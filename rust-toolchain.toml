@@ -1,0 +1,5 @@
+# Everyone, including CI, builds with the same Rust version.
+# Bump it in its own pull request.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]

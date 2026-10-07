@@ -1,0 +1,43 @@
+# cargo-deny configuration: which dependencies Halberd may use.
+# Runs in CI on every change. See docs/decisions/0004-apache-license.md.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+# Known security vulnerabilities in any dependency fail the build.
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licenses compatible with Apache 2.0.
+# Adding a license here needs a pull request that explains why.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+# Allowed licenses no current dependency uses are fine, not a warning.
+unused-allowed-license = "allow"
+
+[licenses.private]
+# Halberd's own crates are not published, so they need no license check.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# Only crates.io; no git or unknown registries.
+unknown-registry = "deny"
+unknown-git = "deny"

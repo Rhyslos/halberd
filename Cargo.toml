@@ -1,0 +1,65 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "tools/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/Rhyslos/halberd"
+authors = ["Rhyslos and Halberd contributors"]
+publish = false
+
+# Internal crates, so any crate can depend on another by name.
+# Which crate may depend on which is decided by layers (see ARCHITECTURE.md)
+# and enforced by the test in tools/layer-check.
+[workspace.dependencies]
+halberd-kv = { path = "crates/halberd-kv" }
+halberd-vmf = { path = "crates/halberd-vmf" }
+halberd-fgd = { path = "crates/halberd-fgd" }
+halberd-vpk = { path = "crates/halberd-vpk" }
+halberd-gma = { path = "crates/halberd-gma" }
+halberd-mdl = { path = "crates/halberd-mdl" }
+halberd-vtf = { path = "crates/halberd-vtf" }
+halberd-geom = { path = "crates/halberd-geom" }
+halberd-doc = { path = "crates/halberd-doc" }
+halberd-config = { path = "crates/halberd-config" }
+halberd-assets = { path = "crates/halberd-assets" }
+halberd-io = { path = "crates/halberd-io" }
+halberd-compile = { path = "crates/halberd-compile" }
+halberd-render = { path = "crates/halberd-render" }
+halberd-tools = { path = "crates/halberd-tools" }
+halberd-ui = { path = "crates/halberd-ui" }
+
+# Outside libraries. Every one must pass `cargo deny check` (see deny.toml).
+toml = "0.9"
+
+[workspace.lints.rust]
+# Ground rule 6: no unsafe code. A crate that truly needs it must get a
+# decision record first and override this locally.
+unsafe_code = "forbid"
+# Documentation rule: every public item must be documented.
+missing_docs = "deny"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+# Ground rule 7: library code never crashes on purpose.
+# Tests are exempt through clippy.toml.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Keep debug builds usable: optimise dependencies even in development,
+# so the viewport stays smooth while working on the editor.
+[profile.dev.package."*"]
+opt-level = 2

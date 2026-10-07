@@ -1,0 +1,18 @@
+# Opens pull requests to keep dependencies and CI actions up to date.
+# Each one runs the full CI, including the license and vulnerability audit.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, internal]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, internal]
