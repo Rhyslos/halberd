@@ -1,0 +1,21 @@
+[package]
+name = "halberd-doc"
+description = "The map document: objects, selection, commands and undo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# Architecture layer, checked by tools/layer-check:
+# a crate may only depend on crates in its own layer or below.
+[package.metadata.halberd]
+layer = 1
+
+[dependencies]
+halberd-geom.workspace = true
+
+[lints]
+workspace = true

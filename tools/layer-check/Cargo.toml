@@ -1,0 +1,16 @@
+[package]
+name = "layer-check"
+description = "Checks that Halberd's crates follow the architecture rules"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+toml.workspace = true
+
+[lints]
+workspace = true

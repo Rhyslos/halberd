@@ -1,0 +1,25 @@
+[package]
+name = "halberd-assets"
+description = "Find, mount, index and cache game content"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# Architecture layer, checked by tools/layer-check:
+# a crate may only depend on crates in its own layer or below.
+[package.metadata.halberd]
+layer = 2
+
+[dependencies]
+halberd-config.workspace = true
+halberd-vpk.workspace = true
+halberd-gma.workspace = true
+halberd-mdl.workspace = true
+halberd-vtf.workspace = true
+
+[lints]
+workspace = true

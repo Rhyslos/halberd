@@ -1,0 +1,22 @@
+[package]
+name = "halberd-tools"
+description = "Interaction tools: select, gizmo, shape tools, radial menus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# Architecture layer, checked by tools/layer-check:
+# a crate may only depend on crates in its own layer or below.
+[package.metadata.halberd]
+layer = 3
+
+[dependencies]
+halberd-doc.workspace = true
+halberd-geom.workspace = true
+
+[lints]
+workspace = true
