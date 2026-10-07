@@ -33,4 +33,5 @@ Advisories accepted, as "unmaintained" notices rather than vulnerabilities, with
 
 - Less code to maintain now. If the viewport later needs control eframe does not give, a new decision record will weigh moving to hand-wired winit.
 - On Windows a terminal window still opens behind the editor. It shows the startup report and stays useful for diagnosing problems during Phase 0; it will be hidden before the first public release, once errors are shown in proper dialogs.
+- Some windowing libraries stop with a panic instead of an error when a system library is missing (found by the smoke test: `libxkbcommon-x11` on a bare Linux machine). Halberd catches that around the window and explains it in plain words, with an install hint, instead of crashing.
 - egui_dock's tab buttons are not exposed to screen readers by default; Halberd labels them itself (`on_tab_button`), which also lets UI tests find them.

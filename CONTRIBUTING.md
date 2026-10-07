@@ -20,7 +20,7 @@ Optional, matching CI: `cargo install cargo-deny` and run `cargo deny check`.
 The window smoke test (Linux only) opens the real window on a virtual screen, as CI does:
 
 ```
-sudo apt-get install xvfb xdotool imagemagick mesa-vulkan-drivers
+sudo apt-get install xvfb xdotool imagemagick mesa-vulkan-drivers libxkbcommon-x11-0
 cargo build -p halberd-app
 xvfb-run -s "-screen 0 1600x900x24" tools/smoke/window-smoke.sh target/debug/halberd smoke-output
 ```

@@ -20,7 +20,7 @@ Starts everything, wires the crates together and owns the frame loop.
 
 1. **Startup** (`startup.rs`): loads settings, finds Garry's Mod, saves what it found, and builds a plain-language report.
 2. **Window** (`window.rs`): opens the editor window with eframe and wgpu, shows the `halberd-ui` workbench with the report in the Console, and remembers the panel layout and window size between sessions.
-3. If the window cannot open (no Vulkan, DirectX 12 or Metal driver), the report and the reason are printed in the terminal instead.
+3. If the window cannot open (no Vulkan, DirectX 12 or Metal driver, or a missing Linux system library), the report and a plain-language reason are printed in the terminal instead. Panics from windowing libraries are caught for this.
 
 Command-line options (`halberd --help`):
 

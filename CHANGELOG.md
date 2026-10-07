@@ -8,6 +8,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 - The editor window: a menu bar (File, View, Help) and five docked panels (Browsers, Viewport, Scene, Properties, Console) in the standard layout. Panels can be dragged, grouped and resized; **View → Reset panel layout** restores them. The layout and window size are remembered between sessions.
 - The Console panel shows the startup report.
+- If the window can't open (no suitable graphics driver, or a missing Linux system library), Halberd explains why in plain words instead of crashing.
 - **Help → About Halberd** with version, credits and license.
 - `--report-only` option: print the startup report and exit without opening the window.
 - Window smoke test in CI: every change opens the real window on Linux, takes a screenshot, and quits through File → Quit.

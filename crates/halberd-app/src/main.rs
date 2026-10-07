@@ -96,8 +96,8 @@ fn main() -> ExitCode {
         Err(reason) => {
             let body = [
                 format!("The editor window could not be opened: {reason}"),
-                "Halberd needs a graphics driver with Vulkan, DirectX 12 or Metal support. \
-                 Updating your graphics driver usually fixes this."
+                "Halberd needs a graphics driver with Vulkan, DirectX 12 or Metal support. If the \
+                 reason above is about graphics, updating your graphics driver usually fixes it."
                     .to_string(),
             ];
             finish(&body, interactive, ExitCode::FAILURE)
