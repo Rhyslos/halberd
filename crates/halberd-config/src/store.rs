@@ -556,67 +556,73 @@ mod tests {
         );
     }
 
-    fn env_from<'a>(
-        pairs: &'a [(&'a str, &'a str)],
-    ) -> impl Fn(&str) -> Option<std::ffi::OsString> + 'a {
+    /// Builds an environment lookup from name/value pairs.
+    fn env_from(
+        pairs: Vec<(&'static str, PathBuf)>,
+    ) -> impl Fn(&str) -> Option<std::ffi::OsString> {
         move |name| {
             pairs
                 .iter()
                 .find(|(k, _)| *k == name)
-                .map(|(_, v)| (*v).into())
+                .map(|(_, v)| v.clone().into_os_string())
         }
+    }
+
+    /// An absolute folder on whichever system runs the tests. ("Absolute"
+    /// means something different on Windows and Unix, so a hard-coded
+    /// `/home/...` would not count as absolute on Windows.)
+    fn absolute(name: &str) -> PathBuf {
+        std::env::temp_dir().join(name)
     }
 
     #[test]
     fn windows_uses_appdata() {
-        // "Absolute" depends on the system running the test, so use a path
-        // in the style of the current system.
-        let appdata = if cfg!(windows) {
-            r"C:\Users\Rhys\AppData\Roaming"
-        } else {
-            "/c/Users/Rhys/AppData"
-        };
-        let pairs = [("APPDATA", appdata), ("HOME", "/ignored")];
-        let env = env_from(&pairs);
-        assert_eq!(config_folder(&env, "windows"), Some(PathBuf::from(appdata)));
+        let appdata = absolute("AppData-Roaming");
+        let env = env_from(vec![
+            ("APPDATA", appdata.clone()),
+            ("HOME", absolute("home")),
+        ]);
+        assert_eq!(config_folder(&env, "windows"), Some(appdata));
     }
 
     #[test]
     fn macos_uses_application_support() {
-        let env = env_from(&[("HOME", "/Users/rhys")]);
+        let home = absolute("rhys");
+        let env = env_from(vec![("HOME", home.clone())]);
         assert_eq!(
             config_folder(&env, "macos"),
-            Some(PathBuf::from("/Users/rhys/Library/Application Support"))
+            Some(home.join("Library").join("Application Support"))
         );
     }
 
     #[test]
     fn linux_prefers_xdg_config_home() {
-        let env = env_from(&[
-            ("XDG_CONFIG_HOME", "/home/rhys/cfg"),
-            ("HOME", "/home/rhys"),
+        let xdg = absolute("cfg");
+        let env = env_from(vec![
+            ("XDG_CONFIG_HOME", xdg.clone()),
+            ("HOME", absolute("rhys")),
         ]);
-        assert_eq!(
-            config_folder(&env, "linux"),
-            Some(PathBuf::from("/home/rhys/cfg"))
-        );
+        assert_eq!(config_folder(&env, "linux"), Some(xdg));
     }
 
     #[test]
     fn linux_falls_back_to_dot_config() {
-        let env = env_from(&[("HOME", "/home/rhys")]);
-        assert_eq!(
-            config_folder(&env, "linux"),
-            Some(PathBuf::from("/home/rhys/.config"))
-        );
+        let home = absolute("rhys");
+        let env = env_from(vec![("HOME", home.clone())]);
+        assert_eq!(config_folder(&env, "linux"), Some(home.join(".config")));
     }
 
     #[test]
     fn relative_or_missing_folders_are_rejected() {
-        let relative = env_from(&[("XDG_CONFIG_HOME", "cfg"), ("HOME", "home")]);
+        let relative = env_from(vec![
+            ("XDG_CONFIG_HOME", "cfg".into()),
+            ("HOME", "home".into()),
+            ("APPDATA", "ad".into()),
+        ]);
         assert_eq!(config_folder(&relative, "linux"), None);
-        assert_eq!(config_folder(env_from(&[]), "linux"), None);
-        assert_eq!(config_folder(env_from(&[]), "windows"), None);
+        assert_eq!(config_folder(&relative, "windows"), None);
+        assert_eq!(config_folder(env_from(vec![]), "linux"), None);
+        assert_eq!(config_folder(env_from(vec![]), "windows"), None);
     }
 
     #[test]

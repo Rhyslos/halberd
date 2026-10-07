@@ -86,9 +86,11 @@ fn first_launch_finds_gmod_and_remembers_it() {
     );
     assert!(run.stdout.contains("Settings saved."));
 
-    let saved = fs::read_to_string(&settings).unwrap();
-    let saved_gmod = gmod.display().to_string().replace('\\', "\\\\");
-    assert!(saved.contains(&saved_gmod), "settings file:\n{saved}");
+    // Read the file back the way Halberd does, rather than matching text:
+    // how a path is written (quotes, backslashes) varies by system.
+    let saved = halberd_config::SettingsStore::new(&settings).load();
+    assert_eq!(saved.status, halberd_config::LoadStatus::Loaded);
+    assert_eq!(saved.settings.game.gmod_dir, Some(gmod));
 }
 
 #[test]
