@@ -29,6 +29,16 @@ fail() {
     echo "SMOKE TEST FAILED: $1"
     echo "--- Halberd output ---"
     cat "$OUT/halberd.log" || true
+    # On GitHub, also raise an annotation so the reason and the end of
+    # Halberd's output show on the pull request page.
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        local msg
+        msg="$1"$'\n'"Last lines of Halberd's output:"$'\n'"$(tail -n 25 "$OUT/halberd.log" 2>/dev/null)"
+        msg="${msg//'%'/'%25'}"
+        msg="${msg//$'\r'/'%0D'}"
+        msg="${msg//$'\n'/'%0A'}"
+        echo "::error title=Window smoke test::$msg"
+    fi
     kill "$PID" 2>/dev/null || true
     exit 1
 }
