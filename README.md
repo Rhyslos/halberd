@@ -4,7 +4,7 @@
 
 Halberd is a free, open-source level editor in the spirit of Unity and Godot: place and shape geometry in a 3D viewport, populate it with props, and compile it straight into a playable GMod map with Valve's own tools. Maps open in Hammer and Hammer++ too, through Export to Hammer.
 
-> **Status: pre-alpha.** There is no usable editor yet. Follow the progress tracker below.
+> **Status: pre-alpha.** The editor window opens, but there is nothing to edit yet. Follow the progress tracker below.
 
 Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
@@ -12,9 +12,9 @@ Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
 Halberd is built in four phases. Each ends with a gate that must pass in real GMod before the next phase starts. This tracker is updated by the pull request that finishes each milestone.
 
-### Phase 0 · Foundations (v0.0, internal) — 6 of 13
+### Phase 0 · Foundations (v0.0, internal) — 7 of 13
 
-`██████░░░░░░░` 46%
+`███████░░░░░░` 54%
 
 - [x] Repository set up: license, README, security policy, contribution rules
 - [x] Automatic builds for Windows, Linux and macOS on every change
@@ -22,7 +22,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Documentation setup: architecture, contributing guide, changelog, pull request template, API reference
 - [x] Workspace split into crates
 - [x] Settings file and GMod install detection
-- [ ] Window and docking panels (Browsers, Scene, Properties, Console)
+- [x] Window and docking panels (Browsers, Scene, Properties, Console)
 - [ ] 3D viewport with Default, Orbit and Fly camera modes
 - [ ] Selection with left click, gizmo modes W / R / S / T
 - [ ] Undo and redo for every edit
@@ -115,9 +115,18 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-07 | First real window: menu bar and five dockable panels, with the layout remembered between sessions |
 | 2026-10-07 | Settings file and Garry's Mod detection: Halberd finds GMod through Steam and remembers it |
 | 2026-10-07 | Repository, documentation, quality checks and crate structure in place |
 | 2026-10-07 | Project started: feature spec, roadmap and technical design written |
+
+### Snapshots
+
+Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-07: the first window.** Five panels, an empty viewport, and the startup report in the Console.
+
+![Halberd's first window: Browsers, Viewport, Scene, Properties and Console panels](docs/screenshots/2026-10-07-first-window.png)
 
 ## Building from source
 

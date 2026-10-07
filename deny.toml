@@ -8,6 +8,13 @@ all-features = true
 version = 2
 # Known security vulnerabilities in any dependency fail the build.
 yanked = "deny"
+# "Unmaintained" notices (not vulnerabilities) accepted one by one, with a
+# reason. Remove an entry as soon as the library using it moves on.
+# See docs/decisions/0007-window-and-panels.md.
+ignore = [
+    { id = "RUSTSEC-2024-0436", reason = "paste: macro helper used only at compile time by egui_dock; no replacement upstream yet" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser: font reading inside winit's Linux window decorations; no replacement upstream yet" },
+]
 
 [licenses]
 version = 2
@@ -23,6 +30,12 @@ allow = [
     "Zlib",
     "CC0-1.0",
     "Unicode-3.0",
+    # Boost license: permissive, used by the clipboard library on Windows.
+    "BSL-1.0",
+    # Licenses of egui's built-in fonts (embedded in the program). Both allow
+    # embedding and redistribution with the license text; see NOTICE.
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
 ]
 confidence-threshold = 0.9
 # Allowed licenses no current dependency uses are fine, not a warning.

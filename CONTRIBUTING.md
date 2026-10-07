@@ -17,6 +17,18 @@ cargo doc --workspace --no-deps --open                  # read the API docs
 
 Optional, matching CI: `cargo install cargo-deny` and run `cargo deny check`.
 
+The window smoke test (Linux only) opens the real window on a virtual screen, as CI does:
+
+```
+sudo apt-get install xvfb xdotool imagemagick mesa-vulkan-drivers
+cargo build -p halberd-app
+xvfb-run -s "-screen 0 1600x900x24" tools/smoke/window-smoke.sh target/debug/halberd smoke-output
+```
+
+## Third-party material
+
+Anything embedded in the program itself (fonts, icons, images) needs its license text in `licenses/`, listed in `licenses/README.md`; that folder ships with every build. Code libraries are covered by `cargo deny`.
+
 ## Ground rules
 
 A pull request that breaks one of these is sent back, however good the feature.
