@@ -33,7 +33,7 @@ halberd-tools = { path = "crates/halberd-tools" }
 halberd-ui = { path = "crates/halberd-ui" }
 
 # Outside libraries. Every one must pass `cargo deny check` (see deny.toml).
-toml = "0.9"
+toml = "1.1"
 
 [workspace.lints.rust]
 # Ground rule 6: no unsafe code. A crate that truly needs it must get a
