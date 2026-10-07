@@ -1,7 +1,11 @@
 //! The Halberd program: starts the editor and wires the crates together.
 //!
-//! Status: skeleton. It reports its version and exits; the window and
-//! frame loop arrive in the Phase 0 "Window, docking panels" milestone.
+//! Status: early skeleton. It loads settings, finds Garry's Mod and reports
+//! what it found; the window and frame loop arrive in the Phase 0
+//! "Window and docking panels" milestone.
+
+mod cli;
+mod startup;
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::process::ExitCode;
@@ -14,16 +18,18 @@ fn version_banner() -> String {
     format!("{PRODUCT_NAME} {}", env!("CARGO_PKG_VERSION"))
 }
 
-/// Builds the full message the skeleton prints.
+/// Builds the full message to print.
 ///
 /// When `wait_for_enter` is true, the message ends with a prompt, because the
 /// program was most likely started by double-clicking and its window would
 /// otherwise close before the text can be read.
-fn startup_message(wait_for_enter: bool) -> String {
-    let mut message = format!(
-        "{}\nThe editor window is not built yet. See the roadmap in README.md.\n",
-        version_banner()
-    );
+fn compose_message(body: &[String], wait_for_enter: bool) -> String {
+    let mut message = format!("{}\n\n", version_banner());
+    for line in body {
+        message.push_str(line);
+        message.push('\n');
+    }
+    message.push_str("\nThe editor window is not built yet. See the roadmap in README.md.\n");
     if wait_for_enter {
         message.push_str("\nPress Enter to close this window.\n");
     }
@@ -35,9 +41,18 @@ fn main() -> ExitCode {
     // until they press Enter. Scripts and pipes are not kept waiting.
     let interactive = std::io::stdin().is_terminal();
 
+    let (body, code) = match cli::parse(std::env::args_os().skip(1)) {
+        Ok(options) if options.help => (vec![cli::HELP.to_string()], ExitCode::SUCCESS),
+        Ok(options) => (startup::run(&options), ExitCode::SUCCESS),
+        Err(problem) => (
+            vec![format!("Problem: {problem}"), cli::HELP.to_string()],
+            ExitCode::FAILURE,
+        ),
+    };
+
     let mut out = std::io::stdout().lock();
     if out
-        .write_all(startup_message(interactive).as_bytes())
+        .write_all(compose_message(&body, interactive).as_bytes())
         .is_err()
         || out.flush().is_err()
     {
@@ -50,7 +65,7 @@ fn main() -> ExitCode {
         // Any outcome (Enter, closed input, error) simply ends the program.
         let _ = std::io::stdin().lock().read_line(&mut line);
     }
-    ExitCode::SUCCESS
+    code
 }
 
 #[cfg(test)]
@@ -66,14 +81,15 @@ mod tests {
 
     #[test]
     fn interactive_message_asks_for_enter() {
-        let message = startup_message(true);
+        let message = compose_message(&["line one".to_string()], true);
         assert!(message.starts_with(&version_banner()));
+        assert!(message.contains("line one\n"));
         assert!(message.ends_with("Press Enter to close this window.\n"));
     }
 
     #[test]
     fn non_interactive_message_does_not_ask_for_enter() {
-        let message = startup_message(false);
+        let message = compose_message(&[], false);
         assert!(message.starts_with(&version_banner()));
         assert!(!message.contains("Press Enter"));
     }

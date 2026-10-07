@@ -34,6 +34,10 @@ halberd-ui = { path = "crates/halberd-ui" }
 
 # Outside libraries. Every one must pass `cargo deny check` (see deny.toml).
 toml = "1.1"
+serde = { version = "1.0", features = ["derive"] }
+steamlocate = "2.1"
+# Development only: temporary folders for tests.
+tempfile = "3"
 
 [workspace.lints.rust]
 # Ground rule 6: no unsafe code. A crate that truly needs it must get a

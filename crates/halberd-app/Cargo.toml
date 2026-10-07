@@ -28,5 +28,8 @@ halberd-ui.workspace = true
 halberd-doc.workspace = true
 halberd-config.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

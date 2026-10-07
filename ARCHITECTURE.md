@@ -48,8 +48,18 @@ Slow work (reading assets, booleans, compiles, lighting) runs on background thre
 | VTF, VMT (textures, materials) | Yes | No |
 | VDF (Steam config) | Yes | No |
 | `.halberd` (Halberd projects, versioned) | Yes | Yes |
+| `settings.toml` (editor settings) | Yes | Yes |
 
 Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from the user's own GMod install. Halberd never ships them.
+
+## Startup
+
+1. **Settings** (`halberd-config`): load `Halberd/settings.toml` from the system's settings folder. Never fails; see [decision 0006](docs/decisions/0006-settings-file.md).
+2. **Garry's Mod** (`halberd-assets`): use the folder from the command line or settings if valid, otherwise search every Steam installation and library. Check for `garrysmod/gameinfo.txt` and the compile tools.
+3. **Remember:** if the found folder differs from the saved one, save it.
+4. **Report** what was found in plain words. (Later: in the console panel.)
+
+Steam libraries are read with the `steamlocate` library, which reads Steam's own files and runs no Steam code.
 
 ## Extension points
 
