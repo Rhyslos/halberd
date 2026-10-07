@@ -20,7 +20,7 @@ For panels: **egui_dock** (drag, split, tab groups, serializable layout) or **eg
 - **egui_dock** provides the panels. Panels can be rearranged but not closed and not torn off into floating windows, so none can be lost. **View → Reset panel layout** restores the standard arrangement.
 - **The layout is saved by eframe** in its storage file (`app.ron` in the system's per-user data folder). A saved layout missing a panel or containing one twice is replaced by the standard layout, with a note in the Console.
 - **`--report-only`** keeps the text-only startup report, for troubleshooting and automated tests.
-- **Window smoke test in CI:** on every change, Linux CI opens the real window on a virtual screen with a software Vulkan driver, takes a screenshot, quits through File → Quit and checks the layout was saved.
+- **Window smoke test in CI:** on every change, Linux CI opens the real window on a virtual screen with a software Vulkan driver, takes a screenshot, quits with Ctrl+Q (falling back to File → Quit) and checks the layout was saved.
 
 Licenses accepted in `deny.toml` for this milestone:
 

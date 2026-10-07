@@ -15,4 +15,4 @@ mod workbench;
 
 pub use layout::{default_layout, is_complete, restore_or_default};
 pub use panel::Panel;
-pub use workbench::{AppInfo, Workbench, WorkbenchAction};
+pub use workbench::{AppInfo, QUIT_SHORTCUT, Workbench, WorkbenchAction};

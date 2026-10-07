@@ -2,7 +2,10 @@
 
 use crate::layout::{default_layout, restore_or_default};
 use crate::panel::Panel;
-use egui::{Align2, Color32, FontId, Id, RichText, ScrollArea, Sense, Ui, WidgetText};
+use egui::{
+    Align2, Color32, FontId, Id, Key, KeyboardShortcut, Modifiers, RichText, ScrollArea, Sense, Ui,
+    WidgetText,
+};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 
 /// Facts about the program shown in the window and the About box.
@@ -13,6 +16,9 @@ pub struct AppInfo {
     /// Version, such as "0.0.1".
     pub version: String,
 }
+
+/// Keyboard shortcut for File → Quit (Ctrl+Q, or Cmd+Q on macOS).
+pub const QUIT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Q);
 
 /// Something the user asked for that the program around the workbench
 /// must carry out.
@@ -75,6 +81,9 @@ impl Workbench {
     /// Draws the whole window and returns what the user asked for.
     pub fn show(&mut self, ui: &mut Ui) -> Vec<WorkbenchAction> {
         let mut actions = Vec::new();
+        if ui.input_mut(|input| input.consume_shortcut(&QUIT_SHORTCUT)) {
+            actions.push(WorkbenchAction::Quit);
+        }
         egui::Panel::top("halberd_menu_bar").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| self.menu_bar(ui, &mut actions));
         });
@@ -103,7 +112,11 @@ impl Workbench {
 
     fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<WorkbenchAction>) {
         ui.menu_button("File", |ui| {
-            if ui.button("Quit").clicked() {
+            let shortcut = ui.ctx().format_shortcut(&QUIT_SHORTCUT);
+            if ui
+                .add(egui::Button::new("Quit").shortcut_text(shortcut))
+                .clicked()
+            {
                 actions.push(WorkbenchAction::Quit);
             }
         });
@@ -330,9 +343,50 @@ mod tests {
         harness.run();
         harness.get_by_label("File").click();
         harness.run();
-        harness.get_by_label("Quit").click();
+        harness.get_by_label_contains("Quit").click();
         harness.run();
         assert!(quit_requested.get());
+    }
+
+    #[test]
+    fn ctrl_q_quits() {
+        let quit_requested = std::rc::Rc::new(std::cell::Cell::new(false));
+        let flag = quit_requested.clone();
+        let mut harness = Harness::builder()
+            .with_size([1280.0, 800.0])
+            .build_ui_state(
+                move |ui, wb: &mut Workbench| {
+                    if wb.show(ui).contains(&WorkbenchAction::Quit) {
+                        flag.set(true);
+                    }
+                },
+                Workbench::new(info(), None),
+            );
+        harness.run();
+        harness.key_press_modifiers(Modifiers::COMMAND, Key::Q);
+        harness.run();
+        assert!(quit_requested.get());
+    }
+
+    #[test]
+    fn plain_q_does_not_quit() {
+        let quit_requested = std::rc::Rc::new(std::cell::Cell::new(false));
+        let flag = quit_requested.clone();
+        let mut harness = Harness::builder()
+            .with_size([1280.0, 800.0])
+            .build_ui_state(
+                move |ui, wb: &mut Workbench| {
+                    if wb.show(ui).contains(&WorkbenchAction::Quit) {
+                        flag.set(true);
+                    }
+                },
+                Workbench::new(info(), None),
+            );
+        harness.run();
+        // Q alone is reserved for radial menus later.
+        harness.key_press(Key::Q);
+        harness.run();
+        assert!(!quit_requested.get());
     }
 
     #[test]

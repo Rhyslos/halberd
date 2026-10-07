@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Window smoke test: opens the real Halberd window on a virtual screen,
-# takes a screenshot, quits through File > Quit, and checks that the panel
-# layout was saved.
+# takes a screenshot, quits with Ctrl+Q (or File > Quit as a fallback), and
+# checks that the panel layout was saved.
 #
 # Usage (needs Xvfb, xdotool, ImageMagick and a Vulkan driver such as Mesa's
 # lavapipe):
@@ -51,20 +51,44 @@ for _ in $(seq 1 60); do
 done
 xdotool search --name "Halberd Map Editor" >/dev/null 2>&1 || fail "no window after 60 seconds"
 
-# Let the first frames draw, then take the screenshot.
-sleep 3
+# Let the first frames draw (software rendering can be slow), then take
+# the screenshot.
+sleep 8
 import -window root "$OUT/window.png"
 
-# File menu sits at the top-left; Quit is its first item.
-xdotool mousemove 19 11 click 1
-sleep 1
-xdotool mousemove 30 36 click 1
+# Quit the way a user would. Try Ctrl+Q a few times (the pointer is moved
+# over the window so it has keyboard focus), then fall back to clicking
+# File > Quit in the menu at the top-left.
+WINDOW_ID="$(xdotool search --name "Halberd Map Editor" | head -1)"
+quit_attempt() {
+    local attempt=$1
+    xdotool mousemove 800 450
+    # A virtual screen has no window manager to give the window keyboard
+    # focus, so give it focus directly.
+    xdotool windowfocus --sync "$WINDOW_ID" 2>/dev/null || true
+    sleep 0.5
+    if [ "$attempt" -le 3 ]; then
+        echo "Quit attempt $attempt: Ctrl+Q"
+        xdotool key ctrl+q
+    else
+        echo "Quit attempt $attempt: File > Quit"
+        xdotool mousemove 19 11 click 1
+        sleep 2
+        xdotool mousemove 40 36 click 1
+    fi
+}
 
-for _ in $(seq 1 20); do
-    kill -0 "$PID" 2>/dev/null || break
-    sleep 1
+for attempt in 1 2 3 4 5 6; do
+    quit_attempt "$attempt"
+    for _ in $(seq 1 10); do
+        kill -0 "$PID" 2>/dev/null || break 2
+        sleep 1
+    done
 done
-kill -0 "$PID" 2>/dev/null && fail "File > Quit did not close Halberd"
+if kill -0 "$PID" 2>/dev/null; then
+    import -window root "$OUT/quit-failed.png" || true
+    fail "neither Ctrl+Q nor File > Quit closed Halberd (see quit-failed.png)"
+fi
 
 wait "$PID" || fail "Halberd exited with an error"
 
@@ -72,4 +96,4 @@ LAYOUT_FILE="$XDG_DATA_HOME/halberd/app.ron"
 grep -q "halberd_panel_layout" "$LAYOUT_FILE" 2>/dev/null ||
     fail "the panel layout was not saved to $LAYOUT_FILE"
 
-echo "Smoke test passed: window opened, screenshot taken, File > Quit worked, layout saved."
+echo "Smoke test passed: window opened, screenshot taken, quit worked, layout saved."

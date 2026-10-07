@@ -10,8 +10,9 @@ All notable changes to Halberd are listed here, newest first. The format follows
 - The Console panel shows the startup report.
 - If the window can't open (no suitable graphics driver, or a missing Linux system library), Halberd explains why in plain words instead of crashing.
 - **Help → About Halberd** with version, credits and license.
+- **Ctrl+Q** (Cmd+Q on macOS) quits, shown next to File → Quit.
 - `--report-only` option: print the startup report and exit without opening the window.
-- Window smoke test in CI: every change opens the real window on Linux, takes a screenshot, and quits through File → Quit.
+- Window smoke test in CI: every change opens the real window on Linux, takes a screenshot, quits with Ctrl+Q (File → Quit as a fallback), and checks the layout was saved.
 - License texts for the embedded fonts, shipped in a `licenses` folder with every build.
 - Settings file (`settings.toml`) in the system's settings folder, holding the Garry's Mod folder, memory budget, worker threads, autosave interval, grid size and WASD preference. Damaged files are set aside and defaults used; out-of-range values are corrected; saving cannot corrupt the file; files from newer versions are never overwritten.
 - Garry's Mod detection: finds GMod through Steam, including extra Steam libraries on other drives, checks the install, finds the compile tools and the Workshop folder, and remembers the result.
