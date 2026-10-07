@@ -3,7 +3,7 @@
 //! Status: skeleton. It reports its version and exits; the window and
 //! frame loop arrive in the Phase 0 "Window, docking panels" milestone.
 
-use std::io::Write;
+use std::io::{BufRead, IsTerminal, Write};
 use std::process::ExitCode;
 
 /// The full product name shown in the title bar and about screen.
@@ -14,16 +14,43 @@ fn version_banner() -> String {
     format!("{PRODUCT_NAME} {}", env!("CARGO_PKG_VERSION"))
 }
 
-fn main() -> ExitCode {
-    let mut out = std::io::stdout().lock();
-    let message = format!(
+/// Builds the full message the skeleton prints.
+///
+/// When `wait_for_enter` is true, the message ends with a prompt, because the
+/// program was most likely started by double-clicking and its window would
+/// otherwise close before the text can be read.
+fn startup_message(wait_for_enter: bool) -> String {
+    let mut message = format!(
         "{}\nThe editor window is not built yet. See the roadmap in README.md.\n",
         version_banner()
     );
-    match out.write_all(message.as_bytes()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::FAILURE,
+    if wait_for_enter {
+        message.push_str("\nPress Enter to close this window.\n");
     }
+    message
+}
+
+fn main() -> ExitCode {
+    // An interactive input means a person is watching: keep the window open
+    // until they press Enter. Scripts and pipes are not kept waiting.
+    let interactive = std::io::stdin().is_terminal();
+
+    let mut out = std::io::stdout().lock();
+    if out
+        .write_all(startup_message(interactive).as_bytes())
+        .is_err()
+        || out.flush().is_err()
+    {
+        return ExitCode::FAILURE;
+    }
+    drop(out);
+
+    if interactive {
+        let mut line = String::new();
+        // Any outcome (Enter, closed input, error) simply ends the program.
+        let _ = std::io::stdin().lock().read_line(&mut line);
+    }
+    ExitCode::SUCCESS
 }
 
 #[cfg(test)]
@@ -35,5 +62,19 @@ mod tests {
         let banner = version_banner();
         assert!(banner.starts_with("Halberd Map Editor "));
         assert!(banner.ends_with(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn interactive_message_asks_for_enter() {
+        let message = startup_message(true);
+        assert!(message.starts_with(&version_banner()));
+        assert!(message.ends_with("Press Enter to close this window.\n"));
+    }
+
+    #[test]
+    fn non_interactive_message_does_not_ask_for_enter() {
+        let message = startup_message(false);
+        assert!(message.starts_with(&version_banner()));
+        assert!(!message.contains("Press Enter"));
     }
 }

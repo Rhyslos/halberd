@@ -12,4 +12,5 @@ All notable changes to Halberd are listed here, newest first. The format follows
 - Continuous integration: formatting, lint, tests and docs on Windows, Linux and macOS; license and vulnerability audit; downloadable builds for all three platforms; changelog check on pull requests.
 - API reference published to GitHub Pages from `main`.
 - Documentation: README with progress tracker, architecture overview, contributing guide, security policy, decision records, pull request and issue templates.
-- `halberd` program skeleton that reports its version.
+- `halberd` program skeleton that reports its version. When started by double-clicking, it waits for Enter so the message can be read.
+- Downloaded builds open straight to the program, with no nested folders.
