@@ -6,6 +6,10 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- Settings file (`settings.toml`) in the system's settings folder, holding the Garry's Mod folder, memory budget, worker threads, autosave interval, grid size and WASD preference. Damaged files are set aside and defaults used; out-of-range values are corrected; saving cannot corrupt the file; files from newer versions are never overwritten.
+- Garry's Mod detection: finds GMod through Steam, including extra Steam libraries on other drives, checks the install, finds the compile tools and the Workshop folder, and remembers the result.
+- Startup report listing the settings file, the GMod folder, the Workshop folder and which compile tools were found, with advice when something is missing.
+- Command-line options `--gmod-dir`, `--steam-dir`, `--settings` and `--help`.
 - Project foundations: Cargo workspace with 17 single-purpose crates in five layers.
 - `layer-check` tool whose tests enforce the architecture rules on every change.
 - Workspace-wide safety lints: no `unsafe` code, no `unwrap`/`expect`/`panic!` in library code, documentation required on every public item.

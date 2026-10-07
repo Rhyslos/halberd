@@ -20,6 +20,10 @@ halberd-vpk.workspace = true
 halberd-gma.workspace = true
 halberd-mdl.workspace = true
 halberd-vtf.workspace = true
+steamlocate.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

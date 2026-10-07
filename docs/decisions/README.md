@@ -12,3 +12,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0003](0003-layered-crates.md) | Layered single-purpose crates | Accepted |
 | [0004](0004-apache-license.md) | Apache 2.0 license | Accepted |
 | [0005](0005-safety-lints.md) | No unsafe, no panics in library code | Accepted |
+| [0006](0006-settings-file.md) | Settings file format, location and safety | Accepted |

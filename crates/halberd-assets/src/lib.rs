@@ -1,18 +1,17 @@
 //! Find, mount, index and cache game content.
 //!
-//! Finds the GMod install, mounts base, mounted-game and Workshop content, indexes what is available, and keeps decoded assets in caches that respect the memory budget.
+//! Finds the Garry's Mod install, mounts base, mounted-game and Workshop
+//! content, indexes what is available, and keeps decoded assets in caches
+//! that respect the memory budget.
 //!
-//! Status: skeleton. See this crate's README for what it must never do.
+//! Implemented so far: finding the Garry's Mod install ([`detect_gmod`]),
+//! either from a folder the user chose or through Steam, and checking it
+//! really is a GMod install with the compile tools Halberd needs.
 
-/// The name of this crate, used in logs and diagnostics.
-pub const CRATE_NAME: &str = "halberd-assets";
+mod gmod;
+mod steam;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
-    }
-}
+pub use gmod::{
+    CompileTool, CompileTools, FoundBy, GMOD_APP_ID, GmodInstall, InvalidGmodDir, inspect_gmod_dir,
+};
+pub use steam::{Detection, DetectionError, detect_gmod, detect_gmod_in};

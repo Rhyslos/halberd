@@ -12,16 +12,16 @@ Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
 Halberd is built in four phases. Each ends with a gate that must pass in real GMod before the next phase starts. This tracker is updated by the pull request that finishes each milestone.
 
-### Phase 0 · Foundations (v0.0, internal) — 5 of 13
+### Phase 0 · Foundations (v0.0, internal) — 6 of 13
 
-`█████░░░░░░░░` 38%
+`██████░░░░░░░` 46%
 
 - [x] Repository set up: license, README, security policy, contribution rules
 - [x] Automatic builds for Windows, Linux and macOS on every change
 - [x] Quality checks in CI: formatting, lint, tests, license and vulnerability scans
 - [x] Documentation setup: architecture, contributing guide, changelog, pull request template, API reference
 - [x] Workspace split into crates
-- [ ] Settings file and GMod install detection
+- [x] Settings file and GMod install detection
 - [ ] Window and docking panels (Browsers, Scene, Properties, Console)
 - [ ] 3D viewport with Default, Orbit and Fly camera modes
 - [ ] Selection with left click, gizmo modes W / R / S / T
@@ -115,6 +115,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-07 | Settings file and Garry's Mod detection: Halberd finds GMod through Steam and remembers it |
 | 2026-10-07 | Repository, documentation, quality checks and crate structure in place |
 | 2026-10-07 | Project started: feature spec, roadmap and technical design written |
 
