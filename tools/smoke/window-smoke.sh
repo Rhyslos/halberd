@@ -184,6 +184,11 @@ grep -q "halberd_panel_layout" "$LAYOUT_FILE" 2>/dev/null ||
 grep -q "halberd_viewport_camera" "$LAYOUT_FILE" 2>/dev/null ||
     fail "the viewport camera was not saved to $LAYOUT_FILE"
 
+LOG_FILE="$XDG_CONFIG_HOME/Halberd/halberd.log"
+grep -q "started" "$LOG_FILE" 2>/dev/null || fail "no log file at $LOG_FILE"
+grep -q "Settings:" "$LOG_FILE" || fail "the startup report is not in the log file"
+echo "Log file written."
+
 # --- Maps ------------------------------------------------------------------
 # Start Halberd again with a copy of the sample Hammer map, check it opened
 # (the window title names it), save with Ctrl+S, quit, and check the saved
@@ -218,6 +223,8 @@ for attempt in 1 2 3; do
     done
 done
 kill -0 "$PID" 2>/dev/null && fail "Halberd did not quit after saving the map"
-echo "Map opened from the command line, saved unchanged, backup kept."
+grep -q "Saved .*sample.vmf" "$LOG_FILE" || fail "the save is not in the log file"
+[ -f "$XDG_CONFIG_HOME/Halberd/halberd.previous.log" ] || fail "the previous run's log was not kept"
+echo "Map opened from the command line, saved unchanged, backup kept, both logged."
 
-echo "Smoke test passed: window opened, viewport drew, orbit and zoom worked, box drawn and undone, quit worked, layout and camera saved, map opened and saved unchanged."
+echo "Smoke test passed: window opened, viewport drew, orbit and zoom worked, box drawn and undone, quit worked, layout and camera saved, map opened and saved unchanged, log file written."

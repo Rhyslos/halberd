@@ -258,17 +258,6 @@ pub(crate) fn placeholder(ui: &mut Ui, heading: &str, detail: &str) {
     ui.label(RichText::new(detail).weak());
 }
 
-pub(crate) fn console_contents(ui: &mut Ui, lines: &[String]) {
-    ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .stick_to_bottom(true)
-        .show(ui, |ui| {
-            for line in lines {
-                ui.label(RichText::new(line).monospace());
-            }
-        });
-}
-
 pub(crate) fn about_contents(ui: &mut Ui, info: &AppInfo) {
     ui.heading(format!("{} {}", info.name, info.version));
     ui.label("A modern map editor for Garry's Mod.");

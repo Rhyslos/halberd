@@ -6,6 +6,9 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **The Console** shows every message with its time and level: information, warnings (yellow) and errors (red). Buttons show or hide each level, a search box finds messages, **Copy** puts what is shown on the clipboard for bug reports, and **Clear** empties it. A message repeated many times is shown once with a count. If warnings or errors arrive while the Console is hidden behind another tab, its tab shows how many.
+- **Log file:** every message is also written to `halberd.log`, next to the settings file, including the reason if Halberd crashes. The previous run's log is kept as `halberd.previous.log`. The Console says where the file is.
+- Problems reported by the graphics driver and window system now appear in the Console as warnings and errors.
 - **Opening and saving Hammer maps (VMF).** File → New (Ctrl+N), Open… (Ctrl+O), Save (Ctrl+S), Save As… (Ctrl+Shift+S), with the system's own file windows. A map can also be opened by starting Halberd with it (`halberd map.vmf`). The camera frames the map when it opens.
 - **Nothing lost:** everything Halberd does not use yet (textures on each face, visgroups, entity settings and outputs, cameras, Hammer's settings) is kept and saved back; an untouched map saves byte for byte. Ids are kept, and new ones never clash with any in the file (hidden objects included). Saving keeps the old file as a `.vmx` backup, as Hammer does; if the backup can't be written, the map is still saved and the Console says so. Brushes Halberd can't show (broken shapes, repeated sides) are kept and saved unchanged.
 - **Entities** from opened maps are shown: point entities as purple boxes, brush entities (such as `func_detail`) in teal-grey. They can be selected and deleted; Properties lists their settings.

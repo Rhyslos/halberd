@@ -113,7 +113,7 @@ pub(crate) fn open_path(workbench: &mut Workbench, path: &Path) {
                 if entities == 1 { "y" } else { "ies" },
             ));
             for note in opened.notes {
-                workbench.push_console(format!("  Note: {note}"));
+                workbench.push_warning(format!("  Note: {note}"));
             }
         }
         Err(e) => workbench.show_error(e.to_string()),
@@ -127,7 +127,7 @@ pub(crate) fn save_to(workbench: &mut Workbench, path: &Path) -> bool {
             workbench.set_file_path(path.to_path_buf());
             workbench.push_console(format!("Saved {}.", path.display()));
             for note in notes {
-                workbench.push_console(format!("  Note: {note}"));
+                workbench.push_warning(format!("  Note: {note}"));
             }
             true
         }

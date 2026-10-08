@@ -44,6 +44,11 @@ wgpu = "30.0"
 glam = { version = "0.34", features = ["serde", "bytemuck"] }
 # Native file open/save windows. On Linux, the desktop's portal (no GTK).
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+# Local clock time for Console messages and the log file.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# The standard logging interface: libraries (wgpu, winit) report problems
+# through it, and Halberd shows them in the Console.
+log = "0.4"
 bytemuck = { version = "1.25", features = ["derive"] }
 # Development only: temporary folders for tests.
 tempfile = "3"

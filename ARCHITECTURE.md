@@ -70,14 +70,19 @@ Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from th
 1. **Settings** (`halberd-config`): load `Halberd/settings.toml` from the system's settings folder. Never fails; see [decision 0006](docs/decisions/0006-settings-file.md).
 2. **Garry's Mod** (`halberd-assets`): use the folder from the command line or settings if valid, otherwise search every Steam installation and library. Check for `garrysmod/gameinfo.txt` and the compile tools.
 3. **Remember:** if the found folder differs from the saved one, save it.
-4. **Report** what was found in plain words.
-5. **Window** (`halberd-app` with eframe): open the editor window and show the `halberd-ui` workbench, with the report in the Console panel, and open a map if one was given on the command line. The panel layout and window size are restored from the last session. See [decision 0007](docs/decisions/0007-window-and-panels.md).
+4. **Report** what was found in plain words, each line an information message or a warning.
+5. **Logging** (`halberd-app`): start `halberd.log` next to the settings file (the previous run's kept as `halberd.previous.log`), connect the standard `log` interface so library warnings and errors reach the Console, and record crashes in the file. See [decision 0012](docs/decisions/0012-console-and-log-file.md).
+6. **Window** (`halberd-app` with eframe): open the editor window and show the `halberd-ui` workbench, with the report in the Console panel, and open a map if one was given on the command line. The panel layout and window size are restored from the last session. See [decision 0007](docs/decisions/0007-window-and-panels.md).
 
 Steam libraries are read with the `steamlocate` library, which reads Steam's own files and runs no Steam code.
 
 ## Window and panels
 
 eframe owns the window and frame loop and renders with wgpu. Each frame, `halberd-app` hands the window's `Ui` to the `halberd-ui` workbench, which draws the menu bar and the docked panels and returns any actions (such as Quit) for the app to carry out.
+
+## Console and log file
+
+The Console (`halberd-ui`) holds messages with a time and a level (information, warning, error). The editor adds its own messages directly; messages from the `log` interface (any thread) wait in `halberd-app`'s log book and are added at the start of the next frame. Every message also goes to the log file: the editor's through the Console's mirror, the logger's straight from the log book.
 
 ## Viewport
 

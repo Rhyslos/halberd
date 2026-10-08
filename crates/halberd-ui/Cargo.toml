@@ -23,6 +23,7 @@ egui.workspace = true
 glam.workspace = true
 egui_dock.workspace = true
 serde.workspace = true
+chrono.workspace = true
 
 [dev-dependencies]
 halberd-kv.workspace = true

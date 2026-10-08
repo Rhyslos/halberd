@@ -16,7 +16,7 @@ The egui panels: Library, Scene, Layers, Properties, Console and Settings, docke
 
 ## Depends on
 
-`halberd-doc`, `halberd-geom`, `halberd-config`, `halberd-tools`. Outside libraries: `egui`, `egui_dock`, `glam`, `serde`.
+`halberd-doc`, `halberd-geom`, `halberd-config`, `halberd-tools`. Outside libraries: `egui`, `egui_dock`, `glam`, `serde`, `chrono` (message times).
 
 ## Status
 
@@ -41,7 +41,7 @@ The workbench is implemented: a menu bar (File, Edit, View, Help) and six panels
 - **Properties**: for an entity, its class and settings (read-only until Phase 2). For a brush, its material(s). For one box, number fields for its width, depth, height and lowest corner. Drag them sideways or click to type; a whole drag is one undo step; values are stored in whole Hammer units. Resizing pushes each face out or in, so every face keeps its own material and file data. For several objects, a summary.
 - **View menu**: show lengths in Hammer units or metres (everywhere: Properties, the Box tool's height field, the player label), and show or hide the player figure. Both are saved in the settings file by `halberd-app`.
 - **Player figure**: a 72-unit player outline beside the box being drawn or the selection, on the side facing the camera (at the origin otherwise), labelled with its height.
-- The Console shows the startup report, and anything a tool could not do. Library and Layers show placeholders until their milestones.
+- **Console** (`console.rs`): every message with its time and level (information, warning, error; warnings and errors coloured). Buttons show or hide each level, a box searches, Copy puts the shown messages on the clipboard, Clear empties it. The same message repeated is shown once with a count. Keeps the last 5,000 messages; each takes one line (hover a cut-short one to read it all), and only the lines on screen are drawn. When problems arrive while it is hidden behind another tab, the tab shows how many. A mirror passes every message on (the program writes them to its log file); the program also adds messages from its logger. Library and Layers show placeholders until their milestones.
 - **Viewport** (`ViewportPanel`): turns mouse and keyboard input into a `ViewportInput` for the camera controller and a `ToolInput` for the active tool (switcher in the top-left corner with the Box tool's height field and the Move W / Rotate R / Scale S / All T gizmo buttons; B toggles Box; W, R, S and T toggle gizmo modes, with Shift+W and Shift+S while the right button is held; Escape cancels or deselects), draws the transform gizmo over the image (`viewport/gizmo.rs`),, shows the image from a `ViewportRenderer` (supplied by the program; `NoRenderer` shows a reason instead), draws the pivot marker while orbiting, and has the camera mode switcher in its bottom-left corner. Fly mode keeps redrawing only while a movement key is held.
 - Tab buttons and the viewport are labelled for screen readers.
 

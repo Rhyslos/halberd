@@ -7,11 +7,12 @@
 mod cli;
 mod files;
 mod gpu;
+mod logging;
 mod preferences;
 mod startup;
 mod window;
 
-use halberd_ui::AppInfo;
+use halberd_ui::{AppInfo, LogEntry};
 use std::io::{BufRead, IsTerminal, Write};
 use std::process::ExitCode;
 
@@ -38,6 +39,11 @@ fn compose_message(body: &[String], wait_for_enter: bool) -> String {
         message.push_str("\nPress Enter to close this window.\n");
     }
     message
+}
+
+/// The text of each report line.
+fn texts(report: &[LogEntry]) -> Vec<String> {
+    report.iter().map(|e| e.message.clone()).collect()
 }
 
 /// Prints a message to the terminal. Waits for Enter first if asked.
@@ -82,25 +88,47 @@ fn main() -> ExitCode {
     }
 
     let startup::Startup {
-        report,
+        mut report,
         settings,
         store,
     } = startup::run(&options);
     if options.report_only {
-        return finish(&report, interactive, ExitCode::SUCCESS);
+        return finish(&texts(&report), interactive, ExitCode::SUCCESS);
+    }
+
+    // The log file lives next to the settings file.
+    let folder = store.as_ref().and_then(|s| s.path().parent());
+    let (log, note) = logging::install(folder, &version_banner());
+    report.extend(note);
+    if let Some(path) = log.file_path() {
+        report.push(LogEntry::info(format!("Log file: {}", path.display())));
+    }
+    // Into the file now, so it is there even if the window fails to open.
+    for entry in &report {
+        log.write_to_file(entry);
     }
 
     // Also show the report in the terminal behind the editor window, where
     // it stays readable even if the window fails to open.
-    print_message(&report, false);
+    print_message(&texts(&report), false);
 
     let info = AppInfo {
         name: PRODUCT_NAME.to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
     };
-    match window::run(info, report, settings, store, options.map.clone()) {
+    match window::run(
+        info,
+        report,
+        settings,
+        store,
+        options.map.clone(),
+        log.clone(),
+    ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(reason) => {
+            log.write_to_file(&LogEntry::error(format!(
+                "The editor window could not be opened: {reason}"
+            )));
             let body = [
                 format!("The editor window could not be opened: {reason}"),
                 "Halberd needs a graphics driver with Vulkan, DirectX 12 or Metal support. If the \
