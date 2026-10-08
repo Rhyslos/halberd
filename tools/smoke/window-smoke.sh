@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Window smoke test: opens the real Halberd window on a virtual screen,
-# takes a screenshot, quits with Ctrl+Q (or File > Quit as a fallback), and
-# checks that the panel layout was saved.
+# takes a screenshot, checks the 3D viewport (background colour, orbiting
+# with the right mouse button, zooming with the wheel), quits with Ctrl+Q (or
+# File > Quit as a fallback), and checks that the panel layout and camera were
+# saved.
 #
 # Usage (needs Xvfb, xdotool, ImageMagick and a Vulkan driver such as Mesa's
 # lavapipe):
@@ -56,6 +58,56 @@ xdotool search --name "Halberd Map Editor" >/dev/null 2>&1 || fail "no window af
 sleep 8
 import -window root "$OUT/window.png"
 
+# --- Viewport checks -------------------------------------------------------
+# The default layout puts the viewport roughly between x=260..1275 and
+# y=50..675 on a 1600x900 screen.
+
+# 1. The sky above the horizon shows the background colour, (24, 25, 30).
+#    A wrong colour-space setting shows up here as near-black.
+SKY="$(convert "$OUT/window.png" -format '%[fx:int(255*p{500,120}.r)] %[fx:int(255*p{500,120}.g)] %[fx:int(255*p{500,120}.b)]' info:)"
+read -r SKY_R SKY_G SKY_B <<<"$SKY"
+echo "Viewport sky colour: $SKY_R $SKY_G $SKY_B (expected about 24 25 30)"
+for pair in "$SKY_R 24" "$SKY_G 25" "$SKY_B 30"; do
+    read -r got want <<<"$pair"
+    diff=$(( got > want ? got - want : want - got ))
+    [ "$diff" -le 8 ] || fail "viewport background is ($SKY_R, $SKY_G, $SKY_B), expected about (24, 25, 30)"
+done
+
+# Number of pixels that differ between two screenshots.
+changed_pixels() {
+    # compare exits with 1 when the images differ, which is what we want to
+    # measure, so its exit code is ignored.
+    { compare -metric AE "$1" "$2" null: 2>&1 || true; } | awk '{print int($1)}'
+}
+
+# 2. Right-dragging in the viewport orbits the camera.
+xdotool mousemove 760 330
+sleep 0.3
+xdotool mousedown 3
+sleep 0.3
+for _ in $(seq 1 20); do
+    xdotool mousemove_relative -- 8 2
+    sleep 0.05
+done
+sleep 0.5
+xdotool mouseup 3
+sleep 1.5
+import -window root "$OUT/after-orbit.png"
+ORBIT_CHANGE="$(changed_pixels "$OUT/window.png" "$OUT/after-orbit.png")"
+echo "Pixels changed by orbiting: $ORBIT_CHANGE"
+[ "$ORBIT_CHANGE" -gt 20000 ] || fail "right-dragging did not orbit the camera"
+
+# 3. Scrolling zooms.
+for _ in 1 2 3 4; do
+    xdotool click 4
+    sleep 0.2
+done
+sleep 2
+import -window root "$OUT/after-zoom.png"
+ZOOM_CHANGE="$(changed_pixels "$OUT/after-orbit.png" "$OUT/after-zoom.png")"
+echo "Pixels changed by zooming: $ZOOM_CHANGE"
+[ "$ZOOM_CHANGE" -gt 20000 ] || fail "scrolling did not zoom the camera"
+
 # Quit the way a user would. Try Ctrl+Q a few times (the pointer is moved
 # over the window so it has keyboard focus), then fall back to clicking
 # File > Quit in the menu at the top-left.
@@ -95,5 +147,7 @@ wait "$PID" || fail "Halberd exited with an error"
 LAYOUT_FILE="$XDG_DATA_HOME/halberd/app.ron"
 grep -q "halberd_panel_layout" "$LAYOUT_FILE" 2>/dev/null ||
     fail "the panel layout was not saved to $LAYOUT_FILE"
+grep -q "halberd_viewport_camera" "$LAYOUT_FILE" 2>/dev/null ||
+    fail "the viewport camera was not saved to $LAYOUT_FILE"
 
-echo "Smoke test passed: window opened, screenshot taken, quit worked, layout saved."
+echo "Smoke test passed: window opened, viewport drew, orbit and zoom worked, quit worked, layout and camera saved."

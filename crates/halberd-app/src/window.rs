@@ -1,14 +1,21 @@
 //! The editor window: opens it with eframe (winit + wgpu) and hands each
 //! frame to the workbench from `halberd-ui`.
 
+use crate::gpu::GpuViewport;
 use eframe::egui;
-use halberd_ui::{AppInfo, Workbench, WorkbenchAction};
+use halberd_config::Settings;
+use halberd_ui::{
+    AppInfo, NoRenderer, ViewportOptions, ViewportPanel, ViewportRenderer, Workbench,
+    WorkbenchAction,
+};
 
 /// Name eframe uses for the window and its own storage folder
 /// (window size, position and the panel layout).
 const APP_NAME: &str = "Halberd";
 /// Key under which the panel layout is remembered between sessions.
 const LAYOUT_KEY: &str = "halberd_panel_layout";
+/// Key under which the viewport camera is remembered between sessions.
+const CAMERA_KEY: &str = "halberd_viewport_camera";
 /// Window size on first launch, in logical pixels.
 const FIRST_SIZE: [f32; 2] = [1600.0, 900.0];
 /// The smallest the window may get while staying usable.
@@ -17,11 +24,12 @@ const MIN_SIZE: [f32; 2] = [960.0, 600.0];
 /// The running editor.
 struct HalberdApp {
     workbench: Workbench,
+    renderer: Box<dyn ViewportRenderer>,
 }
 
 impl eframe::App for HalberdApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        for action in self.workbench.show(ui) {
+        for action in self.workbench.show(ui, self.renderer.as_mut()) {
             match action {
                 WorkbenchAction::Quit => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
             }
@@ -30,15 +38,26 @@ impl eframe::App for HalberdApp {
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, LAYOUT_KEY, self.workbench.layout());
+        eframe::set_value(
+            storage,
+            CAMERA_KEY,
+            &self.workbench.viewport().camera_state(),
+        );
     }
 }
 
 /// Opens the editor window and runs until it is closed.
 ///
 /// `report` is the startup report; it becomes the first lines of the Console
-/// panel. Returns a plain-language reason if the window could not be opened
-/// (for example, no graphics driver that supports Vulkan, DirectX 12 or Metal).
-pub(crate) fn run(info: AppInfo, report: Vec<String>) -> Result<(), String> {
+/// panel. `settings` configure the viewport. Returns a plain-language reason
+/// if the window could not be opened (for example, no graphics driver that
+/// supports Vulkan, DirectX 12 or Metal).
+pub(crate) fn run(info: AppInfo, report: Vec<String>, settings: &Settings) -> Result<(), String> {
+    let viewport_options = ViewportOptions {
+        // Not asked yet (first launch) counts as on, until Settings can ask.
+        wasd_enabled: settings.editor.wasd_movement.unwrap_or(true),
+        grid_size: settings.editor.grid_size as f32,
+    };
     let title = format!("{} {}", info.name, info.version);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -59,11 +78,26 @@ pub(crate) fn run(info: AppInfo, report: Vec<String>) -> Result<(), String> {
             options,
             Box::new(move |cc| {
                 let saved_layout = cc.storage.and_then(|s| eframe::get_value(s, LAYOUT_KEY));
-                let mut workbench = Workbench::new(info, saved_layout);
+                let saved_camera = cc.storage.and_then(|s| eframe::get_value(s, CAMERA_KEY));
+                let viewport = ViewportPanel::new(saved_camera, viewport_options);
+                let mut workbench = Workbench::new(info, saved_layout).with_viewport(viewport);
                 for line in report {
                     workbench.push_console(line);
                 }
-                Ok(Box::new(HalberdApp { workbench }))
+                let renderer: Box<dyn ViewportRenderer> = match cc.wgpu_render_state.as_ref() {
+                    Some(state) => {
+                        let gpu = GpuViewport::new(state);
+                        workbench.push_console(gpu.describe());
+                        Box::new(gpu)
+                    }
+                    None => Box::new(NoRenderer {
+                        reason: "the window has no GPU device".to_string(),
+                    }),
+                };
+                Ok(Box::new(HalberdApp {
+                    workbench,
+                    renderer,
+                }))
             }),
         )
     }));

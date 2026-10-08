@@ -2,10 +2,8 @@
 
 use crate::layout::{default_layout, restore_or_default};
 use crate::panel::Panel;
-use egui::{
-    Align2, Color32, FontId, Id, Key, KeyboardShortcut, Modifiers, RichText, ScrollArea, Sense, Ui,
-    WidgetText,
-};
+use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
+use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, RichText, ScrollArea, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 
 /// Facts about the program shown in the window and the About box.
@@ -34,6 +32,7 @@ pub struct Workbench {
     dock: DockState<Panel>,
     console: Vec<String>,
     about_open: bool,
+    viewport: ViewportPanel,
 }
 
 impl Workbench {
@@ -46,11 +45,24 @@ impl Workbench {
             dock,
             console: Vec::new(),
             about_open: false,
+            viewport: ViewportPanel::new(None, ViewportOptions::default()),
         };
         if let Some(note) = note {
             workbench.push_console(note);
         }
         workbench
+    }
+
+    /// Replaces the viewport, for example with one restored from the last
+    /// session and configured from settings.
+    pub fn with_viewport(mut self, viewport: ViewportPanel) -> Self {
+        self.viewport = viewport;
+        self
+    }
+
+    /// The viewport panel.
+    pub fn viewport(&self) -> &ViewportPanel {
+        &self.viewport
     }
 
     /// The current panel arrangement, for saving between sessions.
@@ -79,7 +91,12 @@ impl Workbench {
     }
 
     /// Draws the whole window and returns what the user asked for.
-    pub fn show(&mut self, ui: &mut Ui) -> Vec<WorkbenchAction> {
+    /// `renderer` draws the 3D viewport.
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+        renderer: &mut dyn ViewportRenderer,
+    ) -> Vec<WorkbenchAction> {
         let mut actions = Vec::new();
         if ui.input_mut(|input| input.consume_shortcut(&QUIT_SHORTCUT)) {
             actions.push(WorkbenchAction::Quit);
@@ -90,6 +107,8 @@ impl Workbench {
 
         let mut viewer = PanelViewer {
             console: &self.console,
+            viewport: &mut self.viewport,
+            renderer,
         };
         DockArea::new(&mut self.dock)
             .style(Style::from_egui(ui.style().as_ref()))
@@ -137,6 +156,8 @@ impl Workbench {
 /// Draws each panel's contents.
 struct PanelViewer<'a> {
     console: &'a [String],
+    viewport: &'a mut ViewportPanel,
+    renderer: &'a mut dyn ViewportRenderer,
 }
 
 impl TabViewer for PanelViewer<'_> {
@@ -172,9 +193,18 @@ impl TabViewer for PanelViewer<'_> {
         *tab != Panel::Viewport
     }
 
+    fn scroll_bars(&self, tab: &Panel) -> [bool; 2] {
+        // The viewport fills its panel exactly and uses the wheel for zoom.
+        if *tab == Panel::Viewport {
+            [false, false]
+        } else {
+            [true, true]
+        }
+    }
+
     fn ui(&mut self, ui: &mut Ui, tab: &mut Panel) {
         match tab {
-            Panel::Viewport => viewport_placeholder(ui),
+            Panel::Viewport => self.viewport.show(ui, self.renderer),
             Panel::Browsers => placeholder(
                 ui,
                 "Props, materials and entities",
@@ -208,24 +238,6 @@ fn console_contents(ui: &mut Ui, lines: &[String]) {
         });
 }
 
-/// What the empty viewport says until 3D rendering arrives.
-const VIEWPORT_NOTE: &str = "3D viewport arrives in the next milestone";
-
-fn viewport_placeholder(ui: &mut Ui) {
-    let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
-    response
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, VIEWPORT_NOTE));
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, Color32::from_rgb(18, 20, 24));
-    painter.text(
-        rect.center(),
-        Align2::CENTER_CENTER,
-        VIEWPORT_NOTE,
-        FontId::proportional(16.0),
-        Color32::from_gray(140),
-    );
-}
-
 fn about_contents(ui: &mut Ui, info: &AppInfo) {
     ui.heading(format!("{} {}", info.name, info.version));
     ui.label("A modern map editor for Garry's Mod.");
@@ -246,6 +258,7 @@ fn about_contents(ui: &mut Ui, info: &AppInfo) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::viewport::NoRenderer;
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
 
@@ -261,7 +274,7 @@ mod tests {
             .with_size([1280.0, 800.0])
             .build_ui_state(
                 |ui, wb: &mut Workbench| {
-                    wb.show(ui);
+                    wb.show(ui, &mut NoRenderer::default());
                 },
                 workbench,
             )
@@ -311,7 +324,7 @@ mod tests {
         harness.run();
         assert!(harness.query_by_label("No map open").is_some());
         assert!(harness.query_by_label("Nothing selected").is_some());
-        assert!(harness.query_by_label(VIEWPORT_NOTE).is_some());
+        assert!(harness.query_by_label(crate::VIEWPORT_LABEL).is_some());
     }
 
     #[test]
@@ -334,7 +347,10 @@ mod tests {
             .with_size([1280.0, 800.0])
             .build_ui_state(
                 move |ui, wb: &mut Workbench| {
-                    if wb.show(ui).contains(&WorkbenchAction::Quit) {
+                    if wb
+                        .show(ui, &mut NoRenderer::default())
+                        .contains(&WorkbenchAction::Quit)
+                    {
                         flag.set(true);
                     }
                 },
@@ -356,7 +372,10 @@ mod tests {
             .with_size([1280.0, 800.0])
             .build_ui_state(
                 move |ui, wb: &mut Workbench| {
-                    if wb.show(ui).contains(&WorkbenchAction::Quit) {
+                    if wb
+                        .show(ui, &mut NoRenderer::default())
+                        .contains(&WorkbenchAction::Quit)
+                    {
                         flag.set(true);
                     }
                 },
@@ -376,7 +395,10 @@ mod tests {
             .with_size([1280.0, 800.0])
             .build_ui_state(
                 move |ui, wb: &mut Workbench| {
-                    if wb.show(ui).contains(&WorkbenchAction::Quit) {
+                    if wb
+                        .show(ui, &mut NoRenderer::default())
+                        .contains(&WorkbenchAction::Quit)
+                    {
                         flag.set(true);
                     }
                 },

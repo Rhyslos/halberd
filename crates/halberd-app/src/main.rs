@@ -5,6 +5,7 @@
 //! found and exits instead, which is useful for troubleshooting and tests.
 
 mod cli;
+mod gpu;
 mod startup;
 mod window;
 
@@ -78,7 +79,7 @@ fn main() -> ExitCode {
         return finish(&[cli::HELP.to_string()], interactive, ExitCode::SUCCESS);
     }
 
-    let report = startup::run(&options);
+    let startup::Startup { report, settings } = startup::run(&options);
     if options.report_only {
         return finish(&report, interactive, ExitCode::SUCCESS);
     }
@@ -91,7 +92,7 @@ fn main() -> ExitCode {
         name: PRODUCT_NAME.to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
     };
-    match window::run(info, report) {
+    match window::run(info, report, &settings) {
         Ok(()) => ExitCode::SUCCESS,
         Err(reason) => {
             let body = [

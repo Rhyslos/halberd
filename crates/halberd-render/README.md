@@ -12,11 +12,19 @@ Draws each viewport with wgpu: brushes, props, entities, gizmos and grids, updat
 
 - Change the document
 - Decode files itself: it gets plain meshes and textures from other crates
+- Know about egui or windows: it draws into its own images, and the program decides how to show them
 
 ## Depends on
 
-`halberd-doc`, `halberd-geom`
+`halberd-doc`, `halberd-geom`. Outside libraries: `wgpu` (same version as eframe, so the window's GPU device is shared), `glam`, `bytemuck`.
 
 ## Status
 
-Skeleton only. The roadmap milestone that fills this crate in will replace this line.
+Draws the ground grid and world axes into an offscreen image per viewport.
+
+- **Target** (`ViewportTarget`): an sRGB colour image (4× multisampled when the GPU supports it) plus a depth buffer. `display_view()` gives the same pixels as plain RGBA, which is what egui expects.
+- **Grid**: one large square on Z = 0 out to ±16384 (the edge of a Source map), with lines computed per pixel in the shader. Three levels (editor grid, ×8, 1024 units) each fade out as they get too dense, so there is no shimmering in the distance. The grid fades towards the horizon.
+- **Axes**: X red, Y green (positive halves bright, negative dimmed), Z blue rising from the origin.
+- **`read_pixels`**: copies an image back to the CPU, for tests and screenshots.
+
+Tests: the shader is validated with wgpu's own compiler on every machine. `tests/gpu.rs` renders real frames and checks pixels (background, axis colours, grid lines, sizes from 1×1 to the GPU limit, 120-frame stability). Without a GPU those tests skip, unless `HALBERD_REQUIRE_GPU` is set, as it is in CI's window job.

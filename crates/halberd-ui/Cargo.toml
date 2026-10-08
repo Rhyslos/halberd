@@ -17,7 +17,9 @@ layer = 3
 [dependencies]
 halberd-doc.workspace = true
 halberd-config.workspace = true
+halberd-tools.workspace = true
 egui.workspace = true
+glam.workspace = true
 egui_dock.workspace = true
 serde.workspace = true
 
