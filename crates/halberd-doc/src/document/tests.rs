@@ -360,3 +360,123 @@ fn different_merge_keys_are_separate_steps() {
     doc.undo();
     assert_eq!(bounds_of(&doc, id).min.x, 10.0);
 }
+
+#[test]
+fn transforming_several_brushes_is_one_named_step() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0), cube_at(100.0)]))
+        .unwrap();
+    let [a, b] = [ids(&doc)[0], ids(&doc)[1]];
+    let moved = |id: ObjectId, dx: f32| {
+        let Object::Brush(brush) = doc.get(id).unwrap().clone();
+        (id, brush.translated(Vec3::new(dx, 0.0, 0.0)).unwrap())
+    };
+    let command = Command::TransformBrushes {
+        kind: crate::TransformKind::Move,
+        brushes: vec![moved(a, 16.0), moved(b, 16.0)],
+    };
+    assert_eq!(command.describe(), "Move 2 brushes");
+    doc.execute(command).unwrap();
+    assert_eq!(bounds_of(&doc, a).min.x, 16.0);
+    assert_eq!(bounds_of(&doc, b).min.x, 116.0);
+    assert_eq!(doc.undo().as_deref(), Some("Move 2 brushes"));
+    assert_eq!(bounds_of(&doc, a).min.x, 0.0);
+    assert_eq!(bounds_of(&doc, b).min.x, 100.0);
+}
+
+#[test]
+fn a_transform_that_changes_nothing_is_refused() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    let Object::Brush(same) = doc.get(id).unwrap().clone();
+    let command = Command::TransformBrushes {
+        kind: crate::TransformKind::Rotate,
+        brushes: vec![(id, same)],
+    };
+    assert_eq!(command.describe(), "Rotate brush");
+    assert_eq!(doc.execute(command), Err(DocError::NothingToDo));
+}
+
+#[test]
+fn a_cancelled_drag_is_reversed_and_forgotten() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    doc.end_step();
+    for x in [8.0, 16.0, 24.0] {
+        doc.execute_merging(
+            Command::TransformBrushes {
+                kind: crate::TransformKind::Move,
+                brushes: vec![(id, cube_at(x))],
+            },
+            42,
+        )
+        .unwrap();
+    }
+    assert!(doc.discard_step(42));
+    assert_eq!(bounds_of(&doc, id).min.x, 0.0, "back where it started");
+    assert_eq!(
+        doc.undo_label(),
+        Some("Create brush"),
+        "the drag left no step"
+    );
+    assert_eq!(doc.redo_label(), None, "and cannot be redone");
+    assert!(!doc.discard_step(42), "nothing left to discard");
+}
+
+#[test]
+fn a_finished_step_is_never_discarded() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    doc.end_step();
+    doc.execute_merging(
+        Command::TransformBrushes {
+            kind: crate::TransformKind::Move,
+            brushes: vec![(id, cube_at(8.0))],
+        },
+        5,
+    )
+    .unwrap();
+    doc.end_step();
+    assert!(!doc.discard_step(5));
+    assert!(!doc.discard_step(6), "other keys are left alone too");
+    assert_eq!(bounds_of(&doc, id).min.x, 8.0);
+}
+
+#[test]
+fn a_drag_that_comes_back_to_the_start_leaves_no_undo_step() {
+    // Regression: dragging out and back left a "Move brush" step that did
+    // nothing when undone.
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    doc.end_step();
+    for x in [16.0, 32.0, 0.0] {
+        doc.execute_merging(
+            Command::TransformBrushes {
+                kind: crate::TransformKind::Move,
+                brushes: vec![(id, cube_at(x))],
+            },
+            9,
+        )
+        .ok();
+    }
+    assert_eq!(doc.undo_label(), Some("Create brush"));
+    // The same drag can carry on afterwards, as a fresh step.
+    doc.execute_merging(
+        Command::TransformBrushes {
+            kind: crate::TransformKind::Move,
+            brushes: vec![(id, cube_at(48.0))],
+        },
+        9,
+    )
+    .unwrap();
+    doc.undo();
+    assert_eq!(bounds_of(&doc, id).min.x, 0.0);
+}

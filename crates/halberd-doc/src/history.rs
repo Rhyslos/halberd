@@ -38,12 +38,31 @@ impl History {
             && last.merge_key == entry.merge_key
             && let Some(merged) = last.change.merged_with(&entry.change)
         {
-            last.change = merged;
+            if merged.is_noop() {
+                // Back where it started: nothing to undo. The drag may still
+                // go on; its next edit starts a fresh step.
+                self.undo.pop_back();
+                self.sealed = true;
+            } else {
+                last.change = merged;
+            }
             return;
         }
         self.undo.push_back(entry);
         while self.undo.len() > MAX_UNDO_STEPS {
             self.undo.pop_front();
+        }
+    }
+
+    /// Takes back the last step if it is still open (not sealed) and was
+    /// made with `key`, without offering it for redo.
+    pub(crate) fn take_open_step(&mut self, key: u64) -> Option<Entry> {
+        let open = !self.sealed && self.undo.back()?.merge_key == Some(key);
+        if open {
+            self.sealed = true;
+            self.undo.pop_back()
+        } else {
+            None
         }
     }
 

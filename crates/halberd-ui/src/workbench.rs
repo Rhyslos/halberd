@@ -245,7 +245,9 @@ impl Workbench {
 
     /// Undo, redo and delete from the keyboard, unless a text box is in use.
     fn edit_shortcuts(&mut self, ui: &Ui) {
-        if ui.ctx().egui_wants_keyboard_input() {
+        // Mid-drag (a box being drawn, a gizmo handle held), undo and delete
+        // would pull the map from under the drag; they wait until it ends.
+        if ui.ctx().egui_wants_keyboard_input() || self.viewport.tools().is_busy() {
             return;
         }
         let consume = |shortcut: &KeyboardShortcut| ui.input_mut(|i| i.consume_shortcut(shortcut));

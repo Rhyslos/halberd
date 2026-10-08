@@ -18,6 +18,7 @@ use halberd_tools::{
     ToolController, ViewportInput, player_bounds,
 };
 
+mod gizmo;
 mod tools;
 
 /// What a renderer needs to draw one viewport frame.
@@ -155,6 +156,11 @@ impl ViewportPanel {
         &self.tools
     }
 
+    /// The tools, for changing the gizmo mode.
+    pub fn tools_mut(&mut self) -> &mut ToolController {
+        &mut self.tools
+    }
+
     /// Tells the viewport whether a menu or popup was open when this frame
     /// began, so an Escape that closes it does not also deselect. The
     /// workbench calls this before drawing the menu bar.
@@ -243,6 +249,9 @@ impl ViewportPanel {
                 PLAYER_LABEL_COLOR,
             );
         }
+
+        let gizmo_shapes = self.tools.gizmo_shapes(&camera, size, doc);
+        gizmo::draw(&painter, rect, &gizmo_shapes);
 
         painter.text(
             rect.left_top() + vec2(8.0, 6.0),

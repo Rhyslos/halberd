@@ -6,7 +6,15 @@ use egui::{Align, Color32, Key, Layout, PointerButton, Rect, Ui, UiBuilder, vec2
 use glam::Vec2;
 use halberd_config::LengthUnit;
 use halberd_doc::Document;
-use halberd_tools::{BOX_HEIGHT_RANGE, Tool, ToolAction, ToolInput};
+use halberd_tools::{BOX_HEIGHT_RANGE, GizmoMode, Tool, ToolAction, ToolInput};
+
+/// True if `key` went down this frame, not counting the repeats a held key
+/// sends: holding W while flying must not flip the gizmo on and off.
+fn first_press(input: &egui::InputState, key: Key) -> bool {
+    input.events.iter().any(
+        |e| matches!(e, egui::Event::Key { key: k, pressed: true, repeat: false, .. } if *k == key),
+    )
+}
 
 /// Screen-reader name of the Box tool's height field.
 pub(crate) const NEW_BOX_HEIGHT_NAME: &str = "New box height";
@@ -31,9 +39,12 @@ impl ViewportPanel {
                 i.pointer.button_down(PointerButton::Primary),
                 i.modifiers.command,
                 !typing && !popup_open && i.key_pressed(Key::Escape),
-                !typing && i.modifiers.is_none() && i.key_pressed(Key::B),
+                !typing && i.modifiers.is_none() && first_press(i, Key::B),
             )
         });
+        if !typing {
+            self.gizmo_keys(ui);
+        }
         if box_key {
             let next = if self.tools.tool() == Tool::Box {
                 Tool::Select
@@ -77,10 +88,44 @@ impl ViewportPanel {
                     notes.push(format!("That edit could not be made: {e}."));
                 }
             }
+            Some(ToolAction::ExecuteMerging(command, key)) => {
+                // A drag that cannot go further this frame (for example,
+                // back where it started) simply waits for the next one.
+                doc.execute_merging(command, key).ok();
+            }
+            Some(ToolAction::CancelMerging(key)) => {
+                doc.discard_step(key);
+            }
             Some(ToolAction::Refused(reason)) => notes.push(reason),
             None => {}
         }
         notes
+    }
+
+    /// The gizmo keys. W, R, S and T pick Move, Rotate, Scale and All, and
+    /// pressing the same key again returns to plain selection. While the
+    /// right button is held (flying uses W and S), Shift+W and Shift+S pick
+    /// Move and Scale instead; R and T work either way.
+    fn gizmo_keys(&mut self, ui: &Ui) {
+        let flying = self.right_was_held;
+        let picked = ui.input(|i| {
+            let plain = i.modifiers.is_none();
+            let shift_only = i.modifiers.shift_only();
+            let move_or_scale_ok = if flying { shift_only } else { plain };
+            let rotate_or_all_ok = plain || (flying && shift_only);
+            [
+                (Key::W, GizmoMode::Move, move_or_scale_ok),
+                (Key::R, GizmoMode::Rotate, rotate_or_all_ok),
+                (Key::S, GizmoMode::Scale, move_or_scale_ok),
+                (Key::T, GizmoMode::All, rotate_or_all_ok),
+            ]
+            .into_iter()
+            .find(|(key, _, allowed)| *allowed && first_press(i, *key))
+            .map(|(_, mode, _)| mode)
+        });
+        if let Some(mode) = picked {
+            self.tools.toggle_gizmo_mode(mode);
+        }
     }
 
     /// The tool buttons in the viewport's top-left corner.
@@ -108,6 +153,18 @@ impl ViewportPanel {
                         .clicked()
                     {
                         self.tools.set_tool(tool);
+                    }
+                }
+                ui.separator();
+                let gizmo = self.tools.gizmo_mode();
+                for mode in GizmoMode::ALL {
+                    let text = format!("{} {}", mode.label(), mode.key());
+                    if ui
+                        .selectable_label(gizmo == Some(mode), text)
+                        .on_hover_text(mode.description())
+                        .clicked()
+                    {
+                        self.tools.toggle_gizmo_mode(mode);
                     }
                 }
                 if current == Tool::Box {

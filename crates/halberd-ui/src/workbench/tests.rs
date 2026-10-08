@@ -442,3 +442,100 @@ fn an_unknown_unit_is_shown_as_hammer_units() {
     let wb = Workbench::new(info(), None).with_display(halberd_config::LengthUnit::Unknown, true);
     assert_eq!(wb.length_unit(), halberd_config::LengthUnit::Units);
 }
+
+#[test]
+fn a_gizmo_drag_in_the_window_is_one_undo_step() {
+    // The workbench ends the undo step whenever no drag is in progress; a
+    // gizmo drag across many frames must still be one step.
+    use halberd_tools::{Axis, GizmoMode, Handle};
+    let mut wb = workbench_with_boxes(1);
+    wb.viewport_mut()
+        .tools_mut()
+        .set_gizmo_mode(Some(GizmoMode::Move));
+    let mut harness = harness_for(wb);
+    harness.run();
+    let rect = harness.get_by_label(crate::VIEWPORT_LABEL).rect();
+    let grab = {
+        let wb = harness.state();
+        let camera = *wb.viewport().controller().camera();
+        let size = glam::Vec2::new(rect.width(), rect.height());
+        let shapes = wb
+            .viewport()
+            .tools()
+            .gizmo_shapes(&camera, size, wb.document());
+        let arrow = shapes
+            .iter()
+            .find(|s| s.handle == Handle::MoveAxis(Axis::Y) && !s.filled)
+            .unwrap();
+        let p = (arrow.points[0] + arrow.points[1]) * 0.5;
+        rect.min + egui::vec2(p.x, p.y)
+    };
+    let before = only_bounds(harness.state());
+    harness.hover_at(grab);
+    harness.event(egui::Event::PointerButton {
+        pos: grab,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.run();
+    for step in 1..=6 {
+        harness.hover_at(grab + egui::vec2(-step as f32 * 10.0, -step as f32 * 6.0));
+        harness.run();
+    }
+    harness.event(egui::Event::PointerButton {
+        pos: grab + egui::vec2(-60.0, -36.0),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.run();
+    assert_ne!(only_bounds(harness.state()), before, "it moved");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(
+        only_bounds(harness.state()),
+        before,
+        "one Ctrl+Z undoes it all"
+    );
+}
+
+#[test]
+fn delete_and_undo_wait_while_a_box_is_being_drawn() {
+    // Regression: Delete or Ctrl+Z mid-drag pulled the map from under it.
+    let mut harness = harness_for(workbench_with_boxes(1));
+    harness
+        .state_mut()
+        .viewport_mut()
+        .set_tool(halberd_tools::Tool::Box);
+    harness.run();
+    let rect = harness.get_by_label(crate::VIEWPORT_LABEL).rect();
+    let at = rect.center() + egui::vec2(0.0, 150.0);
+    harness.hover_at(at);
+    harness.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.run();
+    harness.hover_at(at + egui::vec2(80.0, 20.0));
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert_eq!(
+        harness.state().document().len(),
+        1,
+        "nothing undone or deleted"
+    );
+    harness.event(egui::Event::PointerButton {
+        pos: at + egui::vec2(80.0, 20.0),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.run();
+    assert_eq!(harness.state().document().len(), 2, "the box was drawn");
+}
