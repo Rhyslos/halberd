@@ -1,7 +1,7 @@
 //! Turns viewport input into camera movement, following the feature spec's
 //! three camera modes.
 
-use crate::camera::{Camera, NEAR_PLANE, Ray, wrap_angle};
+use crate::camera::{Camera, NEAR_PLANE, Ray};
 use glam::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
@@ -10,11 +10,6 @@ pub const ORBIT_SENSITIVITY: f32 = 0.006;
 /// Orbit pivots farther away than this are ignored: orbiting around a point
 /// near the horizon swings the camera across the whole map.
 pub const MAX_ORBIT_PIVOT_DISTANCE: f32 = 8_192.0;
-/// How quickly the view turns to centre the pivot, per second. About 95% of
-/// the turn is done after a quarter of a second.
-const CENTRE_RATE: f32 = 12.0;
-/// Angle (radians) at which the pivot counts as centred and the turn snaps.
-const CENTRED: f32 = 1e-3;
 /// Radians the camera turns per point the pointer moves while flying.
 pub const LOOK_SENSITIVITY: f32 = 0.004;
 /// Default flying speed, in units per second (a GMod player sprints at about 400).
@@ -69,17 +64,6 @@ impl CameraMode {
             Self::Fly => "Hold right mouse to look; WASD to move, Space/C up/down, Shift faster",
         }
     }
-}
-
-/// Where the orbit pivot sits on screen while orbiting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum OrbitStyle {
-    /// The view smoothly turns to bring the pivot to the centre of the
-    /// screen, then turns around it there, like walking around an object.
-    #[default]
-    CenterOnPivot,
-    /// The pivot stays exactly where it was clicked.
-    KeepUnderCursor,
 }
 
 /// Movement keys held while flying.
@@ -171,10 +155,6 @@ pub struct CameraState {
     pub pivot: Vec3,
     /// Flying speed, in units per second.
     pub fly_speed: f32,
-    /// Where the pivot sits on screen while orbiting. Saves from before this
-    /// existed load with the default.
-    #[serde(default)]
-    pub orbit_style: OrbitStyle,
 }
 
 impl Default for CameraState {
@@ -184,7 +164,6 @@ impl Default for CameraState {
             mode: CameraMode::Default,
             pivot: Vec3::ZERO,
             fly_speed: DEFAULT_FLY_SPEED,
-            orbit_style: OrbitStyle::default(),
         }
     }
 }
@@ -259,81 +238,41 @@ impl CameraController {
         self.state.fly_speed
     }
 
-    /// Where the pivot sits on screen while orbiting.
-    pub fn orbit_style(&self) -> OrbitStyle {
-        self.state.orbit_style
-    }
-
-    /// Changes where the pivot sits on screen while orbiting.
-    pub fn set_orbit_style(&mut self, style: OrbitStyle) {
-        self.state.orbit_style = style;
-    }
-
     /// Applies one frame of input. Returns true while the camera keeps moving
-    /// without new input (flying with a key held, or turning to centre the
-    /// orbit pivot), so the caller should keep redrawing.
+    /// without new input (flying with a key held), so the caller should keep
+    /// redrawing.
     pub fn update(&mut self, input: &ViewportInput, scene: &dyn SceneQuery) -> bool {
         let input = clean_input(input);
-        let centring = match self.state.mode {
+        match self.state.mode {
             CameraMode::Default | CameraMode::Orbit => self.update_orbit(&input, scene),
-            CameraMode::Fly => {
-                self.update_fly(&input);
-                false
-            }
-        };
+            CameraMode::Fly => self.update_fly(&input),
+        }
         self.update_pan(&input, scene);
         self.update_scroll(&input, scene);
         self.state = sanitize_state(self.state);
-        let flying =
-            self.state.mode == CameraMode::Fly && input.right_held && input.keys.any_movement();
-        flying || centring
+        self.state.mode == CameraMode::Fly && input.right_held && input.keys.any_movement()
     }
 
     fn mode_allowed(&self, mode: CameraMode) -> bool {
         mode != CameraMode::Fly || self.wasd_enabled
     }
 
-    /// Returns true while the view is still turning to centre the pivot.
-    fn update_orbit(&mut self, input: &ViewportInput, scene: &dyn SceneQuery) -> bool {
+    fn update_orbit(&mut self, input: &ViewportInput, scene: &dyn SceneQuery) {
         if !input.right_held {
             self.orbit_pivot = None;
-            return false;
+            return;
         }
         if input.right_pressed || self.orbit_pivot.is_none() {
             let pivot = self.choose_pivot(input, scene);
             self.state.pivot = pivot;
             self.orbit_pivot = Some(pivot);
         }
-        let Some(pivot) = self.orbit_pivot else {
-            return false;
-        };
-        if input.right_delta != Vec2::ZERO {
+        if let Some(pivot) = self.orbit_pivot
+            && input.right_delta != Vec2::ZERO
+        {
             let turn = -input.right_delta * ORBIT_SENSITIVITY;
             self.state.camera.orbit(pivot, turn.x, turn.y);
         }
-        match self.state.orbit_style {
-            OrbitStyle::CenterOnPivot => self.turn_towards(pivot, input.dt),
-            OrbitStyle::KeepUnderCursor => false,
-        }
-    }
-
-    /// Turns the camera's head part of the way towards `point`, easing out.
-    /// Returns true if it still has turning left to do.
-    fn turn_towards(&mut self, point: Vec3, dt: f32) -> bool {
-        let camera = &mut self.state.camera;
-        if camera.position.distance(point) < NEAR_PLANE {
-            return false;
-        }
-        let target = Camera::looking_at(camera.position, point);
-        let yaw = wrap_angle(target.yaw - camera.yaw);
-        let pitch = target.pitch - camera.pitch;
-        if yaw.abs() < CENTRED && pitch.abs() < CENTRED {
-            camera.look(yaw, pitch);
-            return false;
-        }
-        let k = 1.0 - (-CENTRE_RATE * dt).exp();
-        camera.look(yaw * k, pitch * k);
-        true
     }
 
     /// Default mode: the surface under the pointer if it is near enough,
@@ -396,25 +335,54 @@ impl CameraController {
             self.state.fly_speed = (self.state.fly_speed * factor).clamp(low, high);
             return;
         }
-        let cursor = input.cursor.unwrap_or(input.size * 0.5);
-        let ray = self.state.camera.ray_through(cursor, input.size);
-        let hit = scene
-            .pick(&ray)
-            .filter(|p| p.distance(ray.origin) <= MAX_PICK_DISTANCE);
-        let distance = match hit {
-            Some(point) => point.distance(ray.origin),
+        let (direction, target) = match self.zoom_towards_pivot(input.size) {
+            Some(direction) => (direction, Some(self.state.pivot)),
+            None => {
+                let cursor = input.cursor.unwrap_or(input.size * 0.5);
+                let ray = self.state.camera.ray_through(cursor, input.size);
+                let hit = scene
+                    .pick(&ray)
+                    .filter(|p| p.distance(ray.origin) <= MAX_PICK_DISTANCE);
+                (ray.direction, hit)
+            }
+        };
+        let position = self.state.camera.position;
+        let distance = match target {
+            Some(point) => point.distance(position),
             None => self.fallback_distance(),
         };
         let fraction = 1.0 - (-input.scroll.abs() * ZOOM_RATE).exp();
         let mut step = (distance * fraction).max(MIN_ZOOM_STEP);
         if input.scroll > 0.0 {
-            if hit.is_some() {
+            if target.is_some() {
                 step = step.min((distance - MIN_ZOOM_DISTANCE).max(0.0));
             }
         } else {
             step = -step;
         }
-        self.state.camera.position += ray.direction * step;
+        self.state.camera.position += direction * step;
+    }
+
+    /// In Default and Orbit modes the wheel zooms towards the orbit point,
+    /// like 3ds Max, so it stays still on screen while everything grows
+    /// around it. Returns the direction to zoom in, or `None` when the orbit
+    /// point is off screen, behind the camera or too far away (the wheel then
+    /// zooms towards the pointer instead). Fly mode always zooms towards the
+    /// pointer: there is no orbit point to aim at.
+    fn zoom_towards_pivot(&self, size: Vec2) -> Option<Vec3> {
+        if self.state.mode == CameraMode::Fly {
+            return None;
+        }
+        let camera = &self.state.camera;
+        let pivot = self.state.pivot;
+        let offset = pivot - camera.position;
+        let on_screen = camera
+            .project(pivot, size)
+            .is_some_and(|p| p.cmpge(Vec2::ZERO).all() && p.cmple(size).all());
+        let usable = on_screen
+            && camera.depth_of(pivot) > NEAR_PLANE
+            && offset.length() <= MAX_PICK_DISTANCE;
+        usable.then(|| offset.normalize())
     }
 
     /// Depth along the view of what is under the pointer, for panning.

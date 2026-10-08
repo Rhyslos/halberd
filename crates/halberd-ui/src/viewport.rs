@@ -10,7 +10,7 @@ use egui::{
 };
 use glam::{Mat4, Vec2, Vec3};
 use halberd_tools::{
-    CameraController, CameraMode, CameraState, FlyKeys, GroundPlane, OrbitStyle, ViewportInput,
+    CameraController, CameraMode, CameraState, FlyKeys, GroundPlane, ViewportInput,
 };
 
 /// What a renderer needs to draw one viewport frame.
@@ -107,16 +107,6 @@ impl ViewportPanel {
         &self.controller
     }
 
-    /// Where the pivot sits on screen while orbiting.
-    pub fn orbit_style(&self) -> OrbitStyle {
-        self.controller.orbit_style()
-    }
-
-    /// Changes where the pivot sits on screen while orbiting.
-    pub fn set_orbit_style(&mut self, style: OrbitStyle) {
-        self.controller.set_orbit_style(style);
-    }
-
     /// Draws the viewport filling `ui` and handles its input.
     pub fn show(&mut self, ui: &mut Ui, renderer: &mut dyn ViewportRenderer) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
@@ -127,8 +117,7 @@ impl ViewportPanel {
         let input = self.gather_input(ui, &response, rect);
         let animating = self.controller.update(&input, &GroundPlane);
         // Pointer movement already triggers redraws; only flying with a key
-        // held, or turning to centre the orbit pivot, needs frames without
-        // new input.
+        // held needs frames without new input.
         if animating {
             ui.ctx().request_repaint();
         }

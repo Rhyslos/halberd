@@ -15,34 +15,6 @@ fn controller(mode: CameraMode) -> CameraController {
     )
 }
 
-fn controller_keeping_pivot_under_cursor(mode: CameraMode) -> CameraController {
-    let mut c = controller(mode);
-    c.set_orbit_style(OrbitStyle::KeepUnderCursor);
-    c
-}
-
-/// Holds the right button for `frames` frames at 60 fps, moving by `delta`
-/// each frame. Returns whether the last frame asked for another redraw.
-fn hold_right(
-    c: &mut CameraController,
-    cursor: Vec2,
-    delta: Vec2,
-    frames: usize,
-    scene: &dyn SceneQuery,
-) -> bool {
-    let mut animating = false;
-    for _ in 0..frames {
-        let input = ViewportInput {
-            cursor: Some(cursor),
-            right_held: true,
-            right_delta: delta,
-            ..frame()
-        };
-        animating = c.update(&input, scene);
-    }
-    animating
-}
-
 fn frame() -> ViewportInput {
     ViewportInput {
         size: SIZE,
@@ -80,8 +52,8 @@ impl SceneQuery for Selected {
 }
 
 #[test]
-fn keep_under_cursor_orbits_with_the_pivot_fixed_under_the_pointer() {
-    let mut c = controller_keeping_pivot_under_cursor(CameraMode::Default);
+fn default_mode_orbits_around_the_point_under_the_pointer() {
+    let mut c = controller(CameraMode::Default);
     let cursor = Vec2::new(500.0, 700.0);
     let ground = GroundPlane
         .pick(&c.camera().ray_through(cursor, SIZE))
@@ -93,69 +65,6 @@ fn keep_under_cursor_orbits_with_the_pivot_fixed_under_the_pointer() {
         still.distance(cursor) < 0.1,
         "pivot should stay under the pointer"
     );
-}
-
-#[test]
-fn centre_on_pivot_is_the_default_style() {
-    assert_eq!(
-        controller(CameraMode::Default).orbit_style(),
-        OrbitStyle::CenterOnPivot
-    );
-    assert_eq!(
-        CameraState::default().orbit_style,
-        OrbitStyle::CenterOnPivot
-    );
-}
-
-#[test]
-fn centre_on_pivot_turns_the_view_until_the_pivot_is_centred() {
-    let mut c = controller(CameraMode::Default);
-    let cursor = Vec2::new(300.0, 750.0);
-    let ground = GroundPlane
-        .pick(&c.camera().ray_through(cursor, SIZE))
-        .unwrap();
-    let distance = c.camera().position.distance(ground);
-    right_drag(&mut c, cursor, Vec2::new(5.0, 0.0), &GroundPlane);
-    assert_eq!(c.active_pivot(), Some(ground));
-    // Still turning a few frames in, and the pivot is on its way to the centre.
-    assert!(hold_right(&mut c, cursor, Vec2::ZERO, 3, &GroundPlane));
-    let partway = c.camera().project(ground, SIZE).unwrap();
-    assert!(partway.distance(SIZE / 2.0) < cursor.distance(SIZE / 2.0));
-    // After a second the turn has finished and redrawing stops.
-    assert!(!hold_right(&mut c, cursor, Vec2::ZERO, 60, &GroundPlane));
-    let centred = c.camera().project(ground, SIZE).unwrap();
-    assert!(centred.distance(SIZE / 2.0) < 1.0, "pivot at {centred}");
-    // Turning the head never moves the camera towards or away from the pivot.
-    assert!((c.camera().position.distance(ground) - distance).abs() < 1e-2);
-}
-
-#[test]
-fn a_centred_pivot_stays_centred_while_orbiting() {
-    let mut c = controller(CameraMode::Default);
-    let cursor = Vec2::new(1200.0, 600.0);
-    let ground = GroundPlane
-        .pick(&c.camera().ray_through(cursor, SIZE))
-        .unwrap();
-    right_drag(&mut c, cursor, Vec2::ZERO, &GroundPlane);
-    hold_right(&mut c, cursor, Vec2::ZERO, 60, &GroundPlane);
-    let yaw = c.camera().yaw;
-    let still_turning = hold_right(&mut c, cursor, Vec2::new(12.0, 3.0), 30, &GroundPlane);
-    assert!(
-        !still_turning,
-        "orbiting a centred pivot needs no extra turning"
-    );
-    assert!((c.camera().yaw - yaw).abs() > 1.0, "the camera went around");
-    let centred = c.camera().project(ground, SIZE).unwrap();
-    assert!(centred.distance(SIZE / 2.0) < 1.0, "pivot at {centred}");
-}
-
-#[test]
-fn centring_stops_when_the_button_is_released() {
-    let mut c = controller(CameraMode::Default);
-    right_drag(&mut c, Vec2::new(200.0, 800.0), Vec2::ZERO, &GroundPlane);
-    let camera = *c.camera();
-    assert!(!c.update(&frame(), &GroundPlane));
-    assert_eq!(*c.camera(), camera);
 }
 
 #[test]
@@ -175,21 +84,6 @@ fn distant_orbit_points_are_ignored() {
     assert!(far.distance(c.camera().position) > MAX_ORBIT_PIVOT_DISTANCE);
     right_drag(&mut c, centre, Vec2::ZERO, &GroundPlane);
     assert_eq!(c.active_pivot(), Some(Vec3::new(1.0, 2.0, 0.0)));
-}
-
-#[test]
-fn saves_from_before_orbit_styles_load_with_the_default() {
-    let saved = CameraState {
-        orbit_style: OrbitStyle::KeepUnderCursor,
-        ..CameraState::default()
-    };
-    let text = ron::to_string(&saved).unwrap();
-    let old = text.replace(",orbit_style:KeepUnderCursor", "");
-    assert_ne!(old, text, "the test must actually remove the field: {text}");
-    let loaded: CameraState = ron::from_str(&old).unwrap();
-    assert_eq!(loaded.orbit_style, OrbitStyle::CenterOnPivot);
-    let round_trip: CameraState = ron::from_str(&text).unwrap();
-    assert_eq!(round_trip, saved);
 }
 
 #[test]
@@ -242,7 +136,7 @@ fn pivot_marker_disappears_when_the_drag_ends() {
 
 #[test]
 fn dragging_right_turns_the_view() {
-    let mut c = controller_keeping_pivot_under_cursor(CameraMode::Default);
+    let mut c = controller(CameraMode::Default);
     let yaw = c.camera().yaw;
     right_drag(&mut c, SIZE / 2.0, Vec2::new(50.0, 0.0), &GroundPlane);
     assert!((c.camera().yaw - (yaw - 50.0 * ORBIT_SENSITIVITY)).abs() < 1e-4);
@@ -388,9 +282,72 @@ fn middle_drag_pans_the_scene_with_the_pointer() {
     );
 }
 
+/// Scrolls once by `amount` with the pointer at `cursor`.
+fn scroll(c: &mut CameraController, cursor: Vec2, amount: f32) {
+    let input = ViewportInput {
+        cursor: Some(cursor),
+        scroll: amount,
+        ..frame()
+    };
+    c.update(&input, &GroundPlane);
+}
+
 #[test]
-fn scrolling_zooms_towards_the_pointer() {
+fn scrolling_zooms_towards_the_orbit_point() {
     let mut c = controller(CameraMode::Default);
+    // Orbit around a point off to one side, then let go.
+    let cursor = Vec2::new(500.0, 700.0);
+    right_drag(&mut c, cursor, Vec2::new(30.0, 0.0), &GroundPlane);
+    c.update(&frame(), &GroundPlane);
+    let pivot = c.state().pivot;
+    let on_screen = c.camera().project(pivot, SIZE).unwrap();
+    let before = c.camera().position.distance(pivot);
+    // Scroll with the pointer somewhere else entirely.
+    scroll(&mut c, Vec2::new(1400.0, 200.0), 100.0);
+    assert!(c.camera().position.distance(pivot) < before, "zoomed in");
+    let still = c.camera().project(pivot, SIZE).unwrap();
+    assert!(
+        still.distance(on_screen) < 0.1,
+        "the orbit point stays still on screen: {on_screen} became {still}"
+    );
+    scroll(&mut c, Vec2::new(1400.0, 200.0), -300.0);
+    assert!(c.camera().position.distance(pivot) > before, "zoomed out");
+    let still = c.camera().project(pivot, SIZE).unwrap();
+    assert!(still.distance(on_screen) < 0.1);
+}
+
+#[test]
+fn zooming_in_stops_short_of_the_orbit_point() {
+    let mut c = controller(CameraMode::Orbit);
+    for _ in 0..200 {
+        scroll(&mut c, Vec2::new(100.0, 100.0), 400.0);
+    }
+    let distance = c.camera().position.distance(c.state().pivot);
+    assert!((distance - MIN_ZOOM_DISTANCE).abs() < 1e-2, "{distance}");
+}
+
+#[test]
+fn fly_mode_zooms_towards_the_pointer() {
+    let mut c = controller(CameraMode::Fly);
+    let cursor = Vec2::new(400.0, 650.0);
+    let target = GroundPlane
+        .pick(&c.camera().ray_through(cursor, SIZE))
+        .unwrap();
+    scroll(&mut c, cursor, 100.0);
+    let still = c.camera().project(target, SIZE).unwrap();
+    assert!(still.distance(cursor) < 0.1);
+}
+
+#[test]
+fn scrolling_zooms_towards_the_pointer_when_the_orbit_point_is_off_screen() {
+    let mut c = CameraController::new(
+        CameraState {
+            // Behind the default camera, so not on screen.
+            pivot: Camera::default().position * 2.0,
+            ..CameraState::default()
+        },
+        true,
+    );
     let cursor = Vec2::new(400.0, 650.0);
     let target = GroundPlane
         .pick(&c.camera().ray_through(cursor, SIZE))
@@ -415,7 +372,7 @@ fn scrolling_zooms_towards_the_pointer() {
 
 #[test]
 fn zooming_in_stops_before_the_surface() {
-    let mut c = controller(CameraMode::Default);
+    let mut c = controller(CameraMode::Fly);
     let cursor = SIZE / 2.0;
     for _ in 0..200 {
         c.update(
@@ -506,7 +463,6 @@ fn broken_saved_state_is_repaired() {
         pivot: Vec3::splat(f32::INFINITY),
         fly_speed: -5.0,
         mode: CameraMode::Orbit,
-        orbit_style: OrbitStyle::KeepUnderCursor,
     };
     let c = CameraController::new(state, true);
     assert_eq!(*c.camera(), Camera::default());

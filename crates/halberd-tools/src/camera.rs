@@ -250,7 +250,7 @@ fn aspect_of(size: Vec2) -> f32 {
 }
 
 /// Brings an angle into the range (-π, π].
-pub(crate) fn wrap_angle(angle: f32) -> f32 {
+fn wrap_angle(angle: f32) -> f32 {
     // Angles already in range are returned untouched, so saving and loading
     // a camera gives back exactly the same values.
     if angle > -PI && angle <= PI {

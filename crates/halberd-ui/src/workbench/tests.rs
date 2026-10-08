@@ -241,25 +241,3 @@ fn layers_is_a_tab_beside_scene() {
     harness.run();
     assert!(harness.query_by_label("No layers yet").is_some());
 }
-
-#[test]
-fn view_menu_switches_the_orbit_style() {
-    let mut harness = harness_for(Workbench::new(info(), None));
-    harness.run();
-    assert_eq!(
-        harness.state().viewport().orbit_style(),
-        OrbitStyle::CenterOnPivot
-    );
-    for expected in [OrbitStyle::KeepUnderCursor, OrbitStyle::CenterOnPivot] {
-        harness.get_by_label("View").click();
-        harness.run();
-        harness.get_by_label(CENTRE_ORBIT_LABEL).click();
-        harness.run();
-        assert_eq!(harness.state().viewport().orbit_style(), expected);
-        // The choice is saved with the camera.
-        assert_eq!(
-            harness.state().viewport().camera_state().orbit_style,
-            expected
-        );
-    }
-}

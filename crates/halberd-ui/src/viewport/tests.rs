@@ -72,18 +72,13 @@ fn right_drag_orbits_the_camera() {
     let start = egui::pos2(400.0, 500.0);
     h.hover_at(start);
     press(&h, PointerButton::Secondary, start, true);
-    // The view keeps turning to centre the orbit point for a moment, so
-    // step through frames rather than waiting for it to settle.
-    h.run_steps(2);
+    h.run();
     h.hover_at(start + vec2(60.0, 0.0));
-    h.run_steps(2);
+    h.run();
     assert!(
         h.state().panel.controller().active_pivot().is_some(),
         "pivot marker shown"
     );
-    // Once centred, the panel stops asking for redraws.
-    h.run_steps(90);
-    h.run();
     press(&h, PointerButton::Secondary, start + vec2(60.0, 0.0), false);
     h.run();
     assert!(
@@ -94,29 +89,6 @@ fn right_drag_orbits_the_camera() {
         h.state().panel.controller().active_pivot().is_none(),
         "marker gone"
     );
-}
-
-#[test]
-fn keep_under_cursor_style_needs_no_extra_frames() {
-    let mut h = harness(ViewportOptions::default());
-    h.state_mut()
-        .panel
-        .set_orbit_style(OrbitStyle::KeepUnderCursor);
-    h.run();
-    let start = egui::pos2(200.0, 500.0);
-    h.hover_at(start);
-    press(&h, PointerButton::Secondary, start, true);
-    h.run();
-    h.hover_at(start + vec2(30.0, 10.0));
-    h.run();
-    assert!(h.state().panel.controller().active_pivot().is_some());
-    press(
-        &h,
-        PointerButton::Secondary,
-        start + vec2(30.0, 10.0),
-        false,
-    );
-    h.run();
 }
 
 #[test]

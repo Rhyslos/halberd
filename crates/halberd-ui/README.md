@@ -34,9 +34,8 @@ The workbench is implemented: a menu bar (File, View, Help) and six panels in th
 - Panels can be dragged, split, grouped and resized, but not closed or floated, so none can be lost.
 - **View → Reset panel layout** restores the standard arrangement. **Ctrl+Q** quits.
 - A saved layout that is missing a panel is replaced by the standard one, with one exception: a layout from before Layers existed keeps the user's arrangement and gains Layers as a tab beside Scene. The panel once called "Browsers" loads as Library.
-- **View → Centre the orbit point** switches the orbit style (on by default; see `halberd-tools`).
 - The Console shows the startup report. Library, Scene, Layers and Properties show placeholders until their milestones.
-- **Viewport** (`ViewportPanel`): turns mouse and keyboard input into a `ViewportInput` for the camera controller, shows the image from a `ViewportRenderer` (supplied by the program; `NoRenderer` shows a reason instead), draws the pivot marker while orbiting, and has the camera mode switcher in its bottom-left corner. It keeps redrawing without input only while flying with a movement key held, or while the view turns to centre the orbit point.
+- **Viewport** (`ViewportPanel`): turns mouse and keyboard input into a `ViewportInput` for the camera controller, shows the image from a `ViewportRenderer` (supplied by the program; `NoRenderer` shows a reason instead), draws the pivot marker while orbiting, and has the camera mode switcher in its bottom-left corner. Fly mode keeps redrawing only while a movement key is held.
 - Tab buttons and the viewport are labelled for screen readers.
 
 Tests use `egui_kittest` to run the real interface without a window: click menus, measure where each panel is drawn, and drive the viewport with simulated right-drags, middle-drags, scrolling and WASD.

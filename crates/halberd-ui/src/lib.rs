@@ -21,4 +21,4 @@ pub use panel::Panel;
 pub use viewport::{
     NoRenderer, VIEWPORT_LABEL, ViewportOptions, ViewportPanel, ViewportRenderer, ViewportView,
 };
-pub use workbench::{AppInfo, CENTRE_ORBIT_LABEL, QUIT_SHORTCUT, Workbench, WorkbenchAction};
+pub use workbench::{AppInfo, QUIT_SHORTCUT, Workbench, WorkbenchAction};

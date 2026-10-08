@@ -5,7 +5,6 @@ use crate::panel::Panel;
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
 use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, RichText, ScrollArea, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
-use halberd_tools::OrbitStyle;
 
 /// Facts about the program shown in the window and the About box.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,9 +14,6 @@ pub struct AppInfo {
     /// Version, such as "0.0.1".
     pub version: String,
 }
-
-/// The View menu's orbit-style switch.
-pub const CENTRE_ORBIT_LABEL: &str = "Centre the orbit point";
 
 /// Keyboard shortcut for File → Quit (Ctrl+Q, or Cmd+Q on macOS).
 pub const QUIT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Q);
@@ -147,19 +143,6 @@ impl Workbench {
             if ui.button("Reset panel layout").clicked() {
                 self.reset_layout();
                 self.push_console("Panel layout reset to the standard arrangement.");
-            }
-            ui.separator();
-            let mut centre = self.viewport.orbit_style() == OrbitStyle::CenterOnPivot;
-            let toggle = ui.checkbox(&mut centre, CENTRE_ORBIT_LABEL).on_hover_text(
-                "On: while orbiting, the view turns to bring the orbit point to the \
-                 centre of the screen. Off: the orbit point stays where you clicked.",
-            );
-            if toggle.changed() {
-                self.viewport.set_orbit_style(if centre {
-                    OrbitStyle::CenterOnPivot
-                } else {
-                    OrbitStyle::KeepUnderCursor
-                });
             }
         });
         ui.menu_button("Help", |ui| {

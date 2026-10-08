@@ -7,13 +7,12 @@ All notable changes to Halberd are listed here, newest first. The format follows
 ### Added
 
 - **The 3D viewport:** a grid out to the edge of a Source map (±16384 units) that stays crisp at any distance, and coloured world axes (X red, Y green, Z blue). Z is up, as in Hammer.
-- **Camera controls:** middle mouse pans, right mouse orbits, the wheel zooms towards the pointer. Three modes, switched in the viewport's bottom-left corner:
+- **Camera controls:** middle mouse pans, right mouse orbits, the wheel zooms towards the orbit point (as in 3ds Max), or towards the pointer when the orbit point is off screen and in Fly mode. Three modes, switched in the viewport's bottom-left corner:
   - **Default:** orbits around the point under the pointer. Points near the horizon (over 8192 units away) are ignored.
   - **Orbit:** orbits around the selection (the last pivot until selection exists).
   - **Fly:** hold right mouse to look; WASD to move, Space/C for up/down, Shift for 4× speed, wheel to change speed. Hidden when WASD is turned off in settings.
-- While orbiting, the view turns smoothly to bring the orbit point to the centre of the screen, then goes around it. **View → Centre the orbit point** turns this off, so the point stays where you clicked.
 - A pivot marker shows what the camera is orbiting around.
-- The camera position, mode and orbit style are remembered between sessions.
+- The camera position and mode are remembered between sessions.
 - The Console names the graphics device in use.
 - GPU rendering tests, and window smoke test checks for the viewport's colours, orbiting and zooming.
 - The editor window: a menu bar (File, View, Help) and six docked panels (Library, Viewport, Scene, Layers, Properties, Console) in the standard layout, with Layers as a tab beside Scene. Layers will group sections of a map so they can be hidden, locked and selected together, saved to Hammer as visgroups. Panels can be dragged, grouped and resized; **View → Reset panel layout** restores them. The layout and window size are remembered between sessions.
