@@ -238,6 +238,23 @@ impl CameraController {
         self.state.fly_speed
     }
 
+    /// Moves the camera back along its current view direction until all of
+    /// `bounds` is in view, looking at its middle, which also becomes the
+    /// orbit point. Used when a map is opened.
+    pub fn frame(&mut self, bounds: halberd_geom::Aabb) {
+        let centre = bounds.center();
+        let radius = (bounds.size().length() * 0.5).max(64.0);
+        if !centre.is_finite() || !radius.is_finite() {
+            return;
+        }
+        let camera = &mut self.state.camera;
+        let half_fov = (camera.fov_y * 0.5).min(1.4);
+        let distance = radius / half_fov.sin() * 1.1;
+        camera.position = centre - camera.forward() * distance;
+        self.state.pivot = centre;
+        self.state = sanitize_state(self.state);
+    }
+
     /// Applies one frame of input. Returns true while the camera keeps moving
     /// without new input (flying with a key held), so the caller should keep
     /// redrawing.

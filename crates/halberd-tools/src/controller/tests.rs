@@ -512,3 +512,23 @@ fn a_long_random_session_stays_sane() {
         assert!(cam.position.abs().max_element() <= WORLD_LIMIT, "frame {i}");
     }
 }
+
+#[test]
+fn framing_puts_the_whole_map_in_view() {
+    let mut c = controller(CameraMode::Default);
+    let forward = c.camera().forward();
+    let bounds = halberd_geom::Aabb::from_corners(
+        Vec3::new(1000.0, 2000.0, -50.0),
+        Vec3::new(3000.0, 2600.0, 400.0),
+    );
+    c.frame(bounds);
+    assert_eq!(c.camera().forward(), forward, "the view direction is kept");
+    assert_eq!(c.state().pivot, bounds.center());
+    for corner in bounds.corners() {
+        let at = c.camera().project(corner, SIZE).unwrap();
+        assert!(
+            at.x >= 0.0 && at.x <= SIZE.x && at.y >= 0.0 && at.y <= SIZE.y,
+            "{corner} at {at}"
+        );
+    }
+}

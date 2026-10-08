@@ -4,7 +4,7 @@ use super::*;
 use crate::MAX_UNDO_STEPS;
 use halberd_geom::Brush;
 
-fn cube_at(x: f32) -> Brush {
+pub(super) fn cube_at(x: f32) -> Brush {
     Brush::cuboid(Aabb::from_corners(
         Vec3::new(x, 0.0, 0.0),
         Vec3::new(x + 64.0, 64.0, 64.0),
@@ -12,7 +12,7 @@ fn cube_at(x: f32) -> Brush {
     .unwrap()
 }
 
-fn ids(doc: &Document) -> Vec<ObjectId> {
+pub(super) fn ids(doc: &Document) -> Vec<ObjectId> {
     doc.objects().map(|(id, _)| id).collect()
 }
 
@@ -254,7 +254,7 @@ fn every_document_and_copy_has_its_own_instance() {
     assert_eq!(a.revision(), c.revision());
 }
 
-fn only_id(doc: &Document) -> ObjectId {
+pub(super) fn only_id(doc: &Document) -> ObjectId {
     ids(doc)[0]
 }
 
@@ -368,7 +368,7 @@ fn transforming_several_brushes_is_one_named_step() {
         .unwrap();
     let [a, b] = [ids(&doc)[0], ids(&doc)[1]];
     let moved = |id: ObjectId, dx: f32| {
-        let Object::Brush(brush) = doc.get(id).unwrap().clone();
+        let brush = doc.get(id).unwrap().as_brush().unwrap().brush().clone();
         (id, brush.translated(Vec3::new(dx, 0.0, 0.0)).unwrap())
     };
     let command = Command::TransformBrushes {
@@ -390,7 +390,7 @@ fn a_transform_that_changes_nothing_is_refused() {
     doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
         .unwrap();
     let id = only_id(&doc);
-    let Object::Brush(same) = doc.get(id).unwrap().clone();
+    let same = doc.get(id).unwrap().as_brush().unwrap().brush().clone();
     let command = Command::TransformBrushes {
         kind: crate::TransformKind::Rotate,
         brushes: vec![(id, same)],

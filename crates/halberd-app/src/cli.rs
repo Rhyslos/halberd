@@ -16,11 +16,13 @@ pub(crate) struct Options {
     pub(crate) report_only: bool,
     /// Show help and exit.
     pub(crate) help: bool,
+    /// A map to open (double-clicking a .vmf file passes it this way).
+    pub(crate) map: Option<PathBuf>,
 }
 
 /// The help text shown by `--help`.
 pub(crate) const HELP: &str = "\
-Usage: halberd [options]
+Usage: halberd [options] [map.vmf]
 
 Options:
   --gmod-dir <folder>       Use this Garry's Mod folder and remember it
@@ -47,7 +49,11 @@ pub(crate) fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options,
             Some("--settings") => options.settings_file = Some(value_for("--settings")?),
             Some("--report-only") => options.report_only = true,
             Some("--help" | "-h" | "/?") => options.help = true,
-            _ => return Err(format!("unknown option: {}", arg.to_string_lossy())),
+            Some(flag) if flag.starts_with('-') => {
+                return Err(format!("unknown option: {flag}"));
+            }
+            _ if options.map.is_none() => options.map = Some(PathBuf::from(arg)),
+            _ => return Err("only one map can be opened at a time".to_string()),
         }
     }
     Ok(options)
@@ -114,5 +120,22 @@ mod tests {
     #[test]
     fn windows_help_spelling_works() {
         assert!(parse(args(&["/?"])).unwrap().help);
+    }
+
+    #[test]
+    fn a_map_can_be_given_to_open() {
+        let parsed = parse(args(&["--report-only", r"C:\maps\my map.vmf"])).unwrap();
+        assert_eq!(parsed.map, Some(PathBuf::from(r"C:\maps\my map.vmf")));
+        assert!(parsed.report_only);
+        assert!(
+            parse(args(&["a.vmf", "b.vmf"]))
+                .unwrap_err()
+                .contains("one map")
+        );
+        assert!(
+            parse(args(&["--nope"]))
+                .unwrap_err()
+                .contains("unknown option")
+        );
     }
 }

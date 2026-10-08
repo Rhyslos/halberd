@@ -25,6 +25,7 @@ egui_dock.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
+halberd-kv.workspace = true
 egui_kittest.workspace = true
 ron.workspace = true
 

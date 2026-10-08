@@ -418,7 +418,7 @@ impl Gizmo {
         // While dragging, the gizmo stays where the drag began.
         let bounds = match &self.drag {
             Some(drag) => drag.start_bounds(),
-            None => doc.selection_bounds()?,
+            None => selected_brush_bounds(doc)?,
         };
         Some((mode, Frame::new(bounds, camera, size)?))
     }
@@ -481,6 +481,15 @@ impl Gizmo {
             _ => GizmoOutcome::NotMine,
         }
     }
+}
+
+/// The box around the selected world brushes; entities are left out, as
+/// the gizmo cannot move them yet.
+pub(crate) fn selected_brush_bounds(doc: &Document) -> Option<Aabb> {
+    doc.selection()
+        .iter()
+        .filter_map(|id| Some(doc.get(*id)?.as_brush()?.brush().bounds()))
+        .reduce(Aabb::union)
 }
 
 #[cfg(test)]

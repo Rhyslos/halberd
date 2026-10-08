@@ -42,6 +42,8 @@ egui_dock = { version = "0.21", features = ["serde"] }
 # Must match the wgpu version eframe uses (one GPU device is shared).
 wgpu = "30.0"
 glam = { version = "0.34", features = ["serde", "bytemuck"] }
+# Native file open/save windows. On Linux, the desktop's portal (no GTK).
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 bytemuck = { version = "1.25", features = ["derive"] }
 # Development only: temporary folders for tests.
 tempfile = "3"

@@ -6,7 +6,7 @@ use egui::{RichText, ScrollArea, Ui};
 use glam::Vec3;
 use halberd_config::LengthUnit;
 use halberd_doc::{Command, Document, Object, ObjectId};
-use halberd_geom::{Aabb, Brush, MIN_SIZE};
+use halberd_geom::{Aabb, Brush, MIN_SIZE, Plane};
 
 /// The Scene panel: every object in the map. Click to select; Ctrl+click
 /// to add or remove.
@@ -19,17 +19,17 @@ pub(crate) fn scene_contents(ui: &mut Ui, doc: &mut Document) {
         );
         return;
     }
-    let rows: Vec<(ObjectId, &'static str)> =
-        doc.objects().map(|(id, o)| (id, o.kind_name())).collect();
+    let rows: Vec<(ObjectId, String)> = doc.objects().map(|(id, o)| (id, object_name(o))).collect();
     let additive = ui.input(|i| i.modifiers.command);
     let row_height = ui.spacing().interact_size.y;
     ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, rows.len(), |ui, range| {
-            for (id, kind) in rows[range].iter().copied() {
+            for (id, name) in &rows[range] {
+                let id = *id;
                 let selected = doc.is_selected(id);
                 if ui
-                    .selectable_label(selected, format!("{kind} {id}"))
+                    .selectable_label(selected, format!("{name} {id}"))
                     .clicked()
                 {
                     if additive {
@@ -67,9 +67,19 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthU
         .then(|| doc.selection().iter().next().copied())
         .flatten()
         .filter(|id| match doc.get(*id) {
-            Some(Object::Brush(brush)) => brush.is_axis_aligned_box(),
-            None => false,
+            Some(Object::Brush(brush)) => brush.brush().is_axis_aligned_box(),
+            Some(Object::Entity(_)) | None => false,
         });
+    let single = (count == 1)
+        .then(|| doc.selection().iter().next().copied())
+        .flatten();
+    if let Some(Object::Entity(entity)) = single.and_then(|id| doc.get(id)) {
+        entity_details(ui, entity);
+        return;
+    }
+    if let Some(Object::Brush(brush)) = single.and_then(|id| doc.get(id)) {
+        ui.label(materials_summary(brush));
+    }
     match editable_box {
         Some(id) => box_fields(ui, doc, id, bounds, unit),
         None => {
@@ -91,6 +101,52 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthU
                 unit.format(hi.z)
             ));
         }
+    }
+}
+
+/// How an object is named in the Scene list: "Brush", or an entity's
+/// class, such as "light".
+fn object_name(object: &Object) -> String {
+    match object {
+        Object::Brush(_) => "Brush".to_string(),
+        Object::Entity(e) if !e.classname.is_empty() => e.classname.clone(),
+        Object::Entity(_) => "Entity".to_string(),
+    }
+}
+
+/// "Material: X", or how many different materials the faces use.
+fn materials_summary(brush: &halberd_doc::BrushObject) -> String {
+    let mut names: Vec<&str> = brush.faces().iter().map(|f| f.material.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    match names.as_slice() {
+        [one] => format!("Material: {one}"),
+        many => format!("Materials: {} different", many.len()),
+    }
+}
+
+/// An entity's class and settings, read-only for now.
+fn entity_details(ui: &mut Ui, entity: &halberd_doc::EntityObject) {
+    ui.label(RichText::new(&entity.classname).strong().size(15.0));
+    ui.label(RichText::new("Editing entities comes in Phase 2.").weak());
+    ui.add_space(4.0);
+    egui::Grid::new("halberd_entity_settings")
+        .num_columns(2)
+        .striped(true)
+        .spacing([12.0, 2.0])
+        .show(ui, |ui| {
+            for (key, value) in entity.settings() {
+                ui.label(RichText::new(key).monospace());
+                ui.label(RichText::new(value).monospace());
+                ui.end_row();
+            }
+        });
+    if !entity.solids.is_empty() {
+        ui.label(format!(
+            "{} brush{}",
+            entity.solids.len(),
+            if entity.solids.len() == 1 { "" } else { "es" }
+        ));
     }
 }
 
@@ -161,7 +217,10 @@ fn box_fields(ui: &mut Ui, doc: &mut Document, id: ObjectId, bounds: Aabb, unit:
     let units = values.map(|v| unit.to_units(v).round() as f32);
     let size = Vec3::new(units[0], units[1], units[2]).max(Vec3::splat(MIN_SIZE));
     let corner = Vec3::new(units[3], units[4], units[5]);
-    let Ok(brush) = Brush::cuboid(Aabb::from_corners(corner, corner + size)) else {
+    let Some(old) = doc.get(id).and_then(Object::as_brush) else {
+        return;
+    };
+    let Ok(brush) = resized_box(old.brush(), Aabb::from_corners(corner, corner + size)) else {
         return;
     };
     // One undo step per drag of one field.
@@ -169,6 +228,28 @@ fn box_fields(ui: &mut Ui, doc: &mut Document, id: ObjectId, bounds: Aabb, unit:
     // Unchanged after rounding, or out of the world: nothing to do.
     doc.execute_merging(Command::ReplaceBrush { id, brush }, key)
         .ok();
+}
+
+/// The box `brush` moved and resized to fill `bounds`. Each face is the
+/// old face pushed out or pulled in, in the same order, so every face keeps
+/// its own material and file data (a fresh cuboid would hand them out in
+/// its own face order and mix them up).
+fn resized_box(brush: &Brush, bounds: Aabb) -> Result<Brush, halberd_geom::GeomError> {
+    let planes: Vec<Plane> = brush
+        .faces()
+        .iter()
+        .map(|face| {
+            let normal = face.plane().normal;
+            // The corner of the new box furthest along the normal lies on
+            // the face; for a box, that is exact.
+            let far = Vec3::select(normal.cmpgt(Vec3::ZERO), bounds.max, bounds.min);
+            Plane {
+                normal,
+                distance: normal.dot(far),
+            }
+        })
+        .collect();
+    Brush::from_planes(&planes)
 }
 
 pub(crate) fn placeholder(ui: &mut Ui, heading: &str, detail: &str) {
