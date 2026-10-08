@@ -20,7 +20,7 @@ Turns mouse and keyboard input into commands: selection, the W/R/S/T gizmo, shap
 
 ## Status
 
-The viewport camera is implemented.
+The viewport camera and the first left-mouse tools are implemented.
 
 - **`Camera`**: position plus yaw and pitch, Z-up like Hammer. Builds its own view and projection matrices (depth 0 to 1, as wgpu expects), casts rays through the screen and projects points onto it.
 - **`CameraController`**: the three modes from the feature spec.
@@ -34,3 +34,18 @@ The viewport camera is implemented.
 - Fly mode is hidden when WASD movement is turned off in settings.
 - Guarantees, each covered by tests: the pivot stays exactly under the pointer while orbiting; zooming leaves the orbit point exactly where it is on screen; the view never flips over; the camera stays inside ±131072 units; broken input (NaN, zero sizes, huge frame times) never breaks the camera.
 - `CameraState` (camera, mode, pivot, fly speed) is saved between sessions.
+
+### Left-mouse tools
+
+`ToolController` runs the active `Tool`. Tools never change the map: they return a `ToolAction` (select, add/remove from the selection, run a command, or refuse with a reason) for the interface to carry out.
+
+| Tool | Left mouse |
+| --- | --- |
+| Select | Click selects what is under the pointer (nothing: clears the selection). Ctrl+click adds or removes. Moving more than 4 points between press and release is not a click. |
+| Box (B) | Drag to draw a box, snapped to the grid, standing on the grid or on top of the brush under the pointer, as tall as `box_height` (128 units by default, settable, whole units). A drag along one grid line makes a wall one grid square thick; a click makes nothing. Escape cancels. `preview()` gives the box while dragging. |
+
+`DocumentScene` is what the camera and tools see of an open map: brush surfaces first, the grid plane elsewhere, and the selection's centre for Orbit mode.
+
+### Player size
+
+`PLAYER_HEIGHT` (72), `PLAYER_WIDTH` (32), `PLAYER_EYE_HEIGHT` (64) and `player_bounds`: the standard Half-Life 2 player that GMod uses, for the scale figure in the viewport.

@@ -7,6 +7,11 @@
 
 use crate::frame::{FrameParams, FrameUniforms, GRID_HALF_EXTENT};
 use crate::lines::{LineVertex, axis_lines};
+use crate::pipelines::{PipelineKind, create_pipeline};
+use crate::scene::{
+    PLAYER_OUTLINE_VERTICES, PREVIEW_COLOR, SceneGeometry, box_outline, player_outline,
+};
+use halberd_doc::Document;
 use wgpu::util::DeviceExt;
 
 /// Colour format the viewport renders in: 8-bit RGBA, sRGB-encoded, so
@@ -88,9 +93,73 @@ pub struct ViewportRenderer {
     bind_group: wgpu::BindGroup,
     grid_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
+    overlay_pipeline: wgpu::RenderPipeline,
+    brush_pipeline: wgpu::RenderPipeline,
     axis_buffer: wgpu::Buffer,
     axis_vertex_count: u32,
+    scene: SceneBuffers,
+    /// Room for one box outline, rewritten whenever a box is being drawn.
+    preview_buffer: wgpu::Buffer,
+    /// Room for the player figure, rewritten when it is shown.
+    player_buffer: wgpu::Buffer,
 }
+
+/// The map's geometry on the GPU, and which document state it shows.
+#[derive(Debug, Default)]
+struct SceneBuffers {
+    /// Document instance, revision and selection revision last uploaded.
+    shows: Option<(u64, u64, u64)>,
+    faces: GpuList,
+    edges: GpuList,
+    selected_edges: GpuList,
+}
+
+/// Vertices on the GPU, split over as many buffers as the GPU's size limit
+/// needs (a huge map would not fit in one).
+#[derive(Debug, Default)]
+struct GpuList {
+    chunks: Vec<(wgpu::Buffer, u32)>,
+}
+
+/// Largest buffer this renderer makes, whatever the GPU allows: 64 MiB.
+const MAX_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
+
+impl GpuList {
+    /// Uploads `data`. `group` vertices always stay together in one buffer
+    /// (3 for triangles, 2 for lines).
+    fn upload<T: bytemuck::Pod>(
+        device: &wgpu::Device,
+        label: &str,
+        data: &[T],
+        group: usize,
+    ) -> Self {
+        let size = std::mem::size_of::<T>().max(1) as u64;
+        let limit = device.limits().max_buffer_size.min(MAX_CHUNK_BYTES);
+        let per_chunk = ((limit / size) as usize / group).max(1) * group;
+        let chunks = data
+            .chunks(per_chunk)
+            .map(|chunk| {
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(label),
+                    contents: bytemuck::cast_slice(chunk),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+                (buffer, u32::try_from(chunk.len()).unwrap_or(u32::MAX))
+            })
+            .collect();
+        Self { chunks }
+    }
+
+    fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
+        for (buffer, count) in &self.chunks {
+            pass.set_vertex_buffer(0, buffer.slice(..));
+            pass.draw(0..*count, 0..1);
+        }
+    }
+}
+
+/// Vertices in one box outline.
+const PREVIEW_VERTICES: usize = 24;
 
 impl ViewportRenderer {
     /// Builds shaders, pipelines and fixed geometry. `sample_count` is 1 or
@@ -106,6 +175,13 @@ impl ViewportRenderer {
             label: Some("halberd frame uniforms"),
             size: std::mem::size_of::<FrameUniforms>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let player_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("halberd player figure"),
+            size: (PLAYER_OUTLINE_VERTICES * std::mem::size_of::<LineVertex>())
+                as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -139,6 +215,26 @@ impl ViewportRenderer {
             create_pipeline(device, &layout, &shader, sample_count, PipelineKind::Grid);
         let line_pipeline =
             create_pipeline(device, &layout, &shader, sample_count, PipelineKind::Lines);
+        let overlay_pipeline = create_pipeline(
+            device,
+            &layout,
+            &shader,
+            sample_count,
+            PipelineKind::Overlay,
+        );
+        let brush_pipeline = create_pipeline(
+            device,
+            &layout,
+            &shader,
+            sample_count,
+            PipelineKind::Brushes,
+        );
+        let preview_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("halberd box preview"),
+            size: (PREVIEW_VERTICES * std::mem::size_of::<LineVertex>()) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         let axes = axis_lines(GRID_HALF_EXTENT);
         let axis_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -153,9 +249,42 @@ impl ViewportRenderer {
             bind_group,
             grid_pipeline,
             line_pipeline,
+            overlay_pipeline,
+            brush_pipeline,
             axis_buffer,
             axis_vertex_count: axes.len() as u32,
+            scene: SceneBuffers::default(),
+            preview_buffer,
+            player_buffer,
         }
+    }
+
+    /// Makes the next frames show `doc` as it is now. Cheap when nothing
+    /// changed since the last call: the geometry is only rebuilt when the
+    /// document is replaced, edited or its selection changes.
+    pub fn update_scene(&mut self, device: &wgpu::Device, doc: &Document) {
+        let state = (doc.instance(), doc.revision(), doc.selection_revision());
+        if self.scene.shows == Some(state) {
+            return;
+        }
+        self.set_scene(device, &SceneGeometry::from_document(doc));
+        self.scene.shows = Some(state);
+    }
+
+    /// Replaces the drawn map geometry. [`Self::update_scene`] is the usual
+    /// way in; this one is for previews and tests.
+    pub fn set_scene(&mut self, device: &wgpu::Device, geometry: &SceneGeometry) {
+        self.scene = SceneBuffers {
+            shows: None,
+            faces: GpuList::upload(device, "halberd brush faces", &geometry.faces, 3),
+            edges: GpuList::upload(device, "halberd brush outlines", &geometry.edges, 2),
+            selected_edges: GpuList::upload(
+                device,
+                "halberd selection outlines",
+                &geometry.selected_edges,
+                2,
+            ),
+        };
     }
 
     /// The multisample count in use.
@@ -241,6 +370,16 @@ impl ViewportRenderer {
             0,
             bytemuck::bytes_of(&FrameUniforms::new(params)),
         );
+        let preview = params
+            .preview
+            .map(|bounds| box_outline(bounds, PREVIEW_COLOR));
+        if let Some(lines) = &preview {
+            queue.write_buffer(&self.preview_buffer, 0, bytemuck::cast_slice(lines));
+        }
+        let player = params.player.map(player_outline);
+        if let Some(lines) = &player {
+            queue.write_buffer(&self.player_buffer, 0, bytemuck::cast_slice(lines));
+        }
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("halberd viewport frame"),
         });
@@ -273,161 +412,27 @@ impl ViewportRenderer {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.bind_group, &[]);
+            // Solids first, so the transparent grid is hidden behind them.
+            pass.set_pipeline(&self.brush_pipeline);
+            self.scene.faces.draw(&mut pass);
             pass.set_pipeline(&self.grid_pipeline);
             pass.draw(0..6, 0..1);
             pass.set_pipeline(&self.line_pipeline);
             pass.set_vertex_buffer(0, self.axis_buffer.slice(..));
             pass.draw(0..self.axis_vertex_count, 0..1);
+            self.scene.edges.draw(&mut pass);
+            if let Some(lines) = &player {
+                pass.set_vertex_buffer(0, self.player_buffer.slice(..));
+                pass.draw(0..lines.len() as u32, 0..1);
+            }
+            // On top of everything: the selection and the box being drawn.
+            pass.set_pipeline(&self.overlay_pipeline);
+            self.scene.selected_edges.draw(&mut pass);
+            if let Some(lines) = &preview {
+                pass.set_vertex_buffer(0, self.preview_buffer.slice(..));
+                pass.draw(0..lines.len() as u32, 0..1);
+            }
         }
         queue.submit([encoder.finish()]);
     }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum PipelineKind {
-    Grid,
-    Lines,
-}
-
-fn create_pipeline(
-    device: &wgpu::Device,
-    layout: &wgpu::PipelineLayout,
-    shader: &wgpu::ShaderModule,
-    sample_count: u32,
-    kind: PipelineKind,
-) -> wgpu::RenderPipeline {
-    let (label, vs, fs, topology, buffers, blend, depth_write): (_, _, _, _, &[_], _, _) =
-        match kind {
-            PipelineKind::Grid => (
-                "halberd grid pipeline",
-                "grid_vs",
-                "grid_fs",
-                wgpu::PrimitiveTopology::TriangleList,
-                &[],
-                Some(wgpu::BlendState::ALPHA_BLENDING),
-                // Transparent: tests depth but does not hide what is drawn later.
-                false,
-            ),
-            PipelineKind::Lines => (
-                "halberd line pipeline",
-                "line_vs",
-                "line_fs",
-                wgpu::PrimitiveTopology::LineList,
-                &[Some(LineVertex::LAYOUT)],
-                None,
-                true,
-            ),
-        };
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some(label),
-        layout: Some(layout),
-        vertex: wgpu::VertexState {
-            module: shader,
-            entry_point: Some(vs),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            buffers,
-        },
-        primitive: wgpu::PrimitiveState {
-            topology,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: Some(wgpu::DepthStencilState {
-            format: DEPTH_FORMAT,
-            depth_write_enabled: Some(depth_write),
-            depth_compare: Some(wgpu::CompareFunction::LessEqual),
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        multisample: wgpu::MultisampleState {
-            count: sample_count,
-            ..Default::default()
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: shader,
-            entry_point: Some(fs),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: COLOR_FORMAT,
-                blend,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-        }),
-        multiview_mask: None,
-        cache: None,
-    })
-}
-
-/// Copies a target's finished image back to the CPU as tightly packed RGBA8
-/// rows (sRGB-encoded, as stored). Blocks until the GPU is done. Meant for
-/// tests and screenshots, not for every frame.
-pub fn read_pixels(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    target: &ViewportTarget,
-) -> Result<Vec<u8>, String> {
-    let [width, height] = target.size;
-    let unpadded = width * 4;
-    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let padded = unpadded.div_ceil(align) * align;
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("halberd readback"),
-        size: u64::from(padded) * u64::from(height),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("halberd readback"),
-    });
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture: &target.resolved,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    queue.submit([encoder.finish()]);
-
-    let (sender, receiver) = std::sync::mpsc::channel();
-    buffer
-        .slice(..)
-        .map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
-    device
-        .poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        })
-        .map_err(|e| format!("GPU did not finish: {e}"))?;
-    receiver
-        .recv()
-        .map_err(|_| "GPU readback was abandoned".to_string())?
-        .map_err(|e| format!("could not read the image back: {e}"))?;
-
-    let mapped = buffer
-        .slice(..)
-        .get_mapped_range()
-        .map_err(|e| format!("could not read the image back: {e}"))?;
-    let mut pixels = Vec::with_capacity((unpadded * height) as usize);
-    for row in mapped.chunks(padded as usize).take(height as usize) {
-        pixels.extend_from_slice(&row[..unpadded as usize]);
-    }
-    drop(mapped);
-    buffer.unmap();
-    Ok(pixels)
 }

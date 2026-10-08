@@ -1,5 +1,6 @@
 //! What Halberd's settings contain, their defaults and their safe limits.
 
+use crate::LengthUnit;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -57,6 +58,10 @@ pub struct EditorSettings {
     /// Whether WASD moves the camera while right mouse is held.
     /// `None` means the user has not been asked yet (first launch).
     pub wasd_movement: Option<bool>,
+    /// The unit lengths are shown and typed in (`"units"` or `"metres"`).
+    pub length_unit: LengthUnit,
+    /// Whether a player-sized figure is shown in the viewport for scale.
+    pub show_player_scale: bool,
 }
 
 /// One value that was out of range and has been corrected.
@@ -126,6 +131,14 @@ impl Settings {
             &mut self.editor.grid_size,
             nearest_grid(grid),
         );
+        if self.editor.length_unit == LengthUnit::Unknown {
+            changes.push(Adjustment {
+                setting: "editor.length_unit",
+                found: "an unknown unit".into(),
+                used: "units".into(),
+            });
+            self.editor.length_unit = LengthUnit::Units;
+        }
 
         (self, changes)
     }
@@ -170,6 +183,8 @@ impl Default for EditorSettings {
             autosave_minutes: 5,
             grid_size: 16,
             wasd_movement: None,
+            length_unit: LengthUnit::Units,
+            show_player_scale: true,
         }
     }
 }
@@ -248,5 +263,27 @@ mod tests {
             assert!(g.is_power_of_two(), "{value} gave {g}");
             assert!((Settings::MIN_GRID..=Settings::MAX_GRID).contains(&g));
         }
+    }
+
+    #[test]
+    fn length_unit_and_player_scale_load_and_default() {
+        let old: Settings = toml::from_str("[editor]\ngrid_size = 32\n").unwrap();
+        assert_eq!(old.editor.length_unit, LengthUnit::Units);
+        assert!(old.editor.show_player_scale);
+        let metres: Settings =
+            toml::from_str("[editor]\nlength_unit = \"metres\"\nshow_player_scale = false\n")
+                .unwrap();
+        assert_eq!(metres.editor.length_unit, LengthUnit::Metres);
+        assert!(!metres.editor.show_player_scale);
+        let text = toml::to_string(&metres).unwrap();
+        assert!(text.contains("length_unit = \"metres\""), "{text}");
+    }
+
+    #[test]
+    fn an_unknown_length_unit_falls_back_to_units() {
+        let typo: Settings = toml::from_str("[editor]\nlength_unit = \"furlongs\"\n").unwrap();
+        let (fixed, changes) = typo.sanitized();
+        assert_eq!(fixed.editor.length_unit, LengthUnit::Units);
+        assert!(changes.iter().any(|c| c.setting == "editor.length_unit"));
     }
 }

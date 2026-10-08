@@ -1,10 +1,16 @@
 //! The editor window's contents: menu bar, docked panels and the About box.
+//! The workbench also owns the open map, and carries out the Edit menu.
 
 use crate::layout::{default_layout, restore_or_default};
 use crate::panel::Panel;
+use crate::panels::{
+    about_contents, console_contents, placeholder, properties_contents, scene_contents,
+};
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
-use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, RichText, ScrollArea, Ui, WidgetText};
+use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
+use halberd_config::LengthUnit;
+use halberd_doc::{Command, Document};
 
 /// Facts about the program shown in the window and the About box.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,8 +21,28 @@ pub struct AppInfo {
     pub version: String,
 }
 
+/// The View menu's switch for the player figure.
+pub const PLAYER_TOGGLE_LABEL: &str = "Show player for scale";
+
 /// Keyboard shortcut for File → Quit (Ctrl+Q, or Cmd+Q on macOS).
 pub const QUIT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Q);
+/// Edit → Undo (Ctrl+Z).
+pub const UNDO_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
+/// Edit → Redo (Ctrl+Y).
+pub const REDO_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Y);
+/// Also Redo (Ctrl+Shift+Z), as in many programs.
+const REDO_ALT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(
+    Modifiers {
+        shift: true,
+        ..Modifiers::COMMAND
+    },
+    Key::Z,
+);
+/// Edit → Delete (the Delete key).
+pub const DELETE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Delete);
+/// Also Delete: Backspace, which Mac keyboards label "delete".
+const DELETE_ALT_SHORTCUT: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::NONE, Key::Backspace);
 
 /// Something the user asked for that the program around the workbench
 /// must carry out.
@@ -33,6 +59,9 @@ pub struct Workbench {
     console: Vec<String>,
     about_open: bool,
     viewport: ViewportPanel,
+    doc: Document,
+    length_unit: LengthUnit,
+    show_player: bool,
 }
 
 impl Workbench {
@@ -46,6 +75,9 @@ impl Workbench {
             console: Vec::new(),
             about_open: false,
             viewport: ViewportPanel::new(None, ViewportOptions::default()),
+            doc: Document::new(),
+            length_unit: LengthUnit::Units,
+            show_player: true,
         };
         if let Some(note) = note {
             workbench.push_console(note);
@@ -60,9 +92,76 @@ impl Workbench {
         self
     }
 
+    /// Sets the display preferences from settings: the unit lengths are
+    /// shown in, and whether the player figure is shown.
+    pub fn with_display(mut self, length_unit: LengthUnit, show_player: bool) -> Self {
+        self.set_length_unit(length_unit);
+        self.show_player = show_player;
+        self
+    }
+
+    /// The unit lengths are shown and typed in.
+    pub fn length_unit(&self) -> LengthUnit {
+        self.length_unit
+    }
+
+    /// Changes the unit lengths are shown and typed in.
+    pub fn set_length_unit(&mut self, unit: LengthUnit) {
+        self.length_unit = if unit == LengthUnit::Unknown {
+            LengthUnit::Units
+        } else {
+            unit
+        };
+    }
+
+    /// Whether the player figure is shown for scale.
+    pub fn show_player(&self) -> bool {
+        self.show_player
+    }
+
+    /// Shows or hides the player figure.
+    pub fn set_show_player(&mut self, show: bool) {
+        self.show_player = show;
+    }
+
     /// The viewport panel.
     pub fn viewport(&self) -> &ViewportPanel {
         &self.viewport
+    }
+
+    /// The viewport panel, for changing its tool.
+    pub fn viewport_mut(&mut self) -> &mut ViewportPanel {
+        &mut self.viewport
+    }
+
+    /// The open map.
+    pub fn document(&self) -> &Document {
+        &self.doc
+    }
+
+    /// The open map, for changing it (edits through [`Document::execute`]).
+    pub fn document_mut(&mut self) -> &mut Document {
+        &mut self.doc
+    }
+
+    /// Edit → Undo.
+    pub fn undo(&mut self) {
+        self.doc.undo();
+    }
+
+    /// Edit → Redo.
+    pub fn redo(&mut self) {
+        self.doc.redo();
+    }
+
+    /// Edit → Delete: removes the selected objects (an undoable edit).
+    pub fn delete_selection(&mut self) {
+        let selected: Vec<_> = self.doc.selection().iter().copied().collect();
+        if !selected.is_empty()
+            && let Err(e) = self.doc.execute(Command::Remove(selected))
+        {
+            self.push_console(format!("Could not delete: {e}."));
+        }
     }
 
     /// The current panel arrangement, for saving between sessions.
@@ -101,14 +200,28 @@ impl Workbench {
         if ui.input_mut(|input| input.consume_shortcut(&QUIT_SHORTCUT)) {
             actions.push(WorkbenchAction::Quit);
         }
+        self.edit_shortcuts(ui);
+        // Between drags, the next edit starts a new undo step; during a drag
+        // (of a size field, say) its many small edits stay one step.
+        if !ui.ctx().egui_is_using_pointer() {
+            self.doc.end_step();
+        }
+        self.viewport
+            .note_popup_open(egui::Popup::is_any_open(ui.ctx()));
+        self.viewport
+            .set_display(self.length_unit, self.show_player);
         egui::Panel::top("halberd_menu_bar").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| self.menu_bar(ui, &mut actions));
         });
 
+        let mut notes = Vec::new();
         let mut viewer = PanelViewer {
             console: &self.console,
             viewport: &mut self.viewport,
             renderer,
+            doc: &mut self.doc,
+            notes: &mut notes,
+            length_unit: self.length_unit,
         };
         DockArea::new(&mut self.dock)
             .style(Style::from_egui(ui.style().as_ref()))
@@ -116,6 +229,7 @@ impl Workbench {
             .show_add_buttons(false)
             .show_leaf_close_all_buttons(false)
             .show_inside(ui, &mut viewer);
+        self.console.extend(notes);
 
         let mut about_open = self.about_open;
         egui::Window::new("About Halberd")
@@ -129,6 +243,65 @@ impl Workbench {
         actions
     }
 
+    /// Undo, redo and delete from the keyboard, unless a text box is in use.
+    fn edit_shortcuts(&mut self, ui: &Ui) {
+        if ui.ctx().egui_wants_keyboard_input() {
+            return;
+        }
+        let consume = |shortcut: &KeyboardShortcut| ui.input_mut(|i| i.consume_shortcut(shortcut));
+        // Ctrl+Shift+Z first: Ctrl+Z would also match it.
+        if consume(&REDO_ALT_SHORTCUT) || consume(&REDO_SHORTCUT) {
+            self.redo();
+        } else if consume(&UNDO_SHORTCUT) {
+            self.undo();
+        }
+        if consume(&DELETE_SHORTCUT) || consume(&DELETE_ALT_SHORTCUT) {
+            self.delete_selection();
+        }
+    }
+
+    fn edit_menu(&mut self, ui: &mut Ui) {
+        let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
+        let undo = match self.doc.undo_label() {
+            Some(label) => format!("Undo {label}"),
+            None => "Undo".to_string(),
+        };
+        let redo = match self.doc.redo_label() {
+            Some(label) => format!("Redo {label}"),
+            None => "Redo".to_string(),
+        };
+        let (undo_keys, redo_keys, delete_keys) = (
+            shortcut(&UNDO_SHORTCUT),
+            shortcut(&REDO_SHORTCUT),
+            shortcut(&DELETE_SHORTCUT),
+        );
+        let can_undo = self.doc.undo_label().is_some();
+        let can_redo = self.doc.redo_label().is_some();
+        let can_delete = !self.doc.selection().is_empty();
+        if ui
+            .add_enabled(can_undo, egui::Button::new(undo).shortcut_text(undo_keys))
+            .clicked()
+        {
+            self.undo();
+        }
+        if ui
+            .add_enabled(can_redo, egui::Button::new(redo).shortcut_text(redo_keys))
+            .clicked()
+        {
+            self.redo();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(
+                can_delete,
+                egui::Button::new("Delete").shortcut_text(delete_keys),
+            )
+            .clicked()
+        {
+            self.delete_selection();
+        }
+    }
+
     fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<WorkbenchAction>) {
         ui.menu_button("File", |ui| {
             let shortcut = ui.ctx().format_shortcut(&QUIT_SHORTCUT);
@@ -139,11 +312,26 @@ impl Workbench {
                 actions.push(WorkbenchAction::Quit);
             }
         });
+        ui.menu_button("Edit", |ui| self.edit_menu(ui));
         ui.menu_button("View", |ui| {
             if ui.button("Reset panel layout").clicked() {
                 self.reset_layout();
                 self.push_console("Panel layout reset to the standard arrangement.");
             }
+            ui.separator();
+            ui.label("Show lengths in");
+            for unit in LengthUnit::CHOICES {
+                if ui
+                    .radio(self.length_unit == unit, unit.label())
+                    .on_hover_text("Maps are always saved in Hammer units; 1 unit is 2.54 cm")
+                    .clicked()
+                {
+                    self.set_length_unit(unit);
+                }
+            }
+            ui.separator();
+            ui.checkbox(&mut self.show_player, PLAYER_TOGGLE_LABEL)
+                .on_hover_text("A 72-unit (1.83 m) player figure next to what you are working on");
         });
         ui.menu_button("Help", |ui| {
             if ui.button("About Halberd").clicked() {
@@ -158,6 +346,10 @@ struct PanelViewer<'a> {
     console: &'a [String],
     viewport: &'a mut ViewportPanel,
     renderer: &'a mut dyn ViewportRenderer,
+    doc: &'a mut Document,
+    /// Messages for the Console, added after the panels are drawn.
+    notes: &'a mut Vec<String>,
+    length_unit: LengthUnit,
 }
 
 impl TabViewer for PanelViewer<'_> {
@@ -204,61 +396,26 @@ impl TabViewer for PanelViewer<'_> {
 
     fn ui(&mut self, ui: &mut Ui, tab: &mut Panel) {
         match tab {
-            Panel::Viewport => self.viewport.show(ui, self.renderer),
+            Panel::Viewport => {
+                let notes = self.viewport.show(ui, self.renderer, self.doc);
+                self.notes.extend(notes);
+            }
             Panel::Library => placeholder(
                 ui,
                 "Props, materials and entities",
                 "The asset library arrives in Phase 1.",
             ),
-            Panel::Scene => placeholder(ui, "No map open", "The scene tree arrives with brushes."),
+            Panel::Scene => scene_contents(ui, self.doc),
             Panel::Layers => placeholder(
                 ui,
                 "No layers yet",
                 "Layers group sections of a map so they can be hidden, locked and \
                  selected together. They are saved to Hammer as visgroups.",
             ),
-            Panel::Properties => placeholder(
-                ui,
-                "Nothing selected",
-                "Select something to see its properties.",
-            ),
+            Panel::Properties => properties_contents(ui, self.doc, self.length_unit),
             Panel::Console => console_contents(ui, self.console),
         }
     }
-}
-
-fn placeholder(ui: &mut Ui, heading: &str, detail: &str) {
-    ui.add_space(8.0);
-    ui.label(RichText::new(heading).strong());
-    ui.label(RichText::new(detail).weak());
-}
-
-fn console_contents(ui: &mut Ui, lines: &[String]) {
-    ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .stick_to_bottom(true)
-        .show(ui, |ui| {
-            for line in lines {
-                ui.label(RichText::new(line).monospace());
-            }
-        });
-}
-
-fn about_contents(ui: &mut Ui, info: &AppInfo) {
-    ui.heading(format!("{} {}", info.name, info.version));
-    ui.label("A modern map editor for Garry's Mod.");
-    ui.add_space(6.0);
-    ui.label("Created by Rhyslos, built with AI assistance (Claude by Anthropic).");
-    ui.label("Licensed under the Apache License 2.0.");
-    ui.add_space(6.0);
-    ui.label(
-        RichText::new(
-            "Not affiliated with Valve or Facepunch Studios. Garry's Mod is a trademark of \
-             Facepunch Studios; Hammer, Source and Steam are trademarks of Valve Corporation.",
-        )
-        .weak()
-        .small(),
-    );
 }
 
 #[cfg(test)]

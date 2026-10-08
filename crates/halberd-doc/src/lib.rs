@@ -1,18 +1,24 @@
 //! The map document: objects, selection, commands and undo.
 //!
-//! The single source of truth for an open map: brushes, props, entities and groups with stable IDs, the selection, and the command system every edit goes through, which gives undo and redo.
+//! A [`Document`] is the single source of truth for an open map. Every
+//! object has an [`ObjectId`] that never changes and is never reused. The
+//! map changes only through a [`Command`] passed to [`Document::execute`],
+//! which records how to reverse it, so every edit can be undone and redone.
 //!
-//! Status: skeleton. See this crate's README for what it must never do.
+//! The selection lives in the document too, but is not part of the map:
+//! selecting is not an edit and is not undone (as in Hammer). Undoing an
+//! edit does select what it brings back.
+//!
+//! So far the only objects are brushes; props and entities follow.
 
-/// The name of this crate, used in logs and diagnostics.
-pub const CRATE_NAME: &str = "halberd-doc";
+mod command;
+mod document;
+mod error;
+mod history;
+mod object;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
-    }
-}
+pub use command::Command;
+pub use document::{Document, MAX_OBJECTS};
+pub use error::DocError;
+pub use history::MAX_UNDO_STEPS;
+pub use object::{Object, ObjectId};

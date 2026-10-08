@@ -31,10 +31,21 @@ Slow work (reading assets, booleans, compiles, lighting) runs on background thre
 
 ## The document
 
-- The single source of truth for an open map: brushes, props, entities, groups.
+- The single source of truth for an open map: brushes, props, entities, groups. Owned by the workbench in `halberd-ui`.
 - Every object has a stable ID that is never reused.
 - It changes only through commands, which gives undo/redo, autosave and future scripting from one mechanism.
 - Editable shapes may be concave; they are split into Source's convex brushes only on export or compile.
+- Brushes are stored as planes, as in VMF (`halberd-geom`); face polygons are worked out from them.
+- The selection lives in the document but is not an edit, so it is not undone.
+
+### How an edit flows
+
+1. The active tool (`halberd-tools`) reads plain input and returns a `ToolAction`, for example "run `AddBrushes` with this box".
+2. The workbench (`halberd-ui`) carries it out: `Document::execute` checks the command, applies it and records how to reverse it.
+3. The document's revision goes up; the renderer (`halberd-render`) rebuilds its GPU buffers on the next frame.
+4. Undo and redo (Edit menu, Ctrl+Z / Ctrl+Y) replay the recorded changes.
+
+See [decision 0009](docs/decisions/0009-document-commands-and-brushes.md).
 
 ## Files
 
@@ -48,7 +59,7 @@ Slow work (reading assets, booleans, compiles, lighting) runs on background thre
 | VTF, VMT (textures, materials) | Yes | No |
 | VDF (Steam config) | Yes | No |
 | `.halberd` (Halberd projects, versioned) | Yes | Yes |
-| `settings.toml` (editor settings) | Yes | Yes |
+| `settings.toml` (editor settings; View menu choices are saved back to it) | Yes | Yes |
 | `app.ron` (window size, panel layout, viewport camera; written by eframe) | Yes | Yes |
 
 Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from the user's own GMod install. Halberd never ships them.
@@ -74,8 +85,8 @@ Coordinates follow Hammer: **Z is up**, units are Hammer units, right-handed.
 Each frame, for each viewport:
 
 1. **Input** (`halberd-ui`): the panel turns egui's mouse and keyboard state into a plain `ViewportInput`.
-2. **Camera** (`halberd-tools`): the `CameraController` applies it in the current mode (Default, Orbit or Fly), asking the scene what is under the pointer through `SceneQuery`.
-3. **Render** (`halberd-render`, called through `halberd-app`'s `GpuViewport`): the grid and axes are drawn into the viewport's own offscreen image on the window's GPU device.
+2. **Camera and tools** (`halberd-tools`): the `CameraController` applies it in the current mode (Default, Orbit or Fly), asking the map what is under the pointer through `SceneQuery` (`DocumentScene`); the active tool turns left-mouse input into a `ToolAction`.
+3. **Render** (`halberd-render`, called through `halberd-app`'s `GpuViewport`): brushes, the grid and axes are drawn into the viewport's own offscreen image on the window's GPU device.
 4. **Show** (`halberd-ui`): the image is drawn into the panel as an egui texture, with the pivot marker and the camera mode switcher on top.
 
 Rendering sits behind the `ViewportRenderer` trait, so the panel runs in tests with no GPU. See [decision 0008](docs/decisions/0008-viewport-rendering-and-camera.md).

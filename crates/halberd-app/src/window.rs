@@ -2,8 +2,9 @@
 //! frame to the workbench from `halberd-ui`.
 
 use crate::gpu::GpuViewport;
+use crate::preferences::PreferenceSaver;
 use eframe::egui;
-use halberd_config::Settings;
+use halberd_config::{Settings, SettingsStore};
 use halberd_ui::{
     AppInfo, NoRenderer, ViewportOptions, ViewportPanel, ViewportRenderer, Workbench,
     WorkbenchAction,
@@ -25,6 +26,7 @@ const MIN_SIZE: [f32; 2] = [960.0, 600.0];
 struct HalberdApp {
     workbench: Workbench,
     renderer: Box<dyn ViewportRenderer>,
+    preferences: PreferenceSaver,
 }
 
 impl eframe::App for HalberdApp {
@@ -33,6 +35,10 @@ impl eframe::App for HalberdApp {
             match action {
                 WorkbenchAction::Quit => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
             }
+        }
+        let (unit, player) = (self.workbench.length_unit(), self.workbench.show_player());
+        if let Some(note) = self.preferences.update(unit, player) {
+            self.workbench.push_console(note);
         }
     }
 
@@ -49,10 +55,16 @@ impl eframe::App for HalberdApp {
 /// Opens the editor window and runs until it is closed.
 ///
 /// `report` is the startup report; it becomes the first lines of the Console
-/// panel. `settings` configure the viewport. Returns a plain-language reason
+/// panel. `settings` configure the viewport and display; display choices
+/// made in the editor are saved back through `store`. Returns a plain-language reason
 /// if the window could not be opened (for example, no graphics driver that
 /// supports Vulkan, DirectX 12 or Metal).
-pub(crate) fn run(info: AppInfo, report: Vec<String>, settings: &Settings) -> Result<(), String> {
+pub(crate) fn run(
+    info: AppInfo,
+    report: Vec<String>,
+    settings: Settings,
+    store: Option<SettingsStore>,
+) -> Result<(), String> {
     let viewport_options = ViewportOptions {
         // Not asked yet (first launch) counts as on, until Settings can ask.
         wasd_enabled: settings.editor.wasd_movement.unwrap_or(true),
@@ -80,7 +92,10 @@ pub(crate) fn run(info: AppInfo, report: Vec<String>, settings: &Settings) -> Re
                 let saved_layout = cc.storage.and_then(|s| eframe::get_value(s, LAYOUT_KEY));
                 let saved_camera = cc.storage.and_then(|s| eframe::get_value(s, CAMERA_KEY));
                 let viewport = ViewportPanel::new(saved_camera, viewport_options);
-                let mut workbench = Workbench::new(info, saved_layout).with_viewport(viewport);
+                let editor = &settings.editor;
+                let mut workbench = Workbench::new(info, saved_layout)
+                    .with_viewport(viewport)
+                    .with_display(editor.length_unit, editor.show_player_scale);
                 for line in report {
                     workbench.push_console(line);
                 }
@@ -97,6 +112,7 @@ pub(crate) fn run(info: AppInfo, report: Vec<String>, settings: &Settings) -> Re
                 Ok(Box::new(HalberdApp {
                     workbench,
                     renderer,
+                    preferences: PreferenceSaver::new(settings, store),
                 }))
             }),
         )

@@ -4,7 +4,9 @@
 use eframe::egui;
 use eframe::egui_wgpu::RenderState;
 use eframe::wgpu;
-use halberd_render::{FrameParams, ViewportRenderer as GpuRenderer, ViewportTarget};
+use halberd_doc::Document;
+use halberd_render::{FrameParams, PlayerOutline, ViewportRenderer as GpuRenderer, ViewportTarget};
+use halberd_tools::PLAYER_EYE_HEIGHT;
 use halberd_ui::{ViewportRenderer, ViewportView};
 
 /// Draws the viewport with the same GPU device the window uses.
@@ -75,8 +77,9 @@ impl GpuViewport {
 }
 
 impl ViewportRenderer for GpuViewport {
-    fn render(&mut self, view: &ViewportView) -> Result<egui::TextureId, String> {
+    fn render(&mut self, view: &ViewportView, doc: &Document) -> Result<egui::TextureId, String> {
         let texture = self.prepare_target(view.size_px);
+        self.renderer.update_scene(&self.state.device, doc);
         let target = self
             .target
             .as_ref()
@@ -85,6 +88,11 @@ impl ViewportRenderer for GpuViewport {
             view_projection: view.view_projection,
             camera_position: view.camera_position,
             grid_size: view.grid_size,
+            preview: view.preview,
+            player: view.player.map(|bounds| PlayerOutline {
+                bounds,
+                eye_height: PLAYER_EYE_HEIGHT,
+            }),
         };
         self.renderer
             .render(&self.state.device, &self.state.queue, target, &params);

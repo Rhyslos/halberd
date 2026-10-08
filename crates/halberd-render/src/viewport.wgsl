@@ -1,4 +1,5 @@
-// Halberd viewport shaders: the ground grid and coloured lines (axes).
+// Halberd viewport shaders: the ground grid, coloured lines (axes and
+// outlines) and shaded brush faces.
 //
 // Colours are written in linear space; the render target is sRGB, so the
 // GPU converts them when storing.
@@ -92,4 +93,37 @@ fn line_vs(in: LineIn) -> LineOut {
 @fragment
 fn line_fs(in: LineOut) -> @location(0) vec4<f32> {
     return in.color;
+}
+
+// ------------------------------------------------------------- brushes ---
+
+struct BrushIn {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) color: vec4<f32>,
+};
+
+struct BrushOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) normal: vec3<f32>,
+    @location(1) color: vec4<f32>,
+};
+
+@vertex
+fn brush_vs(in: BrushIn) -> BrushOut {
+    var out: BrushOut;
+    out.clip = frame.view_proj * vec4<f32>(in.position, 1.0);
+    out.normal = in.normal;
+    out.color = in.color;
+    return out;
+}
+
+// Simple fixed lighting from above and to one side, so every face of a box
+// has its own shade and shapes read clearly before real lighting exists.
+@fragment
+fn brush_fs(in: BrushOut) -> @location(0) vec4<f32> {
+    let light = normalize(vec3<f32>(0.35, 0.55, 0.85));
+    let diffuse = max(dot(normalize(in.normal), light), 0.0);
+    let shade = 0.38 + 0.62 * diffuse;
+    return vec4<f32>(in.color.rgb * shade, in.color.a);
 }

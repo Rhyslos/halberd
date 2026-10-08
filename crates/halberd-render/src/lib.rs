@@ -1,22 +1,32 @@
 //! GPU rendering of the viewports.
 //!
-//! Draws each viewport with wgpu into its own offscreen image: so far the
-//! ground grid (to the edges of a Source map) and the world axes. Brushes,
-//! props, entities, gizmos and the lighting preview will follow.
+//! Draws each viewport with wgpu into its own offscreen image: the ground
+//! grid (to the edges of a Source map), the world axes, the map's brushes
+//! (shaded, outlined, selected ones in red) and the outline of a box being
+//! drawn. Props, entities, gizmos and the lighting preview will follow.
 //!
-//! This crate knows nothing about egui or windows: it receives a
-//! [`FrameParams`] (camera matrices and grid size) and produces an image
-//! in a [`ViewportTarget`]. It never changes the map document.
+//! This crate knows nothing about egui or windows: it reads the map
+//! document ([`ViewportRenderer::update_scene`]), receives a
+//! [`FrameParams`] (camera matrices, grid size, box preview) and produces
+//! an image in a [`ViewportTarget`]. It never changes the document.
 
 mod frame;
 mod lines;
+mod pipelines;
+mod readback;
 mod renderer;
+mod scene;
 
 pub use frame::{FrameParams, GRID_HALF_EXTENT, MAJOR_EVERY, SUPER_SPACING, grid_spacings};
 pub use lines::{LineVertex, X_AXIS_COLOR, Y_AXIS_COLOR, Z_AXIS_COLOR, Z_AXIS_HEIGHT, axis_lines};
+pub use readback::read_pixels;
 pub use renderer::{
     BACKGROUND, COLOR_FORMAT, DEPTH_FORMAT, DISPLAY_FORMAT, SHADER_SOURCE, ViewportRenderer,
-    ViewportTarget, best_sample_count, read_pixels,
+    ViewportTarget, best_sample_count,
+};
+pub use scene::{
+    BRUSH_COLOR, EDGE_COLOR, FaceVertex, PLAYER_COLOR, PLAYER_OUTLINE_VERTICES, PREVIEW_COLOR,
+    PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR, SceneGeometry, box_outline, player_outline,
 };
 
 #[cfg(test)]
@@ -47,6 +57,11 @@ mod shader_tests {
             .map(|e| e.name.as_str())
             .collect();
         names.sort_unstable();
-        assert_eq!(names, ["grid_fs", "grid_vs", "line_fs", "line_vs"]);
+        assert_eq!(
+            names,
+            [
+                "brush_fs", "brush_vs", "grid_fs", "grid_vs", "line_fs", "line_vs"
+            ]
+        );
     }
 }

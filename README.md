@@ -4,7 +4,7 @@
 
 Halberd is a free, open-source level editor in the spirit of Unity and Godot: place and shape geometry in a 3D viewport, populate it with props, and compile it straight into a playable GMod map with Valve's own tools. Maps open in Hammer and Hammer++ too, through Export to Hammer.
 
-> **Status: pre-alpha.** The editor window and 3D viewport work, but there is nothing to edit yet. Follow the progress tracker below.
+> **Status: pre-alpha.** You can draw, select and delete box brushes in the 3D viewport, with undo and redo, but maps cannot be saved yet. Follow the progress tracker below.
 
 Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
@@ -12,9 +12,9 @@ Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
 Halberd is built in four phases. Each ends with a gate that must pass in real GMod before the next phase starts. This tracker is updated by the pull request that finishes each milestone.
 
-### Phase 0 · Foundations (v0.0, internal) — 8 of 13
+### Phase 0 · Foundations (v0.0, internal) — 10 of 13
 
-`████████░░░░░` 62%
+`██████████░░░` 77%
 
 - [x] Repository set up: license, README, security policy, contribution rules
 - [x] Automatic builds for Windows, Linux and macOS on every change
@@ -24,15 +24,15 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Settings file and GMod install detection
 - [x] Window and docking panels (Library, Scene, Layers, Properties, Console)
 - [x] 3D viewport with Default, Orbit and Fly camera modes
-- [ ] Selection with left click, gizmo modes W / R / S / T
-- [ ] Undo and redo for every edit
-- [ ] Box brushes: create, move, resize, delete
+- [x] Map document with undo and redo for every edit
+- [x] Box brushes: draw, select with left click, delete
+- [ ] Gizmo modes W / R / S / T: move, rotate, scale and resize brushes
 - [ ] VMF import and export of brushes and entities
 - [ ] Console panel showing logs and errors
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost.
 
-### Phase 1 · Blockout (v0.1, public alpha) — 0 of 17
+### Phase 1 · Blockout (v0.1, public alpha) — 0 of 18
 
 `░░░░░░░░░░░░░` 0%
 
@@ -55,6 +55,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [ ] Quick-test compile, then launch GMod
 - [ ] Leak detection with a visual leak path
 - [ ] Settings page: key bindings, WASD toggle, camera speeds, memory budget
+- [ ] Keybinds viewer: a visual keyboard showing every bound key, with hover and search
 - [ ] Signed Windows release and first public announcement
 
 </details>
@@ -115,6 +116,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-08 | First brushes: draw boxes, select them, delete them, with undo and redo |
 | 2026-10-08 | First 3D viewport: grid, axes, and the Default, Orbit and Fly camera modes |
 | 2026-10-07 | First real window: menu bar and five dockable panels, with the layout remembered between sessions |
 | 2026-10-07 | Settings file and Garry's Mod detection: Halberd finds GMod through Steam and remembers it |
@@ -124,6 +126,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-08: the first brushes.** Three boxes drawn with the Box tool (one dragged along a line, which makes a wall), listed in the Scene panel.
+
+![Halberd's first brushes: three grey boxes on the grid, listed in the Scene panel](docs/screenshots/2026-10-08-first-brushes.png)
 
 **2026-10-08: the first 3D viewport.** The grid out to the edge of a Source map, the world axes, and the camera mode switcher.
 
