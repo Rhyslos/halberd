@@ -285,3 +285,22 @@ fn broken_input_never_panics() {
         tools.update(&no_cursor, &camera, &doc);
     }
 }
+
+#[test]
+fn new_boxes_use_the_chosen_height() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = ToolController::new(16.0);
+    tools.set_tool(Tool::Box);
+    tools.set_box_height(72.4);
+    assert_eq!(tools.box_height(), 72.0, "whole units");
+    let from = screen(&camera, Vec3::ZERO);
+    let to = screen(&camera, Vec3::new(64.0, 64.0, 0.0));
+    let brush = added_brush(drag(&mut tools, &camera, &doc, from, to));
+    assert_eq!(brush.bounds().max.z, 72.0);
+    tools.set_box_height(f32::NAN);
+    assert_eq!(tools.box_height(), 72.0, "nonsense is ignored");
+    tools.set_box_height(-5.0);
+    assert_eq!(tools.box_height(), BOX_HEIGHT_RANGE.0);
+    tools.set_box_height(1e9);
+    assert_eq!(tools.box_height(), BOX_HEIGHT_RANGE.1);
+}

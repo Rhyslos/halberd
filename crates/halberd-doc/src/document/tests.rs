@@ -253,3 +253,110 @@ fn every_document_and_copy_has_its_own_instance() {
     assert_ne!(a.instance(), c.instance());
     assert_eq!(a.revision(), c.revision());
 }
+
+fn only_id(doc: &Document) -> ObjectId {
+    ids(doc)[0]
+}
+
+fn bounds_of(doc: &Document, id: ObjectId) -> Aabb {
+    doc.get(id).unwrap().bounds()
+}
+
+#[test]
+fn replacing_a_brush_can_be_undone_and_keeps_the_selection() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    let selection_before = doc.selection().clone();
+    doc.execute(Command::ReplaceBrush {
+        id,
+        brush: cube_at(500.0),
+    })
+    .unwrap();
+    assert_eq!(bounds_of(&doc, id).min.x, 500.0);
+    assert_eq!(doc.selection(), &selection_before);
+    assert_eq!(doc.undo().as_deref(), Some("Change brush"));
+    assert_eq!(bounds_of(&doc, id).min.x, 0.0);
+    doc.redo();
+    assert_eq!(bounds_of(&doc, id).min.x, 500.0);
+}
+
+#[test]
+fn replacing_with_the_same_shape_or_a_missing_brush_is_refused() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    assert_eq!(
+        doc.execute(Command::ReplaceBrush {
+            id,
+            brush: cube_at(0.0)
+        }),
+        Err(DocError::NothingToDo)
+    );
+    let missing = ObjectId(77);
+    assert_eq!(
+        doc.execute(Command::ReplaceBrush {
+            id: missing,
+            brush: cube_at(0.0)
+        }),
+        Err(DocError::UnknownObject(missing))
+    );
+}
+
+#[test]
+fn a_drag_of_many_small_edits_is_one_undo_step() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    doc.end_step();
+    for x in 1..=20 {
+        doc.execute_merging(
+            Command::ReplaceBrush {
+                id,
+                brush: cube_at(x as f32 * 10.0),
+            },
+            7,
+        )
+        .unwrap();
+    }
+    doc.end_step();
+    // A second drag is its own step.
+    doc.execute_merging(
+        Command::ReplaceBrush {
+            id,
+            brush: cube_at(1000.0),
+        },
+        7,
+    )
+    .unwrap();
+    doc.undo();
+    assert_eq!(bounds_of(&doc, id).min.x, 200.0, "second drag undone");
+    doc.undo();
+    assert_eq!(
+        bounds_of(&doc, id).min.x,
+        0.0,
+        "whole first drag undone at once"
+    );
+    assert_eq!(doc.undo_label(), Some("Create brush"));
+    doc.redo();
+    assert_eq!(bounds_of(&doc, id).min.x, 200.0);
+}
+
+#[test]
+fn different_merge_keys_are_separate_steps() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    let replace = |x: f32| Command::ReplaceBrush {
+        id,
+        brush: cube_at(x),
+    };
+    doc.execute_merging(replace(10.0), 1).unwrap();
+    doc.execute_merging(replace(20.0), 2).unwrap();
+    doc.undo();
+    assert_eq!(bounds_of(&doc, id).min.x, 10.0);
+}

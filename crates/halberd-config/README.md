@@ -22,9 +22,10 @@ No other Halberd crates. Outside libraries: `serde`, `toml`.
 
 ## Status
 
-Settings file implemented: game folder, memory budget, worker threads, autosave interval, grid size, WASD preference.
+Settings file implemented: game folder, memory budget, worker threads, autosave interval, grid size, WASD preference, the unit lengths are shown in (`length_unit`: `"units"` or `"metres"`), and whether the player figure is shown (`show_player_scale`).
 
 - File: `Halberd/settings.toml` in the system's settings folder (`%APPDATA%` on Windows, `~/.config` on Linux, `~/Library/Application Support` on macOS).
-- Out-of-range values are corrected on load, with a note.
+- Out-of-range values are corrected on load, with a note. An unknown `length_unit` falls back to `"units"`.
+- `LengthUnit` converts and formats lengths: 1 Hammer unit = 2.54 cm (Source's character scale), so a 72-unit player is 1.83 m. Maps are always stored in Hammer units.
 - A damaged file is renamed to `settings.toml.damaged-N` and defaults are used.
 - Key bindings and camera speeds arrive with the viewport milestones.

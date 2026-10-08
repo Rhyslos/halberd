@@ -10,6 +10,14 @@ pub enum Command {
     AddBrushes(Vec<Brush>),
     /// Removes objects. Removed objects leave the selection.
     Remove(Vec<ObjectId>),
+    /// Replaces a brush's shape, for example after changing its size or
+    /// position. The selection does not change.
+    ReplaceBrush {
+        /// The brush to change.
+        id: ObjectId,
+        /// Its new shape.
+        brush: Brush,
+    },
 }
 
 impl Command {
@@ -19,6 +27,7 @@ impl Command {
         match self {
             Self::AddBrushes(brushes) if brushes.len() == 1 => "Create brush".into(),
             Self::AddBrushes(brushes) => format!("Create {} brushes", brushes.len()),
+            Self::ReplaceBrush { .. } => "Change brush".into(),
             Self::Remove(ids) => {
                 // The same id twice still removes one object.
                 let count = ids.iter().collect::<std::collections::BTreeSet<_>>().len();
@@ -40,6 +49,8 @@ pub(crate) enum Change {
     Inserted(Vec<(ObjectId, Object)>),
     /// These objects were taken out of the map.
     Removed(Vec<(ObjectId, Object)>),
+    /// These objects changed: each with how it was before and after.
+    Modified(Vec<(ObjectId, Object, Object)>),
 }
 
 impl Change {
@@ -48,6 +59,31 @@ impl Change {
         match self {
             Self::Inserted(objects) => Self::Removed(objects),
             Self::Removed(objects) => Self::Inserted(objects),
+            Self::Modified(objects) => Self::Modified(
+                objects
+                    .into_iter()
+                    .map(|(id, before, after)| (id, after, before))
+                    .collect(),
+            ),
         }
+    }
+
+    /// This change followed by `later`, as one change, when both modify the
+    /// same objects. Used to make a whole drag one undo step.
+    pub(crate) fn merged_with(&self, later: &Change) -> Option<Change> {
+        let (Self::Modified(first), Self::Modified(second)) = (self, later) else {
+            return None;
+        };
+        let same_objects =
+            first.len() == second.len() && first.iter().zip(second).all(|(a, b)| a.0 == b.0);
+        same_objects.then(|| {
+            Self::Modified(
+                first
+                    .iter()
+                    .zip(second)
+                    .map(|((id, before, _), (_, _, after))| (*id, before.clone(), after.clone()))
+                    .collect(),
+            )
+        })
     }
 }

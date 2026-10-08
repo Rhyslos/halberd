@@ -32,7 +32,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost.
 
-### Phase 1 · Blockout (v0.1, public alpha) — 0 of 17
+### Phase 1 · Blockout (v0.1, public alpha) — 0 of 18
 
 `░░░░░░░░░░░░░` 0%
 
@@ -55,6 +55,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [ ] Quick-test compile, then launch GMod
 - [ ] Leak detection with a visual leak path
 - [ ] Settings page: key bindings, WASD toggle, camera speeds, memory budget
+- [ ] Keybinds viewer: a visual keyboard showing every bound key, with hover and search
 - [ ] Signed Windows release and first public announcement
 
 </details>

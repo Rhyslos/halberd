@@ -6,6 +6,7 @@
 
 mod cli;
 mod gpu;
+mod preferences;
 mod startup;
 mod window;
 
@@ -79,7 +80,11 @@ fn main() -> ExitCode {
         return finish(&[cli::HELP.to_string()], interactive, ExitCode::SUCCESS);
     }
 
-    let startup::Startup { report, settings } = startup::run(&options);
+    let startup::Startup {
+        report,
+        settings,
+        store,
+    } = startup::run(&options);
     if options.report_only {
         return finish(&report, interactive, ExitCode::SUCCESS);
     }
@@ -92,7 +97,7 @@ fn main() -> ExitCode {
         name: PRODUCT_NAME.to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
     };
-    match window::run(info, report, &settings) {
+    match window::run(info, report, settings, store) {
         Ok(()) => ExitCode::SUCCESS,
         Err(reason) => {
             let body = [

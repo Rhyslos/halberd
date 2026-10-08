@@ -20,6 +20,8 @@ The first editable objects (box brushes) need a home: how the map is stored, how
 - **The selection is part of the document but not an edit** (as in Hammer): selecting is not undone. An undo selects what it brings back.
 - **Brushes are sets of planes (option 4).** `halberd-geom` cuts each face's polygon from a huge square using the other planes, in double precision, and snaps corners within 0.001 of a whole unit. This matches VMF, which arrives two milestones later.
 - **Tools ask, the interface acts.** Tools in `halberd-tools` return a `ToolAction` (select, toggle, execute a command, or refuse with a reason) instead of changing the map, so they stay pure and testable. The workbench in `halberd-ui` owns the document and carries actions out.
+- **A whole drag is one undo step.** Edits sent with the same merge key (`execute_merging`) join the last undo step until `end_step`; the interface ends the step whenever no drag is in progress. Gizmo drags will use the same mechanism.
+- **Lengths are stored in whole Hammer units.** The editor can show and accept metres (1 unit = 2.54 cm, Source's character scale), but values are rounded to whole units, because off-grid brushes cause gaps and leaks in Source maps. So 2 m becomes 79 units (2.01 m).
 - **The renderer reads the document directly** and rebuilds its GPU buffers only when `Document::revision` or `selection_revision` changes.
 - **Milestone order changed:** the tracker had selection and gizmos before undo and brushes, but there is nothing to select without brushes. The document, undo, box drawing, selection and delete come first; the W / R / S / T gizmo follows.
 

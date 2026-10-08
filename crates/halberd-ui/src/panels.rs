@@ -3,7 +3,10 @@
 
 use crate::workbench::AppInfo;
 use egui::{RichText, ScrollArea, Ui};
-use halberd_doc::{Document, ObjectId};
+use glam::Vec3;
+use halberd_config::LengthUnit;
+use halberd_doc::{Command, Document, Object, ObjectId};
+use halberd_geom::{Aabb, Brush, MIN_SIZE};
 
 /// The Scene panel: every object in the map. Click to select; Ctrl+click
 /// to add or remove.
@@ -39,9 +42,10 @@ pub(crate) fn scene_contents(ui: &mut Ui, doc: &mut Document) {
         });
 }
 
-/// The Properties panel: a summary of the selection. Editing values
-/// arrives with the full entity and brush properties.
-pub(crate) fn properties_contents(ui: &mut Ui, doc: &Document) {
+/// The Properties panel: the selection's size and position. A single box
+/// can be resized and moved by typing or dragging the numbers; several
+/// objects show a summary.
+pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthUnit) {
     let count = doc.selection().len();
     let Some(bounds) = doc.selection_bounds() else {
         placeholder(
@@ -58,13 +62,113 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &Document) {
         format!("{count} objects selected")
     };
     ui.label(RichText::new(heading).strong());
+
+    let editable_box = (count == 1)
+        .then(|| doc.selection().iter().next().copied())
+        .flatten()
+        .filter(|id| match doc.get(*id) {
+            Some(Object::Brush(brush)) => brush.is_axis_aligned_box(),
+            None => false,
+        });
+    match editable_box {
+        Some(id) => box_fields(ui, doc, id, bounds, unit),
+        None => {
+            let size = bounds.size().as_dvec3();
+            let (lo, hi) = (bounds.min.as_dvec3(), bounds.max.as_dvec3());
+            ui.label(format!(
+                "Size: {} × {} × {}",
+                unit.format(size.x),
+                unit.format(size.y),
+                unit.format(size.z)
+            ));
+            ui.label(format!(
+                "From ({}, {}, {}) to ({}, {}, {})",
+                unit.format(lo.x),
+                unit.format(lo.y),
+                unit.format(lo.z),
+                unit.format(hi.x),
+                unit.format(hi.y),
+                unit.format(hi.z)
+            ));
+        }
+    }
+}
+
+/// Visible labels of the six number fields.
+const BOX_FIELD_LABELS: [&str; 6] = ["Width", "Depth", "Height", "X", "Y", "Z"];
+/// Names of the six number fields for screen readers (and tests).
+pub(crate) const BOX_FIELD_NAMES: [&str; 6] = [
+    "Box width",
+    "Box depth",
+    "Box height",
+    "Box position X",
+    "Box position Y",
+    "Box position Z",
+];
+
+/// Number fields for one box: its size, and the position of its lowest
+/// corner. Changing a size keeps that corner where it is. Values are typed
+/// in `unit` and stored rounded to whole Hammer units, so brushes stay on
+/// the grid Hammer expects.
+fn box_fields(ui: &mut Ui, doc: &mut Document, id: ObjectId, bounds: Aabb, unit: LengthUnit) {
     let size = bounds.size();
-    let (lo, hi) = (bounds.min, bounds.max);
-    ui.label(format!("Size: {} × {} × {} units", size.x, size.y, size.z));
-    ui.label(format!(
-        "From ({}, {}, {}) to ({}, {}, {})",
-        lo.x, lo.y, lo.z, hi.x, hi.y, hi.z
-    ));
+    let corner = bounds.min;
+    let mut values = [size.x, size.y, size.z, corner.x, corner.y, corner.z]
+        .map(|v| unit.from_units(f64::from(v)));
+    let speed = if unit == LengthUnit::Metres {
+        0.01
+    } else {
+        1.0
+    };
+    let mut changed = None;
+    egui::Grid::new(("halberd_box_fields", id))
+        .num_columns(2)
+        .spacing([12.0, 4.0])
+        .show(ui, |ui| {
+            for (i, label) in BOX_FIELD_LABELS.iter().enumerate() {
+                if i == 0 {
+                    ui.label(RichText::new("Size").weak());
+                    ui.end_row();
+                }
+                if i == 3 {
+                    ui.label(RichText::new("Position (lowest corner)").weak());
+                    ui.end_row();
+                }
+                ui.label(*label);
+                let mut field = egui::DragValue::new(&mut values[i])
+                    .speed(speed)
+                    .fixed_decimals(unit.decimals())
+                    .suffix(unit.suffix());
+                if i < 3 {
+                    field = field.range(unit.from_units(f64::from(MIN_SIZE))..=f64::MAX);
+                }
+                let response = ui.add(field).on_hover_text(
+                    "Drag sideways or click to type. Stored in whole Hammer units (1 unit = 2.54 cm).",
+                );
+                let name = BOX_FIELD_NAMES[i];
+                response.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, name)
+                });
+                if response.changed() {
+                    changed = Some(i);
+                }
+                ui.end_row();
+            }
+        });
+    let Some(field) = changed else {
+        return;
+    };
+    let units = values.map(|v| unit.to_units(v).round() as f32);
+    let size = Vec3::new(units[0], units[1], units[2]).max(Vec3::splat(MIN_SIZE));
+    let corner = Vec3::new(units[3], units[4], units[5]);
+    let Ok(brush) = Brush::cuboid(Aabb::from_corners(corner, corner + size)) else {
+        return;
+    };
+    // One undo step per drag of one field.
+    let key = id.get().wrapping_mul(8).wrapping_add(field as u64);
+    // Unchanged after rounding, or out of the world: nothing to do.
+    doc.execute_merging(Command::ReplaceBrush { id, brush }, key)
+        .ok();
 }
 
 pub(crate) fn placeholder(ui: &mut Ui, heading: &str, detail: &str) {

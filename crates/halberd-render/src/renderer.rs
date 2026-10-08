@@ -8,7 +8,9 @@
 use crate::frame::{FrameParams, FrameUniforms, GRID_HALF_EXTENT};
 use crate::lines::{LineVertex, axis_lines};
 use crate::pipelines::{PipelineKind, create_pipeline};
-use crate::scene::{PREVIEW_COLOR, SceneGeometry, box_outline};
+use crate::scene::{
+    PLAYER_OUTLINE_VERTICES, PREVIEW_COLOR, SceneGeometry, box_outline, player_outline,
+};
 use halberd_doc::Document;
 use wgpu::util::DeviceExt;
 
@@ -98,6 +100,8 @@ pub struct ViewportRenderer {
     scene: SceneBuffers,
     /// Room for one box outline, rewritten whenever a box is being drawn.
     preview_buffer: wgpu::Buffer,
+    /// Room for the player figure, rewritten when it is shown.
+    player_buffer: wgpu::Buffer,
 }
 
 /// The map's geometry on the GPU, and which document state it shows.
@@ -173,6 +177,13 @@ impl ViewportRenderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let player_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("halberd player figure"),
+            size: (PLAYER_OUTLINE_VERTICES * std::mem::size_of::<LineVertex>())
+                as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("halberd frame layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -244,6 +255,7 @@ impl ViewportRenderer {
             axis_vertex_count: axes.len() as u32,
             scene: SceneBuffers::default(),
             preview_buffer,
+            player_buffer,
         }
     }
 
@@ -364,6 +376,10 @@ impl ViewportRenderer {
         if let Some(lines) = &preview {
             queue.write_buffer(&self.preview_buffer, 0, bytemuck::cast_slice(lines));
         }
+        let player = params.player.map(player_outline);
+        if let Some(lines) = &player {
+            queue.write_buffer(&self.player_buffer, 0, bytemuck::cast_slice(lines));
+        }
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("halberd viewport frame"),
         });
@@ -405,6 +421,10 @@ impl ViewportRenderer {
             pass.set_vertex_buffer(0, self.axis_buffer.slice(..));
             pass.draw(0..self.axis_vertex_count, 0..1);
             self.scene.edges.draw(&mut pass);
+            if let Some(lines) = &player {
+                pass.set_vertex_buffer(0, self.player_buffer.slice(..));
+                pass.draw(0..lines.len() as u32, 0..1);
+            }
             // On top of everything: the selection and the box being drawn.
             pass.set_pipeline(&self.overlay_pipeline);
             self.scene.selected_edges.draw(&mut pass);

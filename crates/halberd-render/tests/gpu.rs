@@ -11,7 +11,8 @@ use glam::{Vec2, Vec3};
 use halberd_doc::{Command, Document};
 use halberd_geom::{Aabb, Brush};
 use halberd_render::{
-    BACKGROUND, FrameParams, ViewportRenderer, ViewportTarget, best_sample_count, read_pixels,
+    BACKGROUND, FrameParams, PlayerOutline, ViewportRenderer, ViewportTarget, best_sample_count,
+    read_pixels,
 };
 use halberd_tools::Camera;
 
@@ -100,12 +101,24 @@ fn render_with_preview(
     camera: Camera,
     preview: Option<Aabb>,
 ) -> Shot {
+    render_full(gpu, renderer, target, camera, preview, None)
+}
+
+fn render_full(
+    gpu: &Gpu,
+    renderer: &ViewportRenderer,
+    target: &ViewportTarget,
+    camera: Camera,
+    preview: Option<Aabb>,
+    player: Option<PlayerOutline>,
+) -> Shot {
     let size = target.size();
     let params = FrameParams {
         view_projection: camera.view_projection(Vec2::new(size[0] as f32, size[1] as f32)),
         camera_position: camera.position,
         grid_size: 16.0,
         preview,
+        player,
     };
     renderer.render(&gpu.device, &gpu.queue, target, &params);
     Shot {
@@ -241,6 +254,7 @@ fn rendering_many_frames_is_stable() {
             camera_position: camera.position,
             grid_size: 16.0,
             preview: None,
+            player: None,
         };
         renderer.render(&gpu.device, &gpu.queue, &target, &params);
     }
@@ -358,5 +372,39 @@ fn a_replaced_map_is_redrawn_even_at_the_same_revision() {
     assert!(
         changed > 2000,
         "the old box must be gone ({changed} pixels changed)"
+    );
+}
+
+#[test]
+fn the_player_figure_is_drawn_and_hidden_behind_brushes() {
+    let Some(gpu) = gpu() else { return };
+    let (renderer, target, camera) = box_scene(&gpu, false);
+    let light_blue = |p: [u8; 4]| i32::from(p[2]) - i32::from(p[0]);
+    let figure = |x: f32, y: f32| PlayerOutline {
+        bounds: Aabb::from_corners(
+            Vec3::new(x - 16.0, y - 16.0, 0.0),
+            Vec3::new(x + 16.0, y + 16.0, 72.0),
+        ),
+        eye_height: 64.0,
+    };
+    // In the open, beside the box: its top edge shows.
+    let beside = figure(-160.0, 0.0);
+    let shot = render_full(&gpu, &renderer, &target, camera, None, Some(beside));
+    let top_edge = Vec3::new(-160.0, -16.0, 72.0);
+    assert!(
+        shot.best_near(top_edge, light_blue) > 80,
+        "the figure shows"
+    );
+    // Behind the box (from the camera's side), it is hidden.
+    let behind = figure(160.0, 160.0);
+    let shot = render_full(&gpu, &renderer, &target, camera, None, Some(behind));
+    let hidden_edge = Vec3::new(160.0, 144.0, 36.0);
+    let on_screen = camera
+        .project(hidden_edge, Vec2::new(400.0, 300.0))
+        .unwrap();
+    assert!(on_screen.x > 0.0 && on_screen.x < 400.0 && on_screen.y > 0.0 && on_screen.y < 300.0);
+    assert!(
+        shot.best_near(hidden_edge, light_blue) < 40,
+        "the box hides it"
     );
 }

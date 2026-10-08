@@ -14,6 +14,8 @@ use halberd_geom::{Aabb, Brush, GeomError};
 /// Height of a newly drawn box, in units: comfortably taller than a GMod
 /// player (72 units), like a standard wall.
 pub const DEFAULT_BOX_HEIGHT: f32 = 128.0;
+/// Limits for the height of new boxes, in units.
+pub const BOX_HEIGHT_RANGE: (f32, f32) = (1.0, 16_384.0);
 /// How far the pointer may move between press and release, in points, and
 /// still count as a click rather than a drag.
 pub const CLICK_SLOP: f32 = 4.0;
@@ -96,6 +98,7 @@ struct BoxDrag {
 pub struct ToolController {
     tool: Tool,
     grid: f32,
+    box_height: f32,
     press_at: Option<Vec2>,
     drag: Option<BoxDrag>,
 }
@@ -106,6 +109,7 @@ impl ToolController {
         Self {
             tool: Tool::default(),
             grid: sane_grid(grid_size),
+            box_height: DEFAULT_BOX_HEIGHT,
             press_at: None,
             drag: None,
         }
@@ -126,6 +130,20 @@ impl ToolController {
     /// The grid size boxes snap to.
     pub fn grid_size(&self) -> f32 {
         self.grid
+    }
+
+    /// Height of new boxes, in units.
+    pub fn box_height(&self) -> f32 {
+        self.box_height
+    }
+
+    /// Sets the height of new boxes, in units, kept within
+    /// [`BOX_HEIGHT_RANGE`] and rounded to whole units.
+    pub fn set_box_height(&mut self, height: f32) {
+        let (low, high) = BOX_HEIGHT_RANGE;
+        if height.is_finite() {
+            self.box_height = height.round().clamp(low, high);
+        }
     }
 
     /// True while something is in progress that Escape would cancel.
@@ -159,7 +177,7 @@ impl ToolController {
         );
         Some(Aabb::from_corners(
             drag.start.extend(drag.base),
-            end.extend(drag.base + DEFAULT_BOX_HEIGHT),
+            end.extend(drag.base + self.box_height),
         ))
     }
 

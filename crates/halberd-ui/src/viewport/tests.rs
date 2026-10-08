@@ -354,3 +354,59 @@ fn a_left_press_while_orbiting_does_not_draw_or_select() {
     h.run();
     assert!(h.state().doc.is_empty(), "no box drawn");
 }
+
+#[test]
+fn the_box_tool_shows_a_height_field_in_the_chosen_unit() {
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    assert!(
+        h.query_by_label("Height").is_none(),
+        "only for the Box tool"
+    );
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.state_mut()
+        .panel
+        .set_display(halberd_config::LengthUnit::Metres, true);
+    h.run();
+    assert!(h.query_by_label("Height").is_some());
+    let field = h.get_by_label(tools::NEW_BOX_HEIGHT_NAME);
+    let value = field.value();
+    assert!(
+        value.as_deref().is_some_and(|v| v.contains("3.25")),
+        "128 units in metres: {value:?}"
+    );
+}
+
+#[test]
+fn the_player_figure_stands_beside_the_selection_or_the_box_being_drawn() {
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    let player = h.state().renderer.views.last().unwrap().player.unwrap();
+    assert_eq!(player.min.z, 0.0, "at the origin with nothing selected");
+    assert_eq!(player.size(), Vec3::new(32.0, 32.0, 72.0));
+
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.run();
+    left_drag(&mut h, egui::pos2(300.0, 420.0), egui::pos2(480.0, 470.0));
+    let selected = h.state().doc.selection_bounds().unwrap();
+    let player = h.state().renderer.views.last().unwrap().player.unwrap();
+    let outside = player.min.x > selected.max.x
+        || player.max.x < selected.min.x
+        || player.min.y > selected.max.y
+        || player.max.y < selected.min.y;
+    assert!(outside, "beside the new box, not inside it");
+    assert_eq!(player.min.z, selected.min.z, "on its floor");
+    let camera = h.state().panel.controller().camera().position;
+    let figure_distance = player.center().truncate().distance(camera.truncate());
+    let box_distance = selected.center().truncate().distance(camera.truncate());
+    assert!(
+        figure_distance < box_distance,
+        "on the side facing the camera"
+    );
+
+    h.state_mut()
+        .panel
+        .set_display(halberd_config::LengthUnit::Units, false);
+    h.run();
+    assert!(h.state().renderer.views.last().unwrap().player.is_none());
+}

@@ -16,6 +16,38 @@ pub const EDGE_COLOR: [f32; 4] = [0.02, 0.02, 0.025, 1.0];
 pub const SELECTED_EDGE_COLOR: [f32; 4] = [1.0, 0.22, 0.12, 1.0];
 /// Outline of a box being drawn, linear space (warm yellow).
 pub const PREVIEW_COLOR: [f32; 4] = [1.0, 0.80, 0.25, 1.0];
+/// The player scale figure, linear space (light blue).
+pub const PLAYER_COLOR: [f32; 4] = [0.20, 0.62, 1.0, 1.0];
+
+/// A player-sized figure to show scale: the space a player takes up, and
+/// the height of their eyes above their feet.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlayerOutline {
+    /// The space a standing player takes up.
+    pub bounds: Aabb,
+    /// Eye height above the feet, in units.
+    pub eye_height: f32,
+}
+
+/// Vertices in a player outline: a box and a ring at eye height.
+pub const PLAYER_OUTLINE_VERTICES: usize = 32;
+
+/// The player figure as a line list: its box, and a ring at eye height.
+pub fn player_outline(player: PlayerOutline) -> Vec<LineVertex> {
+    let mut lines = box_outline(player.bounds, PLAYER_COLOR);
+    let eye = player.bounds.min.z + player.eye_height.clamp(0.0, player.bounds.size().z);
+    let ring = Aabb::from_corners(player.bounds.min.with_z(eye), player.bounds.max.with_z(eye));
+    let corners = ring.corners();
+    for i in 0..4 {
+        for corner in [corners[i], corners[(i + 1) % 4]] {
+            lines.push(LineVertex {
+                position: corner.to_array(),
+                color: PLAYER_COLOR,
+            });
+        }
+    }
+    lines
+}
 
 /// One corner of a brush face triangle, as the brush shader reads it.
 #[repr(C)]
@@ -192,6 +224,17 @@ mod tests {
             let winding = (p(1) - p(0)).cross(p(2) - p(0));
             assert!(winding.dot(Vec3::from_array(tri[0].normal)) > 0.0);
         }
+    }
+
+    #[test]
+    fn player_outline_is_a_box_with_an_eye_ring() {
+        let player = PlayerOutline {
+            bounds: Aabb::from_corners(Vec3::new(-16.0, -16.0, 0.0), Vec3::new(16.0, 16.0, 72.0)),
+            eye_height: 64.0,
+        };
+        let lines = player_outline(player);
+        assert_eq!(lines.len(), PLAYER_OUTLINE_VERTICES);
+        assert!(lines[24..].iter().all(|v| v.position[2] == 64.0));
     }
 
     #[test]

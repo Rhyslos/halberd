@@ -330,7 +330,9 @@ fn properties_panel_summarises_the_selection() {
     let mut harness = harness_for(workbench_with_boxes(1));
     harness.run();
     assert!(harness.query_by_label("1 object selected").is_some());
-    assert!(harness.query_by_label("Size: 64 × 64 × 64 units").is_some());
+    for field in crate::panels::BOX_FIELD_NAMES {
+        assert!(harness.query_by_label(field).is_some(), "missing {field}");
+    }
     harness.key_press(Key::Escape);
     harness.run();
     assert!(harness.query_by_label("Nothing selected").is_some());
@@ -355,4 +357,88 @@ fn escape_that_closes_a_menu_keeps_the_selection() {
     harness.key_press(Key::Escape);
     harness.run();
     assert_eq!(harness.state().document().selection().len(), 1);
+}
+
+/// Types `text` into the Properties number field named `field`.
+fn type_into(harness: &mut Harness<'static, Workbench>, field: &str, text: &str) {
+    harness.get_by_label(field).click();
+    harness.run();
+    harness.get_by_label(field).type_text(text);
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+}
+
+fn only_bounds(wb: &Workbench) -> halberd_geom::Aabb {
+    wb.document().objects().next().unwrap().1.bounds()
+}
+
+#[test]
+fn typing_a_height_resizes_the_box_and_can_be_undone() {
+    let mut harness = harness_for(workbench_with_boxes(1));
+    harness.run();
+    type_into(&mut harness, "Box height", "200");
+    let bounds = only_bounds(harness.state());
+    assert_eq!(bounds.size().z, 200.0);
+    assert_eq!(bounds.min.z, 0.0, "the lowest corner stays put");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(only_bounds(harness.state()).size().z, 64.0);
+}
+
+#[test]
+fn in_metres_typed_values_are_converted_to_whole_units() {
+    let mut wb = workbench_with_boxes(1);
+    wb.set_length_unit(halberd_config::LengthUnit::Metres);
+    let mut harness = harness_for(wb);
+    harness.run();
+    type_into(&mut harness, "Box width", "2");
+    // 2 m is 78.74 units; brushes keep whole units.
+    assert_eq!(only_bounds(harness.state()).size().x, 79.0);
+    type_into(&mut harness, "Box position Z", "1");
+    assert_eq!(only_bounds(harness.state()).min.z, 39.0);
+}
+
+#[test]
+fn several_objects_show_a_summary_in_the_chosen_unit() {
+    let mut wb = workbench_with_boxes(2);
+    wb.set_length_unit(halberd_config::LengthUnit::Metres);
+    let mut harness = harness_for(wb);
+    harness.run();
+    assert!(harness.query_by_label("2 objects selected").is_some());
+    assert!(
+        harness
+            .query_by_label("Size: 4.17 m × 1.63 m × 1.63 m")
+            .is_some()
+    );
+    assert!(
+        harness.query_by_label("Width").is_none(),
+        "no fields for several"
+    );
+}
+
+#[test]
+fn view_menu_sets_the_unit_and_the_player_figure() {
+    let mut harness = harness_for(Workbench::new(info(), None));
+    harness.run();
+    harness.get_by_label("View").click();
+    harness.run();
+    harness.get_by_label("Metres").click();
+    harness.run();
+    assert_eq!(
+        harness.state().length_unit(),
+        halberd_config::LengthUnit::Metres
+    );
+    assert!(harness.state().show_player());
+    harness.get_by_label("View").click();
+    harness.run();
+    harness.get_by_label(PLAYER_TOGGLE_LABEL).click();
+    harness.run();
+    assert!(!harness.state().show_player());
+}
+
+#[test]
+fn an_unknown_unit_is_shown_as_hammer_units() {
+    let wb = Workbench::new(info(), None).with_display(halberd_config::LengthUnit::Unknown, true);
+    assert_eq!(wb.length_unit(), halberd_config::LengthUnit::Units);
 }

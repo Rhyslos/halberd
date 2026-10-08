@@ -70,10 +70,32 @@ impl Document {
 
     /// Applies an edit and records it for undo. On error nothing changes.
     pub fn execute(&mut self, command: Command) -> Result<(), DocError> {
+        self.record(command, None)
+    }
+
+    /// Like [`Self::execute`], but consecutive edits with the same `key`
+    /// become one undo step, until [`Self::end_step`] is called. Dragging a
+    /// size field sends many small edits; this makes the whole drag undo at
+    /// once.
+    pub fn execute_merging(&mut self, command: Command, key: u64) -> Result<(), DocError> {
+        self.record(command, Some(key))
+    }
+
+    /// Finishes the current undo step, so the next edit starts a new one.
+    /// The interface calls this whenever no drag is in progress.
+    pub fn end_step(&mut self) {
+        self.history.seal();
+    }
+
+    fn record(&mut self, command: Command, merge_key: Option<u64>) -> Result<(), DocError> {
         let label = command.describe();
         let change = self.prepare(command)?;
         let change = self.apply(change);
-        self.history.record(Entry { label, change });
+        self.history.record(Entry {
+            label,
+            change,
+            merge_key,
+        });
         Ok(())
     }
 
@@ -86,6 +108,7 @@ impl Document {
         self.history.push_redo(Entry {
             label: entry.label,
             change: reversed.inverse(),
+            merge_key: None,
         });
         Some(label)
     }
@@ -99,6 +122,7 @@ impl Document {
         self.history.push_undo(Entry {
             label: entry.label,
             change,
+            merge_key: None,
         });
         Some(label)
     }
@@ -231,6 +255,14 @@ impl Document {
                     .collect::<Result<_, _>>()?;
                 Ok(Change::Removed(objects))
             }
+            Command::ReplaceBrush { id, brush } => {
+                let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
+                let after = Object::Brush(brush);
+                if *before == after {
+                    return Err(DocError::NothingToDo);
+                }
+                Ok(Change::Modified(vec![(id, before.clone(), after)]))
+            }
         }
     }
 
@@ -247,6 +279,11 @@ impl Document {
                 for (id, _) in objects {
                     self.objects.remove(id);
                     self.selection.remove(id);
+                }
+            }
+            Change::Modified(objects) => {
+                for (id, _, after) in objects {
+                    self.objects.insert(*id, after.clone());
                 }
             }
         }

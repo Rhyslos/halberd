@@ -17,6 +17,7 @@
 
 mod camera;
 mod controller;
+mod player;
 mod scene;
 mod tool;
 
@@ -28,5 +29,8 @@ pub use controller::{
     FlyKeys, GroundPlane, LOOK_SENSITIVITY, MAX_ORBIT_PIVOT_DISTANCE, MAX_PICK_DISTANCE,
     ORBIT_SENSITIVITY, SceneQuery, ViewportInput,
 };
+pub use player::{PLAYER_EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, player_bounds};
 pub use scene::DocumentScene;
-pub use tool::{CLICK_SLOP, DEFAULT_BOX_HEIGHT, Tool, ToolAction, ToolController, ToolInput};
+pub use tool::{
+    BOX_HEIGHT_RANGE, CLICK_SLOP, DEFAULT_BOX_HEIGHT, Tool, ToolAction, ToolController, ToolInput,
+};

@@ -9,6 +9,7 @@ use crate::panels::{
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
 use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
+use halberd_config::LengthUnit;
 use halberd_doc::{Command, Document};
 
 /// Facts about the program shown in the window and the About box.
@@ -19,6 +20,9 @@ pub struct AppInfo {
     /// Version, such as "0.0.1".
     pub version: String,
 }
+
+/// The View menu's switch for the player figure.
+pub const PLAYER_TOGGLE_LABEL: &str = "Show player for scale";
 
 /// Keyboard shortcut for File → Quit (Ctrl+Q, or Cmd+Q on macOS).
 pub const QUIT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Q);
@@ -56,6 +60,8 @@ pub struct Workbench {
     about_open: bool,
     viewport: ViewportPanel,
     doc: Document,
+    length_unit: LengthUnit,
+    show_player: bool,
 }
 
 impl Workbench {
@@ -70,6 +76,8 @@ impl Workbench {
             about_open: false,
             viewport: ViewportPanel::new(None, ViewportOptions::default()),
             doc: Document::new(),
+            length_unit: LengthUnit::Units,
+            show_player: true,
         };
         if let Some(note) = note {
             workbench.push_console(note);
@@ -82,6 +90,38 @@ impl Workbench {
     pub fn with_viewport(mut self, viewport: ViewportPanel) -> Self {
         self.viewport = viewport;
         self
+    }
+
+    /// Sets the display preferences from settings: the unit lengths are
+    /// shown in, and whether the player figure is shown.
+    pub fn with_display(mut self, length_unit: LengthUnit, show_player: bool) -> Self {
+        self.set_length_unit(length_unit);
+        self.show_player = show_player;
+        self
+    }
+
+    /// The unit lengths are shown and typed in.
+    pub fn length_unit(&self) -> LengthUnit {
+        self.length_unit
+    }
+
+    /// Changes the unit lengths are shown and typed in.
+    pub fn set_length_unit(&mut self, unit: LengthUnit) {
+        self.length_unit = if unit == LengthUnit::Unknown {
+            LengthUnit::Units
+        } else {
+            unit
+        };
+    }
+
+    /// Whether the player figure is shown for scale.
+    pub fn show_player(&self) -> bool {
+        self.show_player
+    }
+
+    /// Shows or hides the player figure.
+    pub fn set_show_player(&mut self, show: bool) {
+        self.show_player = show;
     }
 
     /// The viewport panel.
@@ -161,8 +201,15 @@ impl Workbench {
             actions.push(WorkbenchAction::Quit);
         }
         self.edit_shortcuts(ui);
+        // Between drags, the next edit starts a new undo step; during a drag
+        // (of a size field, say) its many small edits stay one step.
+        if !ui.ctx().egui_is_using_pointer() {
+            self.doc.end_step();
+        }
         self.viewport
             .note_popup_open(egui::Popup::is_any_open(ui.ctx()));
+        self.viewport
+            .set_display(self.length_unit, self.show_player);
         egui::Panel::top("halberd_menu_bar").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| self.menu_bar(ui, &mut actions));
         });
@@ -174,6 +221,7 @@ impl Workbench {
             renderer,
             doc: &mut self.doc,
             notes: &mut notes,
+            length_unit: self.length_unit,
         };
         DockArea::new(&mut self.dock)
             .style(Style::from_egui(ui.style().as_ref()))
@@ -270,6 +318,20 @@ impl Workbench {
                 self.reset_layout();
                 self.push_console("Panel layout reset to the standard arrangement.");
             }
+            ui.separator();
+            ui.label("Show lengths in");
+            for unit in LengthUnit::CHOICES {
+                if ui
+                    .radio(self.length_unit == unit, unit.label())
+                    .on_hover_text("Maps are always saved in Hammer units; 1 unit is 2.54 cm")
+                    .clicked()
+                {
+                    self.set_length_unit(unit);
+                }
+            }
+            ui.separator();
+            ui.checkbox(&mut self.show_player, PLAYER_TOGGLE_LABEL)
+                .on_hover_text("A 72-unit (1.83 m) player figure next to what you are working on");
         });
         ui.menu_button("Help", |ui| {
             if ui.button("About Halberd").clicked() {
@@ -287,6 +349,7 @@ struct PanelViewer<'a> {
     doc: &'a mut Document,
     /// Messages for the Console, added after the panels are drawn.
     notes: &'a mut Vec<String>,
+    length_unit: LengthUnit,
 }
 
 impl TabViewer for PanelViewer<'_> {
@@ -349,7 +412,7 @@ impl TabViewer for PanelViewer<'_> {
                 "Layers group sections of a map so they can be hidden, locked and \
                  selected together. They are saved to Hammer as visgroups.",
             ),
-            Panel::Properties => properties_contents(ui, self.doc),
+            Panel::Properties => properties_contents(ui, self.doc, self.length_unit),
             Panel::Console => console_contents(ui, self.console),
         }
     }

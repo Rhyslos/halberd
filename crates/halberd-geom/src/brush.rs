@@ -151,6 +151,16 @@ impl Brush {
         self.bounds.center()
     }
 
+    /// True if the brush is a box with sides facing along the world axes,
+    /// so its shape is fully described by its bounds.
+    pub fn is_axis_aligned_box(&self) -> bool {
+        self.faces.len() == 6
+            && self.faces.iter().all(|f| {
+                let n = f.plane.normal.abs();
+                n.max_element() > 1.0 - 1e-6
+            })
+    }
+
     /// The same brush moved by `offset`.
     pub fn translated(&self, offset: Vec3) -> Result<Self, GeomError> {
         if !offset.is_finite() {
@@ -341,6 +351,14 @@ mod tests {
         planes[0].distance *= 0.2;
         let brush = Brush::from_planes(&planes).unwrap();
         assert_eq!(brush, cube(0.0, 64.0));
+    }
+
+    #[test]
+    fn boxes_are_recognised() {
+        assert!(cube(0.0, 64.0).is_axis_aligned_box());
+        let mut planes: Vec<Plane> = cube(0.0, 64.0).faces().iter().map(|f| f.plane()).collect();
+        planes.push(Plane::new(Vec3::new(1.0, 0.0, 1.0), Vec3::new(64.0, 0.0, 32.0)).unwrap());
+        assert!(!Brush::from_planes(&planes).unwrap().is_axis_aligned_box());
     }
 
     #[test]

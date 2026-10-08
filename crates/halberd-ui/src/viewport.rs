@@ -10,11 +10,12 @@ use egui::{
     pos2, vec2,
 };
 use glam::{Mat4, Vec2, Vec3};
+use halberd_config::LengthUnit;
 use halberd_doc::Document;
 use halberd_geom::Aabb;
 use halberd_tools::{
-    CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, Tool, ToolController,
-    ViewportInput,
+    CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, PLAYER_HEIGHT, Tool,
+    ToolController, ViewportInput, player_bounds,
 };
 
 mod tools;
@@ -32,6 +33,8 @@ pub struct ViewportView {
     pub grid_size: f32,
     /// A box being drawn, to outline.
     pub preview: Option<Aabb>,
+    /// Where to draw the player figure for scale, if shown.
+    pub player: Option<Aabb>,
 }
 
 /// Draws viewport images. The editor implements this with the GPU; tests
@@ -85,6 +88,10 @@ impl Default for ViewportOptions {
 pub const VIEWPORT_LABEL: &str = "3D viewport";
 /// Pivot marker colour.
 const PIVOT_COLOR: Color32 = Color32::from_rgb(255, 196, 64);
+/// Colour of the player figure's label (matches the figure).
+const PLAYER_LABEL_COLOR: Color32 = Color32::from_rgb(120, 190, 255);
+/// Gap between the player figure and what it stands next to, in units.
+const PLAYER_GAP: f32 = 32.0;
 
 /// The viewport panel's state.
 pub struct ViewportPanel {
@@ -94,6 +101,8 @@ pub struct ViewportPanel {
     left_was_held: bool,
     /// A menu or popup was open when this frame began.
     popup_was_open: bool,
+    length_unit: LengthUnit,
+    show_player: bool,
     right_was_held: bool,
     middle_was_held: bool,
 }
@@ -107,6 +116,8 @@ impl ViewportPanel {
             grid_size: options.grid_size,
             left_was_held: false,
             popup_was_open: false,
+            length_unit: LengthUnit::Units,
+            show_player: true,
             right_was_held: false,
             middle_was_held: false,
         }
@@ -130,6 +141,18 @@ impl ViewportPanel {
     /// Switches the left-mouse tool.
     pub fn set_tool(&mut self, tool: Tool) {
         self.tools.set_tool(tool);
+    }
+
+    /// The unit lengths are shown in, and whether the player figure is
+    /// shown. The workbench calls this every frame.
+    pub fn set_display(&mut self, length_unit: LengthUnit, show_player: bool) {
+        self.length_unit = length_unit;
+        self.show_player = show_player;
+    }
+
+    /// The tools, for reading the Box tool's height.
+    pub fn tools(&self) -> &ToolController {
+        &self.tools
     }
 
     /// Tells the viewport whether a menu or popup was open when this frame
@@ -174,6 +197,9 @@ impl ViewportPanel {
             camera_position: camera.position,
             grid_size: self.grid_size,
             preview: self.tools.preview(),
+            player: self
+                .show_player
+                .then(|| player_bounds(player_feet(self.tools.preview(), doc, camera.position))),
         };
 
         let painter = ui.painter_at(rect);
@@ -200,6 +226,22 @@ impl ViewportPanel {
             let centre = rect.min + vec2(at.x, at.y);
             painter.circle_stroke(centre, 6.0, Stroke::new(1.5, PIVOT_COLOR));
             painter.circle_filled(centre, 2.0, PIVOT_COLOR);
+        }
+
+        if let Some(player) = view.player
+            && let Some(at) = camera.project(player.center().with_z(player.max.z + 8.0), size)
+            && rect.contains(rect.min + vec2(at.x, at.y))
+        {
+            painter.text(
+                rect.min + vec2(at.x, at.y),
+                Align2::CENTER_BOTTOM,
+                format!(
+                    "Player · {}",
+                    self.length_unit.format(f64::from(PLAYER_HEIGHT))
+                ),
+                FontId::proportional(11.0),
+                PLAYER_LABEL_COLOR,
+            );
         }
 
         painter.text(
@@ -314,6 +356,28 @@ impl ViewportPanel {
                 }
             });
     }
+}
+
+/// Where the player figure stands: beside the box being drawn, else beside
+/// the selection, on its floor and on the side facing the camera; with
+/// neither, at the origin.
+fn player_feet(preview: Option<Aabb>, doc: &Document, camera: Vec3) -> Vec3 {
+    let Some(b) = preview.or_else(|| doc.selection_bounds()) else {
+        return Vec3::ZERO;
+    };
+    let reach = PLAYER_GAP + halberd_tools::PLAYER_WIDTH * 0.5;
+    let c = b.center();
+    let sides = [
+        Vec3::new(b.max.x + reach, c.y, b.min.z),
+        Vec3::new(b.min.x - reach, c.y, b.min.z),
+        Vec3::new(c.x, b.max.y + reach, b.min.z),
+        Vec3::new(c.x, b.min.y - reach, b.min.z),
+    ];
+    let distance = |p: &Vec3| p.truncate().distance_squared(camera.truncate());
+    sides
+        .into_iter()
+        .min_by(|a, b| distance(a).total_cmp(&distance(b)))
+        .unwrap_or(Vec3::ZERO)
 }
 
 #[cfg(test)]

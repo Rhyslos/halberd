@@ -4,8 +4,12 @@
 use super::ViewportPanel;
 use egui::{Align, Color32, Key, Layout, PointerButton, Rect, Ui, UiBuilder, vec2};
 use glam::Vec2;
+use halberd_config::LengthUnit;
 use halberd_doc::Document;
-use halberd_tools::{Tool, ToolAction, ToolInput};
+use halberd_tools::{BOX_HEIGHT_RANGE, Tool, ToolAction, ToolInput};
+
+/// Screen-reader name of the Box tool's height field.
+pub(crate) const NEW_BOX_HEIGHT_NAME: &str = "New box height";
 
 impl ViewportPanel {
     /// Reads this frame's left-mouse and tool keys, runs the active tool and
@@ -104,6 +108,39 @@ impl ViewportPanel {
                         .clicked()
                     {
                         self.tools.set_tool(tool);
+                    }
+                }
+                if current == Tool::Box {
+                    ui.separator();
+                    ui.label("Height");
+                    let unit = self.length_unit;
+                    let mut value = unit.from_units(f64::from(self.tools.box_height()));
+                    let (low, high) = BOX_HEIGHT_RANGE;
+                    let field = egui::DragValue::new(&mut value)
+                        .speed(if unit == LengthUnit::Metres {
+                            0.01
+                        } else {
+                            1.0
+                        })
+                        .range(unit.from_units(f64::from(low))..=unit.from_units(f64::from(high)))
+                        .fixed_decimals(unit.decimals())
+                        .suffix(unit.suffix());
+                    let response = ui.add(field);
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::WidgetType::DragValue,
+                            true,
+                            NEW_BOX_HEIGHT_NAME,
+                        )
+                    });
+                    if response
+                        .on_hover_text(
+                            "Height of new boxes. Drag sideways or click to type. \
+                             A player is 72 units (1.83 m) tall.",
+                        )
+                        .changed()
+                    {
+                        self.tools.set_box_height(unit.to_units(value) as f32);
                     }
                 }
             });

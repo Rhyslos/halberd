@@ -42,6 +42,10 @@ The viewport camera and the first left-mouse tools are implemented.
 | Tool | Left mouse |
 | --- | --- |
 | Select | Click selects what is under the pointer (nothing: clears the selection). Ctrl+click adds or removes. Moving more than 4 points between press and release is not a click. |
-| Box (B) | Drag to draw a box, snapped to the grid, standing on the grid or on top of the brush under the pointer, 128 units tall. A drag along one grid line makes a wall one grid square thick; a click makes nothing. Escape cancels. `preview()` gives the box while dragging. |
+| Box (B) | Drag to draw a box, snapped to the grid, standing on the grid or on top of the brush under the pointer, as tall as `box_height` (128 units by default, settable, whole units). A drag along one grid line makes a wall one grid square thick; a click makes nothing. Escape cancels. `preview()` gives the box while dragging. |
 
 `DocumentScene` is what the camera and tools see of an open map: brush surfaces first, the grid plane elsewhere, and the selection's centre for Orbit mode.
+
+### Player size
+
+`PLAYER_HEIGHT` (72), `PLAYER_WIDTH` (32), `PLAYER_EYE_HEIGHT` (64) and `player_bounds`: the standard Half-Life 2 player that GMod uses, for the scale figure in the viewport.

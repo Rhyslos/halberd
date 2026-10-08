@@ -11,6 +11,10 @@ All notable changes to Halberd are listed here, newest first. The format follows
 - **Edit menu** with **Undo** and **Redo** for every edit, named after what they reverse (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z), and **Delete** (the Delete key).
 - The **Scene** panel lists every object and selects on click; **Properties** shows the selection's size and extent.
 - Brushes are drawn solid, with a different shade per side, so shapes read clearly.
+- **Metres or Hammer units**: View → *Show lengths in* switches every size Halberd shows and accepts (1 unit = 2.54 cm, so a player is 1.83 m). Maps are always stored in Hammer units. Remembered in the settings file.
+- **Editable size and position**: the Properties panel has number fields for a box's width, depth, height and position; drag them or type. Each drag is one undo step.
+- **Box height**: the Box tool has a height field next to it (128 units by default).
+- **Player figure for scale**: a 72-unit (1.83 m) player outline stands beside the selection or the box being drawn, facing the camera, labelled with its height. View → *Show player for scale* turns it off.
 - The window smoke test now draws a box with the real mouse and undoes it.
 - **The 3D viewport:** a grid out to the edge of a Source map (±16384 units) that stays crisp at any distance, and coloured world axes (X red, Y green, Z blue). Z is up, as in Hammer.
 - **Camera controls:** middle mouse pans, right mouse orbits, the wheel zooms towards the orbit point (as in 3ds Max), or towards the pointer when the orbit point is off screen and in Fly mode. Three modes, switched in the viewport's bottom-left corner:

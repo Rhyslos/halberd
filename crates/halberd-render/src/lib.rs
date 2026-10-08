@@ -25,8 +25,8 @@ pub use renderer::{
     ViewportTarget, best_sample_count,
 };
 pub use scene::{
-    BRUSH_COLOR, EDGE_COLOR, FaceVertex, PREVIEW_COLOR, SELECTED_COLOR, SELECTED_EDGE_COLOR,
-    SceneGeometry, box_outline,
+    BRUSH_COLOR, EDGE_COLOR, FaceVertex, PLAYER_COLOR, PLAYER_OUTLINE_VERTICES, PREVIEW_COLOR,
+    PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR, SceneGeometry, box_outline, player_outline,
 };
 
 #[cfg(test)]

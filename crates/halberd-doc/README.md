@@ -23,7 +23,8 @@ The single source of truth for an open map: brushes, props, entities and groups 
 The document, commands and undo are implemented (see [decision 0009](../../docs/decisions/0009-document-commands-and-brushes.md)).
 
 - **`Document`**: the objects (each with an `ObjectId` that never changes and is never reused), the selection, the undo history, and revision counters that tell views when to redraw.
-- **`Command`**: every edit. So far: `AddBrushes` and `Remove`. `execute` checks it first; on error nothing changes.
+- **`Command`**: every edit. So far: `AddBrushes`, `Remove` and `ReplaceBrush` (new size or position). `execute` checks it first; on error nothing changes.
+- **One drag, one undo step**: `execute_merging` with the same key merges consecutive edits (for example, dragging a size field) until `end_step`, which the interface calls whenever no drag is in progress.
 - **Undo and redo**: each applied command keeps the change it made (up to 1000 steps); undo reverses it, redo repeats it, with the same ids.
 - **Selection**: `set_selection`, `toggle_selected`, `clear_selection`. Not an edit, so not undone, as in Hammer; an undo selects what it brings back.
 - **Queries**: `pick` (nearest object along a ray), `selection_bounds`.

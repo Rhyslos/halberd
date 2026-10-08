@@ -13,6 +13,8 @@ pub(crate) struct Startup {
     pub(crate) report: Vec<String>,
     /// The settings in effect (loaded, corrected and possibly updated).
     pub(crate) settings: Settings,
+    /// Where settings are saved, if the settings folder could be found.
+    pub(crate) store: Option<SettingsStore>,
 }
 
 /// Runs the startup steps.
@@ -62,7 +64,11 @@ pub(crate) fn run(options: &Options) -> Startup {
             Err(err) => report.push(format!("Settings were not saved: {err}.")),
         }
     }
-    Startup { report, settings }
+    Startup {
+        report,
+        settings,
+        store,
+    }
 }
 
 /// Finds GMod: a folder given on the command line first, then the saved

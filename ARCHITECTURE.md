@@ -59,7 +59,7 @@ See [decision 0009](docs/decisions/0009-document-commands-and-brushes.md).
 | VTF, VMT (textures, materials) | Yes | No |
 | VDF (Steam config) | Yes | No |
 | `.halberd` (Halberd projects, versioned) | Yes | Yes |
-| `settings.toml` (editor settings) | Yes | Yes |
+| `settings.toml` (editor settings; View menu choices are saved back to it) | Yes | Yes |
 | `app.ron` (window size, panel layout, viewport camera; written by eframe) | Yes | Yes |
 
 Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from the user's own GMod install. Halberd never ships them.

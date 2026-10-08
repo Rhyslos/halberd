@@ -19,9 +19,10 @@ Starts everything, wires the crates together and owns the frame loop.
 ## Status
 
 1. **Startup** (`startup.rs`): loads settings, finds Garry's Mod, saves what it found, and builds a plain-language report.
-2. **Window** (`window.rs`): opens the editor window with eframe and wgpu, shows the `halberd-ui` workbench with the report in the Console, and remembers the panel layout, window size and viewport camera between sessions.
-3. **GPU viewport** (`gpu.rs`): implements the viewport renderer with `halberd-render` on the window's own GPU device, and hands each finished image to egui as a texture. Before each frame it passes the open map to the renderer, which redraws brushes only when the map or selection changed. The Console names the graphics device in use.
-4. If the window cannot open (no Vulkan, DirectX 12 or Metal driver, or a missing Linux system library), the report and a plain-language reason are printed in the terminal instead. Panics from windowing libraries are caught for this.
+2. **Preferences** (`preferences.rs`): when the length unit or player figure is changed in the View menu, saves it to the settings file.
+3. **Window** (`window.rs`): opens the editor window with eframe and wgpu, shows the `halberd-ui` workbench with the report in the Console, and remembers the panel layout, window size and viewport camera between sessions.
+4. **GPU viewport** (`gpu.rs`): implements the viewport renderer with `halberd-render` on the window's own GPU device, and hands each finished image to egui as a texture. Before each frame it passes the open map to the renderer, which redraws brushes only when the map or selection changed. The Console names the graphics device in use.
+5. If the window cannot open (no Vulkan, DirectX 12 or Metal driver, or a missing Linux system library), the report and a plain-language reason are printed in the terminal instead. Panics from windowing libraries are caught for this.
 
 Command-line options (`halberd --help`):
 
