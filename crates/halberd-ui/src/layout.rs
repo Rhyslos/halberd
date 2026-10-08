@@ -5,35 +5,43 @@ use egui_dock::{DockState, NodeIndex};
 
 /// Share of the window width given to everything left of Scene/Properties.
 const MAIN_AREA_WIDTH: f32 = 0.8;
-/// Share of the right column given to Scene (Properties gets the rest).
+/// Share of the right column given to Scene and Layers (Properties gets the rest).
 const SCENE_HEIGHT: f32 = 0.5;
 /// Share of the main area's height given to the viewport row (Console gets the rest).
 const VIEWPORT_ROW_HEIGHT: f32 = 0.75;
-/// Share of the viewport row given to the viewport (Browsers gets the rest).
+/// Share of the viewport row given to the viewport (Library gets the rest).
 const VIEWPORT_WIDTH: f32 = 0.8;
 
 /// The standard arrangement from the feature spec:
 ///
 /// ```text
-/// ┌──────────┬────────────────────┬────────────┐
-/// │ Browsers │      Viewport      │   Scene    │
-/// │          │                    ├────────────┤
-/// ├──────────┴────────────────────┤ Properties │
-/// │            Console            │            │
-/// └───────────────────────────────┴────────────┘
+/// ┌─────────┬────────────────────┬────────────────┐
+/// │ Library │      Viewport      │ Scene · Layers │
+/// │         │                    ├────────────────┤
+/// ├─────────┴────────────────────┤   Properties   │
+/// │            Console           │                │
+/// └──────────────────────────────┴────────────────┘
+/// ```
+///
+/// Scene and Layers share one area as tabs, with Scene in front.
+///
+/// ```text
 /// ```
 pub fn default_layout() -> DockState<Panel> {
     let mut dock = DockState::new(vec![Panel::Viewport]);
     let tree = dock.main_surface_mut();
-    let [main_area, right_column] =
-        tree.split_right(NodeIndex::root(), MAIN_AREA_WIDTH, vec![Panel::Scene]);
+    let [main_area, right_column] = tree.split_right(
+        NodeIndex::root(),
+        MAIN_AREA_WIDTH,
+        vec![Panel::Scene, Panel::Layers],
+    );
     tree.split_below(right_column, SCENE_HEIGHT, vec![Panel::Properties]);
     let [viewport_row, _console] =
         tree.split_below(main_area, VIEWPORT_ROW_HEIGHT, vec![Panel::Console]);
     // egui_dock gives `fraction` to whichever side ends up left or top.
-    // Browsers is the new node and lands on the left, so it gets the
+    // Library is the new node and lands on the left, so it gets the
     // fraction, not the viewport.
-    tree.split_left(viewport_row, 1.0 - VIEWPORT_WIDTH, vec![Panel::Browsers]);
+    tree.split_left(viewport_row, 1.0 - VIEWPORT_WIDTH, vec![Panel::Library]);
     dock
 }
 
@@ -53,9 +61,11 @@ pub fn is_complete(dock: &DockState<Panel>) -> bool {
 }
 
 /// Uses a saved layout if it is complete, otherwise the default.
+/// Layouts saved before the Layers panel existed get it added as a tab next
+/// to Scene, so the user's own arrangement is kept.
 /// Returns a note for the console when the saved layout was not usable.
 pub fn restore_or_default(saved: Option<DockState<Panel>>) -> (DockState<Panel>, Option<String>) {
-    match saved {
+    match saved.map(add_layers_next_to_scene) {
         None => (default_layout(), None),
         Some(dock) if is_complete(&dock) => (dock, None),
         Some(_) => (
@@ -63,6 +73,24 @@ pub fn restore_or_default(saved: Option<DockState<Panel>>) -> (DockState<Panel>,
             Some("The saved panel layout was incomplete, so the standard layout is used.".into()),
         ),
     }
+}
+
+/// Adds the Layers panel as a tab beside Scene, if the layout has Scene but
+/// no Layers. Scene stays the visible tab. Any other layout is returned
+/// unchanged.
+fn add_layers_next_to_scene(mut dock: DockState<Panel>) -> DockState<Panel> {
+    if dock.find_tab(&Panel::Layers).is_some() {
+        return dock;
+    }
+    let Some(scene) = dock.find_tab(&Panel::Scene) else {
+        return dock;
+    };
+    if let Ok(leaf) = dock.leaf_mut(scene.node_path()) {
+        leaf.append_tab(Panel::Layers);
+        // append_tab brings the new tab to the front; put Scene back.
+        leaf.set_active_tab(scene.tab).ok();
+    }
+    dock
 }
 
 #[cfg(test)]
@@ -89,13 +117,56 @@ mod tests {
         assert_eq!(
             groups,
             vec![
-                vec![Panel::Browsers],
                 vec![Panel::Console],
+                vec![Panel::Library],
                 vec![Panel::Properties],
-                vec![Panel::Scene],
+                vec![Panel::Scene, Panel::Layers],
                 vec![Panel::Viewport],
             ]
         );
+    }
+
+    #[test]
+    fn scene_is_in_front_of_layers_by_default() {
+        let dock = default_layout();
+        let scene = dock.find_tab(&Panel::Scene).unwrap();
+        let leaf = dock.leaf(scene.node_path()).unwrap();
+        assert_eq!(leaf.active, scene.tab);
+    }
+
+    #[test]
+    fn layouts_saved_before_layers_existed_gain_it_beside_scene() {
+        // A user's own arrangement from the previous version: Scene moved
+        // under the viewport, the old "Browsers" name, no Layers panel.
+        let mut saved = DockState::new(vec![Panel::Viewport, Panel::Console]);
+        let [_, below] = saved.main_surface_mut().split_below(
+            NodeIndex::root(),
+            0.7,
+            vec![Panel::Properties, Panel::Scene],
+        );
+        saved
+            .main_surface_mut()
+            .split_left(below, 0.5, vec![Panel::Library]);
+        let text = ron::to_string(&saved)
+            .unwrap()
+            .replace("Library", "Browsers");
+        let old: DockState<Panel> = ron::from_str(&text).unwrap();
+
+        let (dock, note) = restore_or_default(Some(old));
+        assert!(note.is_none(), "the user's layout is kept");
+        assert!(is_complete(&dock));
+        let mut groups = leaves(&dock);
+        groups.sort_by_key(|g| g.first().map(|p| p.title()));
+        assert_eq!(
+            groups,
+            vec![
+                vec![Panel::Library],
+                vec![Panel::Properties, Panel::Scene, Panel::Layers],
+                vec![Panel::Viewport, Panel::Console],
+            ]
+        );
+        let scene = dock.find_tab(&Panel::Scene).unwrap();
+        assert_eq!(dock.leaf(scene.node_path()).unwrap().active, scene.tab);
     }
 
     #[test]
@@ -125,7 +196,12 @@ mod tests {
         saved.main_surface_mut().split_left(
             NodeIndex::root(),
             0.8,
-            vec![Panel::Browsers, Panel::Scene, Panel::Properties],
+            vec![
+                Panel::Library,
+                Panel::Scene,
+                Panel::Layers,
+                Panel::Properties,
+            ],
         );
         let (dock, note) = restore_or_default(Some(saved));
         assert!(note.is_none());

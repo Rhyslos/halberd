@@ -16,6 +16,6 @@ pub use camera::{
 };
 pub use controller::{
     CameraController, CameraMode, CameraState, DEFAULT_FLY_SPEED, FAST_MULTIPLIER, FLY_SPEED_RANGE,
-    FlyKeys, GroundPlane, LOOK_SENSITIVITY, MAX_PICK_DISTANCE, ORBIT_SENSITIVITY, SceneQuery,
-    ViewportInput,
+    FlyKeys, GroundPlane, LOOK_SENSITIVITY, MAX_ORBIT_PIVOT_DISTANCE, MAX_PICK_DISTANCE,
+    ORBIT_SENSITIVITY, OrbitStyle, SceneQuery, ViewportInput,
 };

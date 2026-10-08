@@ -27,10 +27,11 @@ The viewport camera is implemented.
 
 | Mode | Right mouse | Middle mouse | Wheel |
 | --- | --- | --- | --- |
-| Default | Orbits around the surface under the pointer (the grid plane until maps exist), else the last pivot | Pans; the point under the pointer follows it | Zooms towards the pointer, stopping 8 units short of the surface |
+| Default | Orbits around the surface under the pointer (the grid plane until maps exist) if it is within 8192 units, else the last pivot | Pans; the point under the pointer follows it | Zooms towards the pointer, stopping 8 units short of the surface |
 | Orbit | Orbits around the selection (the last pivot until selection exists) | Pans | Zooms |
 | Fly | Hold to look; WASD moves, Space/C up/down, Shift ×4 | Pans | Zooms; while holding right mouse, changes fly speed |
 
+- **Orbit style** (`OrbitStyle`): by default (`CenterOnPivot`) the view turns smoothly to bring the pivot to the centre of the screen and then goes around it there; `update` returns true while it is still turning, so the panel keeps redrawing. `KeepUnderCursor` keeps the pivot exactly where it was clicked instead.
 - Fly mode is hidden when WASD movement is turned off in settings.
-- Guarantees, each covered by tests: the pivot stays exactly under the pointer while orbiting; the view never flips over; the camera stays inside ±131072 units; broken input (NaN, zero sizes, huge frame times) never breaks the camera.
-- `CameraState` (camera, mode, pivot, fly speed) is saved between sessions.
+- Guarantees, each covered by tests: centring finishes and then stops asking for redraws; a centred pivot stays centred while orbiting; with `KeepUnderCursor`, the pivot stays exactly under the pointer; the view never flips over; the camera stays inside ±131072 units; broken input (NaN, zero sizes, huge frame times) never breaks the camera.
+- `CameraState` (camera, mode, pivot, fly speed, orbit style) is saved between sessions. Saves from before orbit styles existed load with the default.

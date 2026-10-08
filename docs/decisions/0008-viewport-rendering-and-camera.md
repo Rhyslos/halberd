@@ -22,9 +22,10 @@ For the camera maths: glam's camera module (reorganised in glam 0.34, released d
 - **egui reads a plain-RGBA view of the sRGB image.** egui expects non-sRGB native textures; handing it the sRGB view decodes colours twice and darkens everything. Found by looking at the first screenshot, now checked by the window smoke test.
 - **Our own view and projection matrices** in `halberd-tools::Camera`: right-handed, **Z-up like Hammer**, depth 0 to 1 as wgpu expects. Tests pin the conventions down.
 - **The camera lives in `halberd-tools`**, takes input as plain data (`ViewportInput`) and asks the scene through a `SceneQuery` trait. Until maps exist, the scene is the grid plane (`GroundPlane`), so Default mode's "orbit around what's under the pointer" orbits around the grid point under the pointer.
-- **Orbit keeps the pivot exactly under the pointer:** the camera is moved so the pivot keeps the same coordinates in the camera's own frame. Panning and zooming likewise keep the grabbed point under the pointer.
+- **Orbit turns the view to centre the pivot**, then goes around it. The first version kept the pivot exactly where it was clicked (the camera moves so the pivot keeps the same coordinates in its own frame). That is mathematically an orbit, but with the pivot off to one side the scene seems to slide as well as turn, and the project lead found it did not feel like going *around* the point. So by default the head also turns smoothly towards the pivot (about 95% of the way in a quarter of a second), which feels like walking around an object. The original behaviour stays as an option (**View → Centre the orbit point**, off), saved with the camera. Panning and zooming keep the grabbed point under the pointer.
+- **Distant orbit points are ignored:** a grid point more than 8192 units away (near the horizon) would swing the camera across the whole map, so Default mode falls back to the last pivot.
 - **Grid drawn per pixel** on one large square to ±16384 (the edge of a Source map), with three fading levels, rather than thousands of line segments: crisp at every distance, no shimmering.
-- **Redraw only when needed:** egui redraws on input; the viewport asks for continuous frames only while flying with a movement key held.
+- **Redraw only when needed:** egui redraws on input; the viewport asks for continuous frames only while flying with a movement key held, or while the view is still turning to centre the orbit point.
 
 ## Consequences
 
