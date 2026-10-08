@@ -2,9 +2,9 @@
 //!
 //! The editor window is a [`Workbench`]: a menu bar on top and a dock of
 //! [`Panel`]s that users can drag, split and resize. The default arrangement
-//! ([`default_layout`]) follows the feature spec: Browsers on the left, the
-//! viewport in the middle, Scene and Properties on the right, and the
-//! Console along the bottom. The viewport ([`ViewportPanel`]) handles camera
+//! ([`default_layout`]) follows the feature spec: Library on the left, the
+//! viewport in the middle, Scene (with Layers as a second tab) and
+//! Properties on the right, and the Console along the bottom. The viewport ([`ViewportPanel`]) handles camera
 //! input and shows images drawn by a [`ViewportRenderer`] supplied by the
 //! program.
 //!

@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 
 /// Radians the camera turns per point the pointer moves while orbiting.
 pub const ORBIT_SENSITIVITY: f32 = 0.006;
+/// Orbit pivots farther away than this are ignored: orbiting around a point
+/// near the horizon swings the camera across the whole map.
+pub const MAX_ORBIT_PIVOT_DISTANCE: f32 = 8_192.0;
 /// Radians the camera turns per point the pointer moves while flying.
 pub const LOOK_SENSITIVITY: f32 = 0.004;
 /// Default flying speed, in units per second (a GMod player sprints at about 400).
@@ -272,13 +275,15 @@ impl CameraController {
         }
     }
 
-    /// Default mode: the surface under the pointer, else the last pivot.
-    /// Orbit mode: the selection, else the last pivot.
+    /// Default mode: the surface under the pointer if it is near enough,
+    /// else the last pivot. Orbit mode: the selection, else the last pivot.
     fn choose_pivot(&self, input: &ViewportInput, scene: &dyn SceneQuery) -> Vec3 {
+        let position = self.state.camera.position;
         let picked = match self.state.mode {
             CameraMode::Default => input
                 .cursor
-                .and_then(|c| self.pick_at(c, input.size, scene)),
+                .and_then(|c| self.pick_at(c, input.size, scene))
+                .filter(|p| p.distance(position) <= MAX_ORBIT_PIVOT_DISTANCE),
             CameraMode::Orbit | CameraMode::Fly => scene.selection_center(),
         };
         picked.unwrap_or(self.state.pivot)
@@ -330,25 +335,54 @@ impl CameraController {
             self.state.fly_speed = (self.state.fly_speed * factor).clamp(low, high);
             return;
         }
-        let cursor = input.cursor.unwrap_or(input.size * 0.5);
-        let ray = self.state.camera.ray_through(cursor, input.size);
-        let hit = scene
-            .pick(&ray)
-            .filter(|p| p.distance(ray.origin) <= MAX_PICK_DISTANCE);
-        let distance = match hit {
-            Some(point) => point.distance(ray.origin),
+        let (direction, target) = match self.zoom_towards_pivot(input.size) {
+            Some(direction) => (direction, Some(self.state.pivot)),
+            None => {
+                let cursor = input.cursor.unwrap_or(input.size * 0.5);
+                let ray = self.state.camera.ray_through(cursor, input.size);
+                let hit = scene
+                    .pick(&ray)
+                    .filter(|p| p.distance(ray.origin) <= MAX_PICK_DISTANCE);
+                (ray.direction, hit)
+            }
+        };
+        let position = self.state.camera.position;
+        let distance = match target {
+            Some(point) => point.distance(position),
             None => self.fallback_distance(),
         };
         let fraction = 1.0 - (-input.scroll.abs() * ZOOM_RATE).exp();
         let mut step = (distance * fraction).max(MIN_ZOOM_STEP);
         if input.scroll > 0.0 {
-            if hit.is_some() {
+            if target.is_some() {
                 step = step.min((distance - MIN_ZOOM_DISTANCE).max(0.0));
             }
         } else {
             step = -step;
         }
-        self.state.camera.position += ray.direction * step;
+        self.state.camera.position += direction * step;
+    }
+
+    /// In Default and Orbit modes the wheel zooms towards the orbit point,
+    /// like 3ds Max, so it stays still on screen while everything grows
+    /// around it. Returns the direction to zoom in, or `None` when the orbit
+    /// point is off screen, behind the camera or too far away (the wheel then
+    /// zooms towards the pointer instead). Fly mode always zooms towards the
+    /// pointer: there is no orbit point to aim at.
+    fn zoom_towards_pivot(&self, size: Vec2) -> Option<Vec3> {
+        if self.state.mode == CameraMode::Fly {
+            return None;
+        }
+        let camera = &self.state.camera;
+        let pivot = self.state.pivot;
+        let offset = pivot - camera.position;
+        let on_screen = camera
+            .project(pivot, size)
+            .is_some_and(|p| p.cmpge(Vec2::ZERO).all() && p.cmple(size).all());
+        let usable = on_screen
+            && camera.depth_of(pivot) > NEAR_PLANE
+            && offset.length() <= MAX_PICK_DISTANCE;
+        usable.then(|| offset.normalize())
     }
 
     /// Depth along the view of what is under the pointer, for panning.
@@ -430,435 +464,4 @@ fn sanitize_state(state: CameraState) -> CameraState {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::camera::WORLD_LIMIT;
-
-    const SIZE: Vec2 = Vec2::new(1600.0, 900.0);
-
-    fn controller(mode: CameraMode) -> CameraController {
-        CameraController::new(
-            CameraState {
-                mode,
-                ..CameraState::default()
-            },
-            true,
-        )
-    }
-
-    fn frame() -> ViewportInput {
-        ViewportInput {
-            size: SIZE,
-            dt: 1.0 / 60.0,
-            ..ViewportInput::default()
-        }
-    }
-
-    /// Press right at `cursor`, then drag by `delta` over one frame.
-    fn right_drag(c: &mut CameraController, cursor: Vec2, delta: Vec2, scene: &dyn SceneQuery) {
-        let press = ViewportInput {
-            cursor: Some(cursor),
-            right_pressed: true,
-            right_held: true,
-            ..frame()
-        };
-        c.update(&press, scene);
-        let drag = ViewportInput {
-            cursor: Some(cursor + delta),
-            right_held: true,
-            right_delta: delta,
-            ..frame()
-        };
-        c.update(&drag, scene);
-    }
-
-    struct Selected(Vec3);
-    impl SceneQuery for Selected {
-        fn pick(&self, ray: &Ray) -> Option<Vec3> {
-            GroundPlane.pick(ray)
-        }
-        fn selection_center(&self) -> Option<Vec3> {
-            Some(self.0)
-        }
-    }
-
-    #[test]
-    fn default_mode_orbits_around_the_point_under_the_pointer() {
-        let mut c = controller(CameraMode::Default);
-        let cursor = Vec2::new(500.0, 700.0);
-        let ground = GroundPlane
-            .pick(&c.camera().ray_through(cursor, SIZE))
-            .unwrap();
-        right_drag(&mut c, cursor, Vec2::new(40.0, -15.0), &GroundPlane);
-        assert!(c.active_pivot().unwrap().distance(ground) < 1e-3);
-        let still = c.camera().project(ground, SIZE).unwrap();
-        assert!(
-            still.distance(cursor) < 0.1,
-            "pivot should stay under the pointer"
-        );
-    }
-
-    #[test]
-    fn default_mode_uses_the_last_pivot_when_pointing_at_the_sky() {
-        let mut c = controller(CameraMode::Default);
-        // The default view looks down at the origin; the top edge is sky.
-        let sky = Vec2::new(800.0, 2.0);
-        assert!(
-            GroundPlane
-                .pick(&c.camera().ray_through(sky, SIZE))
-                .is_none()
-        );
-        right_drag(&mut c, sky, Vec2::new(10.0, 0.0), &GroundPlane);
-        assert_eq!(c.active_pivot(), Some(Vec3::ZERO));
-    }
-
-    #[test]
-    fn orbit_mode_uses_the_selection() {
-        let mut c = controller(CameraMode::Orbit);
-        let centre = Vec3::new(256.0, 128.0, 64.0);
-        right_drag(
-            &mut c,
-            Vec2::new(100.0, 800.0),
-            Vec2::new(20.0, 5.0),
-            &Selected(centre),
-        );
-        assert_eq!(c.active_pivot(), Some(centre));
-    }
-
-    #[test]
-    fn orbit_mode_without_selection_uses_the_last_pivot() {
-        let mut c = controller(CameraMode::Orbit);
-        right_drag(
-            &mut c,
-            Vec2::new(100.0, 800.0),
-            Vec2::new(20.0, 5.0),
-            &GroundPlane,
-        );
-        assert_eq!(c.active_pivot(), Some(Vec3::ZERO));
-    }
-
-    #[test]
-    fn pivot_marker_disappears_when_the_drag_ends() {
-        let mut c = controller(CameraMode::Default);
-        right_drag(&mut c, SIZE / 2.0, Vec2::new(5.0, 5.0), &GroundPlane);
-        assert!(c.active_pivot().is_some());
-        c.update(&frame(), &GroundPlane);
-        assert!(c.active_pivot().is_none());
-    }
-
-    #[test]
-    fn dragging_right_turns_the_view() {
-        let mut c = controller(CameraMode::Default);
-        let yaw = c.camera().yaw;
-        right_drag(&mut c, SIZE / 2.0, Vec2::new(50.0, 0.0), &GroundPlane);
-        assert!((c.camera().yaw - (yaw - 50.0 * ORBIT_SENSITIVITY)).abs() < 1e-4);
-    }
-
-    #[test]
-    fn fly_mode_moves_forward_with_w() {
-        let mut c = controller(CameraMode::Fly);
-        let start = c.camera().position;
-        let forward = c.camera().forward();
-        let input = ViewportInput {
-            right_held: true,
-            keys: FlyKeys {
-                forward: true,
-                ..FlyKeys::default()
-            },
-            dt: 0.05,
-            ..frame()
-        };
-        assert!(
-            c.update(&input, &GroundPlane),
-            "keeps animating while flying"
-        );
-        let moved = c.camera().position - start;
-        assert!((moved - forward * DEFAULT_FLY_SPEED * 0.05).length() < 1e-3);
-    }
-
-    #[test]
-    fn shift_flies_faster_and_space_goes_up() {
-        let mut c = controller(CameraMode::Fly);
-        let start = c.camera().position;
-        let input = ViewportInput {
-            right_held: true,
-            keys: FlyKeys {
-                up: true,
-                fast: true,
-                ..FlyKeys::default()
-            },
-            dt: 0.05,
-            ..frame()
-        };
-        c.update(&input, &GroundPlane);
-        let expected = Vec3::Z * DEFAULT_FLY_SPEED * FAST_MULTIPLIER * 0.05;
-        assert!((c.camera().position - start - expected).length() < 1e-3);
-    }
-
-    #[test]
-    fn fly_keys_do_nothing_without_the_right_button() {
-        let mut c = controller(CameraMode::Fly);
-        let start = c.camera().position;
-        let input = ViewportInput {
-            keys: FlyKeys {
-                forward: true,
-                ..FlyKeys::default()
-            },
-            ..frame()
-        };
-        assert!(!c.update(&input, &GroundPlane));
-        assert_eq!(c.camera().position, start);
-    }
-
-    #[test]
-    fn fly_mode_looks_without_moving() {
-        let mut c = controller(CameraMode::Fly);
-        let start = c.camera().position;
-        let input = ViewportInput {
-            right_held: true,
-            right_delta: Vec2::new(30.0, 10.0),
-            ..frame()
-        };
-        c.update(&input, &GroundPlane);
-        assert_eq!(c.camera().position, start);
-        assert!(c.active_pivot().is_none());
-    }
-
-    #[test]
-    fn a_long_stall_does_not_cause_a_jump() {
-        let mut c = controller(CameraMode::Fly);
-        let start = c.camera().position;
-        let input = ViewportInput {
-            right_held: true,
-            keys: FlyKeys {
-                forward: true,
-                ..FlyKeys::default()
-            },
-            dt: 5.0,
-            ..frame()
-        };
-        c.update(&input, &GroundPlane);
-        let moved = c.camera().position.distance(start);
-        assert!((moved - DEFAULT_FLY_SPEED * MAX_DT).abs() < 1e-2);
-    }
-
-    #[test]
-    fn wasd_off_hides_fly_mode() {
-        let mut c = CameraController::new(CameraState::default(), false);
-        assert_eq!(
-            c.available_modes(),
-            [CameraMode::Default, CameraMode::Orbit]
-        );
-        assert_eq!(c.set_mode(CameraMode::Fly), CameraMode::Default);
-    }
-
-    #[test]
-    fn saved_fly_mode_falls_back_when_wasd_is_off() {
-        let state = CameraState {
-            mode: CameraMode::Fly,
-            ..CameraState::default()
-        };
-        assert_eq!(
-            CameraController::new(state, false).mode(),
-            CameraMode::Default
-        );
-        assert_eq!(CameraController::new(state, true).mode(), CameraMode::Fly);
-    }
-
-    #[test]
-    fn middle_drag_pans_the_scene_with_the_pointer() {
-        let mut c = controller(CameraMode::Default);
-        let cursor = Vec2::new(900.0, 600.0);
-        let ground = GroundPlane
-            .pick(&c.camera().ray_through(cursor, SIZE))
-            .unwrap();
-        let press = ViewportInput {
-            cursor: Some(cursor),
-            middle_pressed: true,
-            middle_held: true,
-            ..frame()
-        };
-        c.update(&press, &GroundPlane);
-        let delta = Vec2::new(-60.0, 25.0);
-        let drag = ViewportInput {
-            cursor: Some(cursor + delta),
-            middle_held: true,
-            middle_delta: delta,
-            ..frame()
-        };
-        c.update(&drag, &GroundPlane);
-        let now = c.camera().project(ground, SIZE).unwrap();
-        assert!(
-            now.distance(cursor + delta) < 0.1,
-            "grabbed point follows the pointer"
-        );
-    }
-
-    #[test]
-    fn scrolling_zooms_towards_the_pointer() {
-        let mut c = controller(CameraMode::Default);
-        let cursor = Vec2::new(400.0, 650.0);
-        let target = GroundPlane
-            .pick(&c.camera().ray_through(cursor, SIZE))
-            .unwrap();
-        let before = c.camera().position.distance(target);
-        c.update(
-            &ViewportInput {
-                cursor: Some(cursor),
-                scroll: 100.0,
-                ..frame()
-            },
-            &GroundPlane,
-        );
-        let after = c.camera().position.distance(target);
-        assert!(after < before);
-        let still = c.camera().project(target, SIZE).unwrap();
-        assert!(
-            still.distance(cursor) < 0.1,
-            "zooming keeps the point under the pointer"
-        );
-    }
-
-    #[test]
-    fn zooming_in_stops_before_the_surface() {
-        let mut c = controller(CameraMode::Default);
-        let cursor = SIZE / 2.0;
-        for _ in 0..200 {
-            c.update(
-                &ViewportInput {
-                    cursor: Some(cursor),
-                    scroll: 400.0,
-                    ..frame()
-                },
-                &GroundPlane,
-            );
-        }
-        let target = GroundPlane
-            .pick(&c.camera().ray_through(cursor, SIZE))
-            .unwrap();
-        assert!(c.camera().position.distance(target) >= MIN_ZOOM_DISTANCE - 1e-2);
-    }
-
-    #[test]
-    fn scrolling_out_moves_away() {
-        let mut c = controller(CameraMode::Default);
-        let before = c.camera().position.length();
-        c.update(
-            &ViewportInput {
-                cursor: Some(SIZE / 2.0),
-                scroll: -100.0,
-                ..frame()
-            },
-            &GroundPlane,
-        );
-        assert!(c.camera().position.length() > before);
-    }
-
-    #[test]
-    fn scrolling_while_flying_changes_speed() {
-        let mut c = controller(CameraMode::Fly);
-        let start = c.camera().position;
-        c.update(
-            &ViewportInput {
-                right_held: true,
-                scroll: 200.0,
-                ..frame()
-            },
-            &GroundPlane,
-        );
-        assert!(c.fly_speed() > DEFAULT_FLY_SPEED);
-        assert_eq!(c.camera().position, start);
-        for _ in 0..100 {
-            c.update(
-                &ViewportInput {
-                    right_held: true,
-                    scroll: -2000.0,
-                    ..frame()
-                },
-                &GroundPlane,
-            );
-        }
-        assert_eq!(c.fly_speed(), FLY_SPEED_RANGE.0);
-    }
-
-    #[test]
-    fn broken_input_leaves_a_working_camera() {
-        let mut c = controller(CameraMode::Default);
-        let nan = Vec2::splat(f32::NAN);
-        let input = ViewportInput {
-            size: Vec2::ZERO,
-            cursor: Some(nan),
-            right_pressed: true,
-            right_held: true,
-            right_delta: nan,
-            middle_pressed: true,
-            middle_held: true,
-            middle_delta: Vec2::splat(f32::INFINITY),
-            scroll: f32::NAN,
-            keys: FlyKeys::default(),
-            dt: f32::NAN,
-        };
-        c.update(&input, &GroundPlane);
-        assert!(c.camera().position.is_finite() && c.camera().view_matrix().is_finite());
-    }
-
-    #[test]
-    fn broken_saved_state_is_repaired() {
-        let state = CameraState {
-            camera: Camera {
-                yaw: f32::NAN,
-                ..Camera::default()
-            },
-            pivot: Vec3::splat(f32::INFINITY),
-            fly_speed: -5.0,
-            mode: CameraMode::Orbit,
-        };
-        let c = CameraController::new(state, true);
-        assert_eq!(*c.camera(), Camera::default());
-        assert_eq!(c.state().pivot, Vec3::ZERO);
-        assert_eq!(c.fly_speed(), FLY_SPEED_RANGE.0);
-    }
-
-    #[test]
-    fn a_long_random_session_stays_sane() {
-        // A built-in stress test: thousands of frames of random input in
-        // every mode must keep the camera finite and inside the world.
-        let mut seed: u64 = 0xDEC0_DE12_3456_789A;
-        let mut next = move || {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            seed
-        };
-        let mut unit = move || (next() % 20_001) as f32 / 10_000.0 - 1.0;
-        let mut c = controller(CameraMode::Default);
-        for i in 0..20_000 {
-            if i % 500 == 0 {
-                c.set_mode(CameraMode::ALL[(i / 500) % 3]);
-            }
-            let input = ViewportInput {
-                size: SIZE,
-                cursor: Some(Vec2::new((unit() + 1.0) * 800.0, (unit() + 1.0) * 450.0)),
-                right_pressed: unit() > 0.8,
-                right_held: unit() > -0.2,
-                right_delta: Vec2::new(unit(), unit()) * 200.0,
-                middle_pressed: unit() > 0.9,
-                middle_held: unit() > 0.5,
-                middle_delta: Vec2::new(unit(), unit()) * 300.0,
-                scroll: if unit() > 0.7 { unit() * 1500.0 } else { 0.0 },
-                keys: FlyKeys {
-                    forward: unit() > 0.0,
-                    left: unit() > 0.5,
-                    up: unit() > 0.6,
-                    fast: unit() > 0.3,
-                    ..FlyKeys::default()
-                },
-                dt: (unit() + 1.0) * 0.06,
-            };
-            c.update(&input, &GroundPlane);
-            let cam = c.camera();
-            assert!(cam.view_matrix().is_finite(), "frame {i}");
-            assert!(cam.position.abs().max_element() <= WORLD_LIMIT, "frame {i}");
-        }
-    }
-}
+mod tests;

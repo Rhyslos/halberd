@@ -22,7 +22,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Documentation setup: architecture, contributing guide, changelog, pull request template, API reference
 - [x] Workspace split into crates
 - [x] Settings file and GMod install detection
-- [x] Window and docking panels (Browsers, Scene, Properties, Console)
+- [x] Window and docking panels (Library, Scene, Layers, Properties, Console)
 - [x] 3D viewport with Default, Orbit and Fly camera modes
 - [ ] Selection with left click, gizmo modes W / R / S / T
 - [ ] Undo and redo for every edit
@@ -78,7 +78,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [ ] Workshop and mounted-game content indexing
 - [ ] Dependency report before compile
 - [ ] Radial menus on Q
-- [ ] Groups, prefabs and visgroups
+- [ ] Groups, prefabs and layers (saved to Hammer as visgroups)
 - [ ] Autosave and crash recovery
 - [ ] Halberd project file format with versioned migrations
 - [ ] Backdoor entity warnings (lua_run, point_servercommand)

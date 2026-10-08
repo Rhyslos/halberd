@@ -22,7 +22,9 @@ For the camera maths: glam's camera module (reorganised in glam 0.34, released d
 - **egui reads a plain-RGBA view of the sRGB image.** egui expects non-sRGB native textures; handing it the sRGB view decodes colours twice and darkens everything. Found by looking at the first screenshot, now checked by the window smoke test.
 - **Our own view and projection matrices** in `halberd-tools::Camera`: right-handed, **Z-up like Hammer**, depth 0 to 1 as wgpu expects. Tests pin the conventions down.
 - **The camera lives in `halberd-tools`**, takes input as plain data (`ViewportInput`) and asks the scene through a `SceneQuery` trait. Until maps exist, the scene is the grid plane (`GroundPlane`), so Default mode's "orbit around what's under the pointer" orbits around the grid point under the pointer.
-- **Orbit keeps the pivot exactly under the pointer:** the camera is moved so the pivot keeps the same coordinates in the camera's own frame. Panning and zooming likewise keep the grabbed point under the pointer.
+- **Orbit keeps the pivot exactly under the pointer:** the camera is moved so the pivot keeps the same coordinates in the camera's own frame. (A version that turned the view to centre the pivot was tried and felt worse; it was dropped.)
+- **The wheel zooms towards the orbit point** in Default and Orbit modes, as in 3ds Max: the camera moves straight towards the last orbit point, so it stays still on screen and stops 8 units short of it. If the orbit point is off screen, behind the camera or very far away, the wheel zooms towards the pointer instead; Fly mode always does. Panning keeps the grabbed point under the pointer.
+- **Distant orbit points are ignored:** a grid point more than 8192 units away (near the horizon) would swing the camera across the whole map, so Default mode falls back to the last pivot.
 - **Grid drawn per pixel** on one large square to ±16384 (the edge of a Source map), with three fading levels, rather than thousands of line segments: crisp at every distance, no shimmering.
 - **Redraw only when needed:** egui redraws on input; the viewport asks for continuous frames only while flying with a movement key held.
 

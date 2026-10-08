@@ -27,10 +27,10 @@ The viewport camera is implemented.
 
 | Mode | Right mouse | Middle mouse | Wheel |
 | --- | --- | --- | --- |
-| Default | Orbits around the surface under the pointer (the grid plane until maps exist), else the last pivot | Pans; the point under the pointer follows it | Zooms towards the pointer, stopping 8 units short of the surface |
-| Orbit | Orbits around the selection (the last pivot until selection exists) | Pans | Zooms |
-| Fly | Hold to look; WASD moves, Space/C up/down, Shift ×4 | Pans | Zooms; while holding right mouse, changes fly speed |
+| Default | Orbits around the surface under the pointer (the grid plane until maps exist) if it is within 8192 units, else the last pivot | Pans; the point under the pointer follows it | Zooms towards the last orbit point, stopping 8 units short of it; towards the pointer when the orbit point is off screen |
+| Orbit | Orbits around the selection (the last pivot until selection exists) | Pans | Zooms, as in Default |
+| Fly | Hold to look; WASD moves, Space/C up/down, Shift ×4 | Pans | Zooms towards the pointer; while holding right mouse, changes fly speed |
 
 - Fly mode is hidden when WASD movement is turned off in settings.
-- Guarantees, each covered by tests: the pivot stays exactly under the pointer while orbiting; the view never flips over; the camera stays inside ±131072 units; broken input (NaN, zero sizes, huge frame times) never breaks the camera.
+- Guarantees, each covered by tests: the pivot stays exactly under the pointer while orbiting; zooming leaves the orbit point exactly where it is on screen; the view never flips over; the camera stays inside ±131072 units; broken input (NaN, zero sizes, huge frame times) never breaks the camera.
 - `CameraState` (camera, mode, pivot, fly speed) is saved between sessions.
