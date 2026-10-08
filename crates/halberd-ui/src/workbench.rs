@@ -45,10 +45,37 @@ const DELETE_ALT_SHORTCUT: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::NONE, Key::Backspace);
 
 /// Something the user asked for that the program around the workbench
-/// must carry out.
+/// must carry out (the workbench never touches files or the window itself).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkbenchAction {
-    /// File → Quit was chosen.
+    /// Close the window: the user chose Quit, with nothing unsaved (or
+    /// chose not to save).
+    Quit,
+    /// Show an Open window and load the chosen map with
+    /// [`Workbench::set_document`].
+    Open,
+    /// Save the map to its file (or ask where, if it has none), then carry
+    /// on with `then`.
+    Save {
+        /// What the user was doing when asked to save first.
+        then: Option<FileIntent>,
+    },
+    /// Ask where to save the map, save it there, then carry on with `then`.
+    SaveAs {
+        /// What the user was doing when asked to save first.
+        then: Option<FileIntent>,
+    },
+}
+
+/// Something that would close the current map, and so may first need its
+/// unsaved changes saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileIntent {
+    /// Start a new, empty map.
+    New,
+    /// Open another map.
+    Open,
+    /// Close Halberd.
     Quit,
 }
 
@@ -62,6 +89,12 @@ pub struct Workbench {
     doc: Document,
     length_unit: LengthUnit,
     show_player: bool,
+    /// The file the map was opened from or last saved to.
+    file_path: Option<std::path::PathBuf>,
+    /// What the user wants to do once they have answered "save changes?".
+    asking_to_save: Option<FileIntent>,
+    /// A problem to show in a message box.
+    error: Option<String>,
 }
 
 impl Workbench {
@@ -78,6 +111,9 @@ impl Workbench {
             doc: Document::new(),
             length_unit: LengthUnit::Units,
             show_player: true,
+            file_path: None,
+            asking_to_save: None,
+            error: None,
         };
         if let Some(note) = note {
             workbench.push_console(note);
@@ -197,9 +233,7 @@ impl Workbench {
         renderer: &mut dyn ViewportRenderer,
     ) -> Vec<WorkbenchAction> {
         let mut actions = Vec::new();
-        if ui.input_mut(|input| input.consume_shortcut(&QUIT_SHORTCUT)) {
-            actions.push(WorkbenchAction::Quit);
-        }
+        self.file_shortcuts(ui, &mut actions);
         self.edit_shortcuts(ui);
         // Between drags, the next edit starts a new undo step; during a drag
         // (of a size field, say) its many small edits stay one step.
@@ -208,6 +242,8 @@ impl Workbench {
         }
         self.viewport
             .note_popup_open(egui::Popup::is_any_open(ui.ctx()));
+        self.viewport
+            .block_keys(self.is_asking_to_save() || self.error.is_some());
         self.viewport
             .set_display(self.length_unit, self.show_player);
         egui::Panel::top("halberd_menu_bar").show(ui, |ui| {
@@ -239,6 +275,7 @@ impl Workbench {
             .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ui.ctx(), |ui| about_contents(ui, &self.info));
         self.about_open = about_open;
+        self.dialogs(ui, &mut actions);
 
         actions
     }
@@ -247,7 +284,13 @@ impl Workbench {
     fn edit_shortcuts(&mut self, ui: &Ui) {
         // Mid-drag (a box being drawn, a gizmo handle held), undo and delete
         // would pull the map from under the drag; they wait until it ends.
-        if ui.ctx().egui_wants_keyboard_input() || self.viewport.tools().is_busy() {
+        // While a box ("save changes?", a problem) is showing, the map
+        // behind it stays as it is.
+        if ui.ctx().egui_wants_keyboard_input()
+            || self.viewport.tools().is_busy()
+            || self.is_asking_to_save()
+            || self.error.is_some()
+        {
             return;
         }
         let consume = |shortcut: &KeyboardShortcut| ui.input_mut(|i| i.consume_shortcut(shortcut));
@@ -305,15 +348,7 @@ impl Workbench {
     }
 
     fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<WorkbenchAction>) {
-        ui.menu_button("File", |ui| {
-            let shortcut = ui.ctx().format_shortcut(&QUIT_SHORTCUT);
-            if ui
-                .add(egui::Button::new("Quit").shortcut_text(shortcut))
-                .clicked()
-            {
-                actions.push(WorkbenchAction::Quit);
-            }
-        });
+        ui.menu_button("File", |ui| self.file_menu(ui, actions));
         ui.menu_button("Edit", |ui| self.edit_menu(ui));
         ui.menu_button("View", |ui| {
             if ui.button("Reset panel layout").clicked() {
@@ -420,5 +455,14 @@ impl TabViewer for PanelViewer<'_> {
     }
 }
 
+mod files;
+
+pub use files::{
+    CANCEL_BUTTON, DONT_SAVE_BUTTON, NEW_SHORTCUT, OPEN_SHORTCUT, SAVE_AS_SHORTCUT, SAVE_BUTTON,
+    SAVE_SHORTCUT,
+};
+
+#[cfg(test)]
+mod file_tests;
 #[cfg(test)]
 mod tests;

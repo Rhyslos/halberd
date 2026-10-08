@@ -9,16 +9,23 @@
 //! selecting is not an edit and is not undone (as in Hammer). Undoing an
 //! edit does select what it brings back.
 //!
-//! So far the only objects are brushes; props and entities follow.
+//! Objects are world brushes ([`BrushObject`], with each face's material)
+//! and entities ([`EntityObject`], with their own brushes). What a map
+//! file holds that the editor does not use yet is kept in
+//! [`MapFileData`] and on each object, so saving loses nothing.
 
 mod command;
 mod document;
 mod error;
 mod history;
+mod map_data;
 mod object;
 
 pub use command::{Command, TransformKind};
 pub use document::{Document, MAX_OBJECTS};
 pub use error::DocError;
 pub use history::MAX_UNDO_STEPS;
-pub use object::{Object, ObjectId};
+pub use map_data::{MapFileData, TextEncoding};
+pub use object::{
+    BrushObject, DEFAULT_MATERIAL, EntityObject, FaceInfo, Object, ObjectId, POINT_ENTITY_HALF_SIZE,
+};

@@ -5,14 +5,14 @@ use crate::viewport::NoRenderer;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
-fn info() -> AppInfo {
+pub(super) fn info() -> AppInfo {
     AppInfo {
         name: "Halberd Map Editor".into(),
         version: "9.9.9".into(),
     }
 }
 
-fn harness_for(workbench: Workbench) -> Harness<'static, Workbench> {
+pub(super) fn harness_for(workbench: Workbench) -> Harness<'static, Workbench> {
     Harness::builder()
         .with_size([1280.0, 800.0])
         .build_ui_state(
@@ -242,7 +242,7 @@ fn layers_is_a_tab_beside_scene() {
     assert!(harness.query_by_label("No layers yet").is_some());
 }
 
-fn workbench_with_boxes(count: usize) -> Workbench {
+pub(super) fn workbench_with_boxes(count: usize) -> Workbench {
     let mut wb = Workbench::new(info(), None);
     let brushes = (0..count)
         .map(|i| {
@@ -360,7 +360,7 @@ fn escape_that_closes_a_menu_keeps_the_selection() {
 }
 
 /// Types `text` into the Properties number field named `field`.
-fn type_into(harness: &mut Harness<'static, Workbench>, field: &str, text: &str) {
+pub(super) fn type_into(harness: &mut Harness<'static, Workbench>, field: &str, text: &str) {
     harness.get_by_label(field).click();
     harness.run();
     harness.get_by_label(field).type_text(text);

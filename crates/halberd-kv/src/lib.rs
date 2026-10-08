@@ -1,18 +1,29 @@
 //! Read and write Valve's KeyValues text format.
 //!
-//! KeyValues is the nested `"key" "value"` text format behind VMF maps, VMT materials and Steam's VDF files. This crate turns that text into a plain tree and back, exactly, so other format crates can build on it.
+//! KeyValues is the nested `"key" "value"` text format behind VMF maps, VMT
+//! materials and Steam's VDF files:
 //!
-//! Status: skeleton. See this crate's README for what it must never do.
+//! ```text
+//! versioninfo
+//! {
+//!     "editorversion" "400"
+//! }
+//! ```
+//!
+//! [`parse`] turns text into a plain tree of [`Entry`] values, keeping the
+//! order of everything and any repeated keys or blocks. [`write()`] turns the
+//! tree back into text in the layout Hammer uses (tabs, one item a line), so
+//! an untouched Hammer file comes back the same.
+//!
+//! Text is taken literally: backslashes are not escapes (Hammer writes
+//! Windows paths with single backslashes). Comments (`// …`) are skipped.
+//! Malformed input gives a [`KvError`] with the line it was found on; it
+//! never panics.
 
-/// The name of this crate, used in logs and diagnostics.
-pub const CRATE_NAME: &str = "halberd-kv";
+mod parse;
+mod tree;
+mod write;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
-    }
-}
+pub use parse::{KvError, MAX_DEPTH, parse};
+pub use tree::{Block, Entry};
+pub use write::{LineEnding, write, write_with};

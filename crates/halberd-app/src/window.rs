@@ -1,14 +1,15 @@
 //! The editor window: opens it with eframe (winit + wgpu) and hands each
 //! frame to the workbench from `halberd-ui`.
 
+use crate::files;
 use crate::gpu::GpuViewport;
 use crate::preferences::PreferenceSaver;
 use eframe::egui;
 use halberd_config::{Settings, SettingsStore};
 use halberd_ui::{
-    AppInfo, NoRenderer, ViewportOptions, ViewportPanel, ViewportRenderer, Workbench,
-    WorkbenchAction,
+    AppInfo, FileIntent, NoRenderer, ViewportOptions, ViewportPanel, ViewportRenderer, Workbench,
 };
+use std::path::PathBuf;
 
 /// Name eframe uses for the window and its own storage folder
 /// (window size, position and the panel layout).
@@ -27,14 +28,30 @@ struct HalberdApp {
     workbench: Workbench,
     renderer: Box<dyn ViewportRenderer>,
     preferences: PreferenceSaver,
+    /// The window may close: the user confirmed (or had nothing unsaved).
+    allow_close: bool,
+    /// The title last given to the window.
+    title: String,
 }
 
 impl eframe::App for HalberdApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        for action in self.workbench.show(ui, self.renderer.as_mut()) {
-            match action {
-                WorkbenchAction::Quit => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
+        let ctx = ui.ctx().clone();
+        // The window's close button: with unsaved changes, ask first.
+        let close_requested = ctx.input(|i| i.viewport().close_requested());
+        if close_requested && !self.allow_close && self.workbench.is_modified() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            if let Some(action) = self.workbench.request(FileIntent::Quit) {
+                files::handle(action, &mut self.workbench, &ctx, &mut self.allow_close);
             }
+        }
+        for action in self.workbench.show(ui, self.renderer.as_mut()) {
+            files::handle(action, &mut self.workbench, &ctx, &mut self.allow_close);
+        }
+        let title = self.workbench.window_title();
+        if title != self.title {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.title = title;
         }
         let (unit, player) = (self.workbench.length_unit(), self.workbench.show_player());
         if let Some(note) = self.preferences.update(unit, player) {
@@ -64,6 +81,7 @@ pub(crate) fn run(
     report: Vec<String>,
     settings: Settings,
     store: Option<SettingsStore>,
+    map: Option<PathBuf>,
 ) -> Result<(), String> {
     let viewport_options = ViewportOptions {
         // Not asked yet (first launch) counts as on, until Settings can ask.
@@ -99,6 +117,9 @@ pub(crate) fn run(
                 for line in report {
                     workbench.push_console(line);
                 }
+                if let Some(path) = &map {
+                    files::open_path(&mut workbench, path);
+                }
                 let renderer: Box<dyn ViewportRenderer> = match cc.wgpu_render_state.as_ref() {
                     Some(state) => {
                         let gpu = GpuViewport::new(state);
@@ -113,6 +134,8 @@ pub(crate) fn run(
                     workbench,
                     renderer,
                     preferences: PreferenceSaver::new(settings, store),
+                    allow_close: false,
+                    title: String::new(),
                 }))
             }),
         )

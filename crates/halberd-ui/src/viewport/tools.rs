@@ -29,7 +29,7 @@ impl ViewportPanel {
         rect: Rect,
         doc: &mut Document,
     ) -> Vec<String> {
-        let typing = ui.ctx().egui_wants_keyboard_input();
+        let typing = ui.ctx().egui_wants_keyboard_input() || self.keys_blocked;
         // Escape that closes a menu or popup is for that menu only. The menu
         // may already have closed itself this frame, so also ask whether one
         // was open when the frame began.

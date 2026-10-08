@@ -23,7 +23,7 @@ Convex brushes are implemented.
 
 - **`Plane`**: normal (pointing out of the solid) and distance.
 - **`Aabb`**: axis-aligned box, for bounds and box drawing.
-- **`Brush`**: a convex solid stored as planes, exactly as VMF stores brushes. Each face's polygon is cut from a huge square by the other planes, in double precision, with corners snapped onto whole units when within 0.001. Faces wind counter-clockwise seen from outside. `cuboid`, `from_planes` (planes of any normal length are rescaled; duplicate and unused planes are dropped), `translated`, `bounds`, `ray_hit` (a ray starting inside a brush ignores it), `is_axis_aligned_box`.
+- **`Brush`**: a convex solid stored as planes, exactly as VMF stores brushes. Each face's polygon is cut from a huge square by the other planes, in double precision, with corners snapped onto whole units when within 0.001. Faces wind counter-clockwise seen from outside. `cuboid`, `from_planes` (planes of any normal length are rescaled; duplicate and unused planes are dropped), `translated`, `bounds`, `ray_hit` (a ray starting inside a brush ignores it), `is_axis_aligned_box`. Each face knows which input plane it came from (`Face::source`), so per-face data such as materials follows faces through moves and rebuilds.
 - **Transforms**: `transformed` (any matrix), `rotated` (around an axis through a pivot) and `scaled` (keeping an anchor in place), worked on the planes in double precision; a quarter turn of a grid-aligned box lands on whole units again.
 - **Limits** (`GeomError` explains each in plain words): at most 128 faces, at least 1 unit thick, within ±131072 units, planes must enclose a solid.
 

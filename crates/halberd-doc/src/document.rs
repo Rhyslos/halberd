@@ -2,7 +2,7 @@
 
 use crate::command::{Change, Command};
 use crate::history::{Entry, History};
-use crate::{DocError, Object, ObjectId};
+use crate::{BrushObject, DocError, MapFileData, Object, ObjectId};
 use glam::Vec3;
 use halberd_geom::Aabb;
 use std::collections::{BTreeMap, BTreeSet};
@@ -25,6 +25,8 @@ pub struct Document {
     history: History,
     revision: u64,
     selection_revision: u64,
+    saved_revision: u64,
+    file_data: MapFileData,
 }
 
 impl Default for Document {
@@ -37,6 +39,8 @@ impl Default for Document {
             history: History::default(),
             revision: 0,
             selection_revision: 0,
+            saved_revision: 0,
+            file_data: MapFileData::default(),
         }
     }
 }
@@ -52,6 +56,8 @@ impl Clone for Document {
             history: self.history.clone(),
             revision: self.revision,
             selection_revision: self.selection_revision,
+            saved_revision: self.saved_revision,
+            file_data: self.file_data.clone(),
         }
     }
 }
@@ -60,6 +66,45 @@ impl Document {
     /// An empty map.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A map read from a file: these objects (given ids in order), and the
+    /// rest of the file's contents. Nothing is selected, there is nothing to
+    /// undo, and it counts as saved. Objects beyond [`MAX_OBJECTS`] are
+    /// refused.
+    pub fn from_map(objects: Vec<Object>, file_data: MapFileData) -> Result<Self, DocError> {
+        if objects.len() > MAX_OBJECTS {
+            return Err(DocError::TooManyObjects);
+        }
+        let mut doc = Self {
+            file_data,
+            ..Self::default()
+        };
+        for object in objects {
+            let id = doc.new_id();
+            doc.objects.insert(id, object);
+        }
+        Ok(doc)
+    }
+
+    /// What the map's file held besides its objects.
+    pub fn file_data(&self) -> &MapFileData {
+        &self.file_data
+    }
+
+    /// Sets how the map's file text is encoded, as found when it was read.
+    pub fn set_encoding(&mut self, encoding: crate::TextEncoding) {
+        self.file_data.encoding = encoding;
+    }
+
+    /// Records that the map has just been saved.
+    pub fn mark_saved(&mut self) {
+        self.saved_revision = self.revision;
+    }
+
+    /// True if the map changed since it was opened, created or last saved.
+    pub fn is_modified(&self) -> bool {
+        self.revision != self.saved_revision
     }
 
     /// A number no other document in this run of the program shares, so
@@ -251,7 +296,7 @@ impl Document {
                 }
                 let objects = brushes
                     .into_iter()
-                    .map(|brush| (self.new_id(), Object::Brush(brush)))
+                    .map(|brush| (self.new_id(), Object::Brush(BrushObject::new(brush))))
                     .collect();
                 Ok(Change::Inserted(objects))
             }
@@ -271,7 +316,8 @@ impl Document {
             }
             Command::ReplaceBrush { id, brush } => {
                 let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
-                let after = Object::Brush(brush);
+                let shaped = before.as_brush().ok_or(DocError::NotABrush(id))?;
+                let after = Object::Brush(shaped.with_shape(brush));
                 if *before == after {
                     return Err(DocError::NothingToDo);
                 }
@@ -287,7 +333,8 @@ impl Document {
                         continue;
                     }
                     let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
-                    objects.push((id, before.clone(), Object::Brush(brush)));
+                    let shaped = before.as_brush().ok_or(DocError::NotABrush(id))?;
+                    objects.push((id, before.clone(), Object::Brush(shaped.with_shape(brush))));
                 }
                 if objects.iter().all(|(_, before, after)| before == after) {
                     return Err(DocError::NothingToDo);
@@ -329,5 +376,7 @@ impl Document {
     }
 }
 
+#[cfg(test)]
+mod map_tests;
 #[cfg(test)]
 mod tests;

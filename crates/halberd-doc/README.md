@@ -16,7 +16,7 @@ The single source of truth for an open map: brushes, props, entities and groups 
 
 ## Depends on
 
-`halberd-geom`. Outside library: `glam`.
+`halberd-geom`, `halberd-kv` (to keep file entries). Outside library: `glam`.
 
 ## Status
 
@@ -28,6 +28,8 @@ The document, commands and undo are implemented (see [decision 0009](../../docs/
 - **Cancelling a drag**: `discard_step` reverses and forgets an unfinished merged step, so a drag cancelled with Escape leaves nothing in the undo list.
 - **One drag, one undo step**: `execute_merging` with the same key merges consecutive edits (for example, dragging a size field) until `end_step`, which the interface calls whenever no drag is in progress.
 - **Undo and redo**: each applied command keeps the change it made (up to 1000 steps); undo reverses it, redo repeats it, with the same ids.
+- **Objects**: `BrushObject` (a shape and, per face, its material and the file entries Halberd does not use yet) and `EntityObject` (class, origin, its own brushes, and its other entries). Point entities are shown as 16-unit boxes. `Document::from_map` builds a map read from a file; `MapFileData` keeps the rest of that file (Hammer's blocks, world settings, line endings, text encoding).
+- **Saved state**: `is_modified` and `mark_saved`, for the title bar's dot and the "save changes?" question.
 - **Selection**: `set_selection`, `toggle_selected`, `clear_selection`. Not an edit, so not undone, as in Hammer; an undo selects what it brings back.
 - **Queries**: `pick` (nearest object along a ray), `selection_bounds`.
 

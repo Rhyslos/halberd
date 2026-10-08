@@ -26,6 +26,7 @@ Draws the ground grid, world axes and the map's brushes into an offscreen image 
 - **Grid**: one large square on Z = 0 out to ±16384 (the edge of a Source map), with lines computed per pixel in the shader. Three levels (editor grid, ×8, 1024 units) each fade out as they get too dense, so there is no shimmering in the distance. The grid fades towards the horizon.
 - **Axes**: X red, Y green (positive halves bright, negative dimmed), Z blue rising from the origin.
 - **Brushes** (`SceneGeometry`): faces as triangles with simple fixed lighting (each side of a box has its own shade), dark outlines, and selected brushes in red with outlines drawn on top of everything. Rebuilt only when the document's revision or selection changes (`update_scene`). Faces are drawn first, so the transparent grid hides behind them.
+- **Entities**: brushes belonging to entities are teal-grey; point entities are purple 16-unit boxes. Selected ones are red like brushes.
 - **Box preview**: the outline of a box being drawn, in yellow, on top of everything (`FrameParams::preview`).
 - **Player figure**: a light-blue player-sized outline with a ring at eye height, hidden behind brushes like a real object (`FrameParams::player`).
 - **`read_pixels`**: copies an image back to the CPU, for tests and screenshots.

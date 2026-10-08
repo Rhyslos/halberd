@@ -102,6 +102,8 @@ pub struct ViewportPanel {
     left_was_held: bool,
     /// A menu or popup was open when this frame began.
     popup_was_open: bool,
+    /// A box ("save changes?", a problem) is showing: tool keys wait.
+    keys_blocked: bool,
     length_unit: LengthUnit,
     show_player: bool,
     right_was_held: bool,
@@ -117,6 +119,7 @@ impl ViewportPanel {
             grid_size: options.grid_size,
             left_was_held: false,
             popup_was_open: false,
+            keys_blocked: false,
             length_unit: LengthUnit::Units,
             show_player: true,
             right_was_held: false,
@@ -156,6 +159,11 @@ impl ViewportPanel {
         &self.tools
     }
 
+    /// Points the camera at the whole of `bounds` (a newly opened map).
+    pub fn frame(&mut self, bounds: Aabb) {
+        self.controller.frame(bounds);
+    }
+
     /// The tools, for changing the gizmo mode.
     pub fn tools_mut(&mut self) -> &mut ToolController {
         &mut self.tools
@@ -166,6 +174,12 @@ impl ViewportPanel {
     /// workbench calls this before drawing the menu bar.
     pub fn note_popup_open(&mut self, open: bool) {
         self.popup_was_open = open;
+    }
+
+    /// Tells the viewport whether a message box is showing. While one is,
+    /// tool keys (B, W, R, S, T, Escape) leave the map alone.
+    pub fn block_keys(&mut self, blocked: bool) {
+        self.keys_blocked = blocked;
     }
 
     /// Draws the viewport filling `ui` and handles its input: the camera,

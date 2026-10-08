@@ -24,6 +24,7 @@ pub use viewport::{
     NoRenderer, VIEWPORT_LABEL, ViewportOptions, ViewportPanel, ViewportRenderer, ViewportView,
 };
 pub use workbench::{
-    AppInfo, DELETE_SHORTCUT, PLAYER_TOGGLE_LABEL, QUIT_SHORTCUT, REDO_SHORTCUT, UNDO_SHORTCUT,
-    Workbench, WorkbenchAction,
+    AppInfo, CANCEL_BUTTON, DELETE_SHORTCUT, DONT_SAVE_BUTTON, FileIntent, NEW_SHORTCUT,
+    OPEN_SHORTCUT, PLAYER_TOGGLE_LABEL, QUIT_SHORTCUT, REDO_SHORTCUT, SAVE_AS_SHORTCUT,
+    SAVE_BUTTON, SAVE_SHORTCUT, UNDO_SHORTCUT, Workbench, WorkbenchAction,
 };

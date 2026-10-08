@@ -17,6 +17,11 @@ layer = 2
 [dependencies]
 halberd-doc.workspace = true
 halberd-vmf.workspace = true
+halberd-geom.workspace = true
+glam.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

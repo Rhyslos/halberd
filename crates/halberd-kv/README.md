@@ -20,4 +20,10 @@ none (no other Halberd crates)
 
 ## Status
 
-Skeleton only. The roadmap milestone that fills this crate in will replace this line.
+Reading and writing are implemented.
+
+- `parse` turns text into a list of `Entry` values (`Pair` or `Block`), keeping order, repeated keys and blocks, and text exactly (no escapes; `//` comments skipped; a byte-order mark ignored). Errors give the line and a plain reason. Nesting is limited to 256 levels.
+- `write` / `write_with` produce Hammer's layout: block names unquoted when possible, `{` and `}` on their own lines, tab indentation, `"key" "value"` pairs, Windows or Unix line endings. A `"` inside text cannot be written in this format and becomes `'`.
+- `Block::get` and `Block::blocks` find pairs and blocks without regard to case, as Valve's tools do.
+
+Tests: a Hammer file reads and writes back byte for byte; 20,000 random texts never crash the reader; 5,000 random trees write and read back unchanged.

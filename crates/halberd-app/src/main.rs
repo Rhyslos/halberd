@@ -5,6 +5,7 @@
 //! found and exits instead, which is useful for troubleshooting and tests.
 
 mod cli;
+mod files;
 mod gpu;
 mod preferences;
 mod startup;
@@ -97,7 +98,7 @@ fn main() -> ExitCode {
         name: PRODUCT_NAME.to_string(),
         version: env!("CARGO_PKG_VERSION").into(),
     };
-    match window::run(info, report, settings, store) {
+    match window::run(info, report, settings, store, options.map.clone()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(reason) => {
             let body = [

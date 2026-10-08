@@ -52,7 +52,7 @@ See [decision 0009](docs/decisions/0009-document-commands-and-brushes.md).
 
 | Format | Read | Write |
 | --- | --- | --- |
-| VMF (Hammer maps) | Yes | Yes |
+| VMF (Hammer maps; `halberd-kv`, `halberd-vmf`, `halberd-io`; see [decision 0011](docs/decisions/0011-vmf-maps.md)) | Yes | Yes |
 | FGD (entity definitions) | Yes | No |
 | VPK (Valve archives) | Yes | No |
 | GMA, `.bin` (Workshop addons) | Yes | No |
@@ -71,7 +71,7 @@ Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from th
 2. **Garry's Mod** (`halberd-assets`): use the folder from the command line or settings if valid, otherwise search every Steam installation and library. Check for `garrysmod/gameinfo.txt` and the compile tools.
 3. **Remember:** if the found folder differs from the saved one, save it.
 4. **Report** what was found in plain words.
-5. **Window** (`halberd-app` with eframe): open the editor window and show the `halberd-ui` workbench, with the report in the Console panel. The panel layout and window size are restored from the last session. See [decision 0007](docs/decisions/0007-window-and-panels.md).
+5. **Window** (`halberd-app` with eframe): open the editor window and show the `halberd-ui` workbench, with the report in the Console panel, and open a map if one was given on the command line. The panel layout and window size are restored from the last session. See [decision 0007](docs/decisions/0007-window-and-panels.md).
 
 Steam libraries are read with the `steamlocate` library, which reads Steam's own files and runs no Steam code.
 
@@ -91,6 +91,13 @@ Each frame, for each viewport:
 4. **Show** (`halberd-ui`): the image is drawn into the panel as an egui texture, with the pivot marker and the camera mode switcher on top.
 
 Rendering sits behind the `ViewportRenderer` trait, so the panel runs in tests with no GPU. See [decision 0008](docs/decisions/0008-viewport-rendering-and-camera.md).
+
+## Opening and saving maps
+
+1. **File menu** (`halberd-ui`): the workbench asks "save changes?" if needed, then returns an action (Open, Save, Save As, Quit).
+2. **App** (`halberd-app`): shows the system's file window, then calls `halberd-io`.
+3. **Read** (`halberd-io` with `halberd-vmf` and `halberd-kv`): text → KeyValues tree → document. Whatever the editor does not use is kept on the objects and in `MapFileData`.
+4. **Write**: document → tree → text, everything kept put back in place; written to a temporary file, the old file kept as `.vmx`, then swapped in.
 
 ## Extension points
 

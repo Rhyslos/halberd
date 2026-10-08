@@ -150,11 +150,17 @@ quit_attempt() {
     if [ "$attempt" -le 3 ]; then
         echo "Quit attempt $attempt: Ctrl+Q"
         xdotool key ctrl+q
+        # The box drawn and undone counts as a change, so Halberd asks
+        # "Save changes?"; N answers "Don't save".
+        sleep 1
+        xdotool key n
     else
         echo "Quit attempt $attempt: File > Quit"
         xdotool mousemove 19 11 click 1
         sleep 2
-        xdotool mousemove 40 36 click 1
+        xdotool mousemove 40 134 click 1
+        sleep 1
+        xdotool key n
     fi
 }
 
@@ -178,4 +184,40 @@ grep -q "halberd_panel_layout" "$LAYOUT_FILE" 2>/dev/null ||
 grep -q "halberd_viewport_camera" "$LAYOUT_FILE" 2>/dev/null ||
     fail "the viewport camera was not saved to $LAYOUT_FILE"
 
-echo "Smoke test passed: window opened, viewport drew, orbit and zoom worked, box drawn and undone, quit worked, layout and camera saved."
+# --- Maps ------------------------------------------------------------------
+# Start Halberd again with a copy of the sample Hammer map, check it opened
+# (the window title names it), save with Ctrl+S, quit, and check the saved
+# file is exactly the original (and the old one was kept as a .vmx backup).
+SAMPLE="$(cd "$(dirname "$0")/../.." && pwd)/crates/halberd-vmf/tests/data/sample.vmf"
+MAP_DIR="$(mktemp -d)"
+cp "$SAMPLE" "$MAP_DIR/sample.vmf"
+"$BIN" "$MAP_DIR/sample.vmf" >"$OUT/halberd-map.log" 2>&1 </dev/null &
+PID=$!
+for _ in $(seq 1 60); do
+    if xdotool search --name "sample.vmf" >/dev/null 2>&1; then break; fi
+    kill -0 "$PID" 2>/dev/null || fail "Halberd exited before opening the sample map"
+    sleep 1
+done
+xdotool search --name "sample.vmf" >/dev/null 2>&1 || fail "the window title does not name the opened map"
+sleep 6
+import -window root "$OUT/map.png"
+WINDOW_ID="$(xdotool search --name "sample.vmf" | head -1)"
+xdotool mousemove 800 450
+xdotool windowfocus --sync "$WINDOW_ID" 2>/dev/null || true
+sleep 0.5
+xdotool key ctrl+s
+sleep 2
+cmp -s "$SAMPLE" "$MAP_DIR/sample.vmf" || fail "saving an untouched map changed it"
+[ -f "$MAP_DIR/sample.vmx" ] || fail "no .vmx backup was kept"
+for attempt in 1 2 3; do
+    xdotool windowfocus --sync "$WINDOW_ID" 2>/dev/null || true
+    xdotool key ctrl+q
+    for _ in $(seq 1 10); do
+        kill -0 "$PID" 2>/dev/null || break 2
+        sleep 1
+    done
+done
+kill -0 "$PID" 2>/dev/null && fail "Halberd did not quit after saving the map"
+echo "Map opened from the command line, saved unchanged, backup kept."
+
+echo "Smoke test passed: window opened, viewport drew, orbit and zoom worked, box drawn and undone, quit worked, layout and camera saved, map opened and saved unchanged."

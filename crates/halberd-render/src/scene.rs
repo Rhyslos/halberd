@@ -8,6 +8,11 @@ use halberd_geom::{Aabb, Brush};
 
 /// Brush face colour, linear space (neutral grey with a hint of blue).
 pub const BRUSH_COLOR: [f32; 4] = [0.30, 0.31, 0.34, 1.0];
+/// Colour of brushes that belong to an entity (such as `func_detail`),
+/// linear space (a cool teal-grey, so they stand apart from world brushes).
+pub const ENTITY_BRUSH_COLOR: [f32; 4] = [0.20, 0.32, 0.34, 1.0];
+/// Colour of the box a point entity is shown as, linear space (purple).
+pub const POINT_ENTITY_COLOR: [f32; 4] = [0.42, 0.12, 0.52, 1.0];
 /// Selected brush face colour, linear space (Hammer's red selection).
 pub const SELECTED_COLOR: [f32; 4] = [0.55, 0.10, 0.08, 1.0];
 /// Brush outline colour, linear space (dark, so faces read as solid).
@@ -87,14 +92,23 @@ impl SceneGeometry {
     pub fn from_document(doc: &Document) -> Self {
         let mut scene = Self::default();
         for (id, object) in doc.objects() {
+            let selected = doc.is_selected(id);
             match object {
-                Object::Brush(brush) => scene.add_brush(brush, doc.is_selected(id)),
+                Object::Brush(brush) => scene.add_brush(brush.brush(), BRUSH_COLOR, selected),
+                Object::Entity(entity) => {
+                    for solid in &entity.solids {
+                        scene.add_brush(solid.brush(), ENTITY_BRUSH_COLOR, selected);
+                    }
+                    if let Some(marker) = entity.marker().and_then(|m| Brush::cuboid(m).ok()) {
+                        scene.add_brush(&marker, POINT_ENTITY_COLOR, selected);
+                    }
+                }
             }
         }
         scene
     }
 
-    fn add_brush(&mut self, brush: &Brush, selected: bool) {
+    fn add_brush(&mut self, brush: &Brush, base: [f32; 4], selected: bool) {
         let (color, edges, edge_color) = if selected {
             (
                 SELECTED_COLOR,
@@ -102,7 +116,7 @@ impl SceneGeometry {
                 SELECTED_EDGE_COLOR,
             )
         } else {
-            (BRUSH_COLOR, &mut self.edges, EDGE_COLOR)
+            (base, &mut self.edges, EDGE_COLOR)
         };
         for face in brush.faces() {
             let normal = face.plane().normal.to_array();

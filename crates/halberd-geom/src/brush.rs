@@ -27,6 +27,7 @@ const SNAP: f64 = 1e-3;
 pub struct Face {
     plane: Plane,
     vertices: Vec<Vec3>,
+    source: usize,
 }
 
 impl Face {
@@ -38,6 +39,15 @@ impl Face {
     /// The corners of the face, counter-clockwise seen from outside.
     pub fn vertices(&self) -> &[Vec3] {
         &self.vertices
+    }
+
+    /// Which of the planes given to [`Brush::from_planes`] this face came
+    /// from (its index in that list). Data kept per face elsewhere, such as
+    /// a texture, follows the face through moves, turns and rebuilds this
+    /// way: [`Brush::transformed`] passes the faces in order, so a face's
+    /// source is then its index among the old faces.
+    pub fn source(&self) -> usize {
+        self.source
     }
 }
 
@@ -83,8 +93,8 @@ impl Brush {
         if !planes.iter().all(finite) {
             return Err(GeomError::NotFinite);
         }
-        let mut unique: Vec<Plane> = Vec::with_capacity(planes.len());
-        for plane in planes {
+        let mut unique: Vec<(Plane, usize)> = Vec::with_capacity(planes.len());
+        for (index, plane) in planes.iter().enumerate() {
             // Any normal length is accepted; the plane is scaled so its
             // normal is unit length, which the cutting below relies on.
             let length = plane.normal.length();
@@ -95,15 +105,15 @@ impl Brush {
                 normal: plane.normal / length,
                 distance: plane.distance / length,
             };
-            if !unique.iter().any(|u| u.same_as(&plane)) {
-                unique.push(plane);
+            if !unique.iter().any(|(u, _)| u.same_as(&plane)) {
+                unique.push((plane, index));
             }
         }
 
         let mut faces = Vec::with_capacity(unique.len());
-        for (i, plane) in unique.iter().enumerate() {
+        for (i, (plane, source)) in unique.iter().enumerate() {
             let mut polygon = huge_square(*plane);
-            for (j, other) in unique.iter().enumerate() {
+            for (j, (other, _)) in unique.iter().enumerate() {
                 if i != j {
                     polygon = clip(&polygon, *other);
                     if polygon.len() < 3 {
@@ -115,6 +125,7 @@ impl Brush {
                 faces.push(Face {
                     plane: *plane,
                     vertices: polygon.into_iter().map(snap).collect(),
+                    source: *source,
                 });
             }
         }
@@ -359,6 +370,25 @@ mod tests {
         let mut planes: Vec<Plane> = cube(0.0, 64.0).faces().iter().map(|f| f.plane()).collect();
         planes.push(Plane::new(Vec3::new(1.0, 0.0, 1.0), Vec3::new(64.0, 0.0, 32.0)).unwrap());
         assert!(!Brush::from_planes(&planes).unwrap().is_axis_aligned_box());
+    }
+
+    #[test]
+    fn faces_remember_which_plane_they_came_from() {
+        let cube_planes: Vec<Plane> = cube(0.0, 64.0).faces().iter().map(|f| f.plane()).collect();
+        // An unused plane first, then the cube's planes with one repeated.
+        let mut planes = vec![Plane::new(Vec3::Z, Vec3::splat(500.0)).unwrap()];
+        planes.extend(cube_planes.iter().copied());
+        planes.push(cube_planes[2]);
+        let brush = Brush::from_planes(&planes).unwrap();
+        for face in brush.faces() {
+            assert_eq!(planes[face.source()], face.plane());
+            assert!(face.source() >= 1 && face.source() <= 6, "first copy wins");
+        }
+        // Transforms keep face order: a face's source is its old index.
+        let moved = brush.translated(Vec3::X).unwrap();
+        for (i, face) in moved.faces().iter().enumerate() {
+            assert_eq!(face.source(), i);
+        }
     }
 
     #[test]

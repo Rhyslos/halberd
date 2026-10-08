@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::{Tool, ToolController, ToolInput};
-use halberd_doc::{Command, Object, ObjectId};
+use halberd_doc::{Command, ObjectId};
 use halberd_geom::Brush;
 
 const SIZE: Vec2 = Vec2::new(1600.0, 900.0);
@@ -495,7 +495,7 @@ fn random_drags_never_break_the_map() {
         let action = t.update(&release, &camera, &doc);
         apply(&mut doc, action);
         for (_, object) in doc.objects() {
-            let Object::Brush(brush) = object;
+            let brush = object.as_brush().unwrap().brush();
             assert!(brush.faces().len() >= 4);
             assert!(brush.bounds().min.is_finite());
         }
@@ -626,4 +626,21 @@ fn rings_partly_behind_the_camera_are_not_drawn() {
     for shape in t.gizmo_shapes(&close, Vec2::new(1600.0, 40.0), &doc) {
         assert_eq!(shape.points.len(), 49, "a ring is whole or not there");
     }
+}
+
+#[test]
+fn entities_alone_get_no_gizmo() {
+    use halberd_doc::{EntityObject, Object};
+    let camera = angled();
+    let light = Object::Entity(EntityObject {
+        classname: "light".into(),
+        origin: Some(Vec3::new(64.0, 32.0, 64.0)),
+        solids: Vec::new(),
+        file_data: Vec::new(),
+    });
+    let mut doc = Document::from_map(vec![light], Default::default()).unwrap();
+    let id = doc.objects().next().unwrap().0;
+    doc.set_selection([id]);
+    let t = tools(GizmoMode::Move);
+    assert!(t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
 }

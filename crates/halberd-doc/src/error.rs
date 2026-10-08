@@ -13,6 +13,9 @@ pub enum DocError {
     UnknownObject(ObjectId),
     /// The map would hold more than [`crate::MAX_OBJECTS`] objects.
     TooManyObjects,
+    /// The command changes a brush's shape, but the object is not a world
+    /// brush.
+    NotABrush(ObjectId),
 }
 
 impl fmt::Display for DocError {
@@ -21,6 +24,7 @@ impl fmt::Display for DocError {
             Self::NothingToDo => f.write_str("there is nothing to change"),
             Self::UnknownObject(id) => write!(f, "object {id} is not in the map"),
             Self::TooManyObjects => f.write_str("the map has reached its object limit"),
+            Self::NotABrush(id) => write!(f, "object {id} is not a brush"),
         }
     }
 }

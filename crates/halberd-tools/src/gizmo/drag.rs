@@ -8,7 +8,7 @@
 use super::{Frame, Handle, ROTATE_SNAP_DEGREES};
 use crate::ToolAction;
 use glam::{Vec2, Vec3};
-use halberd_doc::{Command, Document, Object, ObjectId, TransformKind};
+use halberd_doc::{Command, Document, ObjectId, TransformKind};
 use halberd_geom::{Aabb, Brush, GeomError};
 
 /// Pixels of pointer movement that double (or halve) the size when
@@ -64,14 +64,12 @@ impl Drag {
         let originals: Vec<(ObjectId, Brush)> = doc
             .selection()
             .iter()
-            .filter_map(|id| match doc.get(*id)? {
-                Object::Brush(brush) => Some((*id, brush.clone())),
-            })
+            .filter_map(|id| Some((*id, doc.get(*id)?.as_brush()?.brush().clone())))
             .collect();
         if originals.is_empty() {
             return None;
         }
-        let bounds = doc.selection_bounds()?;
+        let bounds = super::selected_brush_bounds(doc)?;
         let start = match handle {
             Handle::MoveAxis(a) | Handle::ScaleAxis(a) => {
                 Start::Along(along_axis(frame, a.unit(), cursor)?)
