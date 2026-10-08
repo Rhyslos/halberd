@@ -6,6 +6,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **The transform gizmo.** Select brushes, then press **W** to move (arrows, and squares to move across two axes), **R** to rotate (rings, 15° steps), **S** to scale (a cube per side, and one in the middle to resize evenly) or **T** for all three. The same key again returns to plain selection; the modes are also buttons next to the tools. While holding right mouse, Shift+W and Shift+S pick Move and Scale. Moves and sizes snap to the grid, each drag is one undo step ("Move brush", "Rotate 2 brushes"), and Escape cancels a drag.
 - **Box brushes.** The Box tool (**B**, or the switcher in the viewport's top-left corner) draws a box by dragging: snapped to the grid, standing on the grid or on top of the brush under the pointer, 128 units tall. Dragging along one grid line makes a wall one grid square thick. Escape cancels.
 - **Selecting.** The Select tool clicks to select a brush (selected brushes are red and outlined through everything); Ctrl+click adds or removes; clicking empty space or pressing Escape deselects. Orbit mode turns around the selection.
 - **Edit menu** with **Undo** and **Redo** for every edit, named after what they reverse (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z), and **Delete** (the Delete key).

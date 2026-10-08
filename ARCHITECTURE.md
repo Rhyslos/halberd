@@ -44,6 +44,7 @@ Slow work (reading assets, booleans, compiles, lighting) runs on background thre
 2. The workbench (`halberd-ui`) carries it out: `Document::execute` checks the command, applies it and records how to reverse it.
 3. The document's revision goes up; the renderer (`halberd-render`) rebuilds its GPU buffers on the next frame.
 4. Undo and redo (Edit menu, Ctrl+Z / Ctrl+Y) replay the recorded changes.
+5. Drags (gizmo handles, number fields) send an edit every frame with one merge key, so the whole drag is one undo step; a cancelled drag is reversed and forgotten. See [decision 0010](docs/decisions/0010-transform-gizmo.md).
 
 See [decision 0009](docs/decisions/0009-document-commands-and-brushes.md).
 

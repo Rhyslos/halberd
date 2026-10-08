@@ -410,3 +410,197 @@ fn the_player_figure_stands_beside_the_selection_or_the_box_being_drawn() {
     h.run();
     assert!(h.state().renderer.views.last().unwrap().player.is_none());
 }
+
+/// Draws a box with the Box tool, then switches to Select with the gizmo
+/// in `mode`. The new box is selected.
+fn box_with_gizmo(mode: halberd_tools::GizmoMode) -> Harness<'static, State> {
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.run();
+    left_drag(&mut h, egui::pos2(300.0, 420.0), egui::pos2(480.0, 470.0));
+    h.state_mut().panel.tools_mut().set_gizmo_mode(Some(mode));
+    h.run();
+    h
+}
+
+/// Where a gizmo handle is on screen, in harness coordinates.
+fn handle_on_screen(h: &Harness<'_, State>, handle: halberd_tools::Handle) -> egui::Pos2 {
+    let rect = h.get_by_label(VIEWPORT_LABEL).rect();
+    let state = h.state();
+    let camera = *state.panel.controller().camera();
+    let size = Vec2::new(rect.width(), rect.height());
+    let shapes = state.panel.tools().gizmo_shapes(&camera, size, &state.doc);
+    let shape = shapes
+        .iter()
+        .find(|s| s.handle == handle && !s.filled)
+        .or_else(|| shapes.iter().find(|s| s.handle == handle))
+        .expect("the handle is drawn");
+    let p = if shape.filled {
+        shape.points.iter().copied().sum::<Vec2>() / shape.points.len() as f32
+    } else {
+        (shape.points[0] + shape.points[1]) * 0.5
+    };
+    rect.min + egui::vec2(p.x, p.y)
+}
+
+#[test]
+fn w_r_s_t_pick_gizmo_modes_and_the_same_key_turns_it_off() {
+    use halberd_tools::GizmoMode;
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    for (key, mode) in [
+        (Key::W, GizmoMode::Move),
+        (Key::R, GizmoMode::Rotate),
+        (Key::S, GizmoMode::Scale),
+        (Key::T, GizmoMode::All),
+    ] {
+        h.key_press(key);
+        h.run();
+        assert_eq!(h.state().panel.tools().gizmo_mode(), Some(mode));
+    }
+    h.key_press(Key::T);
+    h.run();
+    assert_eq!(h.state().panel.tools().gizmo_mode(), None);
+}
+
+#[test]
+fn while_flying_shift_w_picks_move_but_w_alone_does_not() {
+    use halberd_tools::GizmoMode;
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut().panel.set_tool(Tool::Select);
+    h.run();
+    let at = egui::pos2(400.0, 300.0);
+    h.hover_at(at);
+    press(&h, PointerButton::Secondary, at, true);
+    h.run();
+    h.key_press(Key::W);
+    h.run();
+    assert_eq!(h.state().panel.tools().gizmo_mode(), None, "W flies");
+    h.key_press_modifiers(Modifiers::SHIFT, Key::W);
+    h.run();
+    assert_eq!(h.state().panel.tools().gizmo_mode(), Some(GizmoMode::Move));
+    h.key_press(Key::R);
+    h.run();
+    assert_eq!(
+        h.state().panel.tools().gizmo_mode(),
+        Some(GizmoMode::Rotate)
+    );
+    press(&h, PointerButton::Secondary, at, false);
+    h.run();
+}
+
+#[test]
+fn ctrl_s_is_not_a_gizmo_key() {
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    h.run();
+    assert_eq!(h.state().panel.tools().gizmo_mode(), None, "kept for Save");
+}
+
+#[test]
+fn the_toolbar_buttons_pick_gizmo_modes() {
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    h.get_by_label("Rotate R").click();
+    h.run();
+    assert_eq!(
+        h.state().panel.tools().gizmo_mode(),
+        Some(halberd_tools::GizmoMode::Rotate)
+    );
+}
+
+#[test]
+fn dragging_the_move_arrow_moves_the_box_in_one_undo_step() {
+    use halberd_tools::{Axis, GizmoMode, Handle};
+    let mut h = box_with_gizmo(GizmoMode::Move);
+    let before = h.state().doc.selection_bounds().unwrap();
+    let grab = handle_on_screen(&h, Handle::MoveAxis(Axis::X));
+    h.hover_at(grab);
+    press(&h, PointerButton::Primary, grab, true);
+    h.run();
+    for step in 1..=5 {
+        h.hover_at(grab + egui::vec2(step as f32 * 12.0, 0.0));
+        h.run();
+    }
+    press(
+        &h,
+        PointerButton::Primary,
+        grab + egui::vec2(60.0, 0.0),
+        false,
+    );
+    h.run();
+    let after = h.state().doc.selection_bounds().unwrap();
+    assert_ne!(after.min.x, before.min.x, "moved along X");
+    assert_eq!(after.min.y, before.min.y);
+    assert_eq!(after.min.z, before.min.z);
+    assert_eq!(after.size(), before.size());
+    assert_eq!(h.state().doc.selection().len(), 1, "still selected");
+    assert_eq!(h.state_mut().doc.undo().as_deref(), Some("Move brush"));
+    assert_eq!(
+        h.state().doc.selection_bounds().unwrap(),
+        before,
+        "one step"
+    );
+}
+
+#[test]
+fn escape_cancels_a_gizmo_drag() {
+    use halberd_tools::{Axis, GizmoMode, Handle};
+    let mut h = box_with_gizmo(GizmoMode::Scale);
+    let before = h.state().doc.selection_bounds().unwrap();
+    let grab = handle_on_screen(&h, Handle::ScaleAxis(Axis::Z));
+    h.hover_at(grab);
+    press(&h, PointerButton::Primary, grab, true);
+    h.run();
+    h.hover_at(grab + egui::vec2(0.0, -80.0));
+    h.run();
+    assert_ne!(h.state().doc.selection_bounds().unwrap(), before);
+    h.key_press(Key::Escape);
+    h.run();
+    assert_eq!(h.state().doc.selection_bounds().unwrap(), before);
+    assert_eq!(
+        h.state().doc.selection().len(),
+        1,
+        "Escape kept the selection"
+    );
+    press(
+        &h,
+        PointerButton::Primary,
+        grab + egui::vec2(0.0, -80.0),
+        false,
+    );
+    h.run();
+    assert_eq!(h.state().doc.selection_bounds().unwrap(), before);
+    assert_eq!(h.state().doc.undo_label(), Some("Create brush"));
+}
+
+#[test]
+fn a_held_gizmo_key_does_not_flicker() {
+    // Regression: key repeats from a held W toggled Move on and off.
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    // Hold W down: one press, then the repeats a held key sends.
+    for repeat in [false, true, true, true, true, true] {
+        h.event(egui::Event::Key {
+            key: Key::W,
+            physical_key: None,
+            pressed: true,
+            repeat,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    h.event(egui::Event::Key {
+        key: Key::W,
+        physical_key: None,
+        pressed: false,
+        repeat: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    assert_eq!(
+        h.state().panel.tools().gizmo_mode(),
+        Some(halberd_tools::GizmoMode::Move)
+    );
+}

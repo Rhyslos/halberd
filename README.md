@@ -4,7 +4,7 @@
 
 Halberd is a free, open-source level editor in the spirit of Unity and Godot: place and shape geometry in a 3D viewport, populate it with props, and compile it straight into a playable GMod map with Valve's own tools. Maps open in Hammer and Hammer++ too, through Export to Hammer.
 
-> **Status: pre-alpha.** You can draw, select and delete box brushes in the 3D viewport, with undo and redo, but maps cannot be saved yet. Follow the progress tracker below.
+> **Status: pre-alpha.** You can draw box brushes in the 3D viewport, then select, move, rotate, resize and delete them, with undo and redo, but maps cannot be saved yet. Follow the progress tracker below.
 
 Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
@@ -12,9 +12,9 @@ Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
 Halberd is built in four phases. Each ends with a gate that must pass in real GMod before the next phase starts. This tracker is updated by the pull request that finishes each milestone.
 
-### Phase 0 · Foundations (v0.0, internal) — 10 of 13
+### Phase 0 · Foundations (v0.0, internal) — 11 of 13
 
-`██████████░░░` 77%
+`███████████░░` 85%
 
 - [x] Repository set up: license, README, security policy, contribution rules
 - [x] Automatic builds for Windows, Linux and macOS on every change
@@ -26,7 +26,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] 3D viewport with Default, Orbit and Fly camera modes
 - [x] Map document with undo and redo for every edit
 - [x] Box brushes: draw, select with left click, delete
-- [ ] Gizmo modes W / R / S / T: move, rotate, scale and resize brushes
+- [x] Gizmo modes W / R / S / T: move, rotate, scale and resize brushes
 - [ ] VMF import and export of brushes and entities
 - [ ] Console panel showing logs and errors
 
@@ -116,6 +116,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-08 | Transform gizmo: move, rotate and scale brushes with W / R / S / T |
 | 2026-10-08 | First brushes: draw boxes, select them, delete them, with undo and redo |
 | 2026-10-08 | First 3D viewport: grid, axes, and the Default, Orbit and Fly camera modes |
 | 2026-10-07 | First real window: menu bar and five dockable panels, with the layout remembered between sessions |
@@ -126,6 +127,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-08: the transform gizmo.** All three gizmos at once (T): arrows and squares to move, rings to rotate, cubes to scale. The player figure stands beside the selection for scale.
+
+![Halberd's transform gizmo around a selected box](docs/screenshots/2026-10-08-first-gizmo.png)
 
 **2026-10-08: the first brushes.** Three boxes drawn with the Box tool (one dragged along a line, which makes a wall), listed in the Scene panel.
 

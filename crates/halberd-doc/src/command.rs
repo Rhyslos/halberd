@@ -18,6 +18,25 @@ pub enum Command {
         /// Its new shape.
         brush: Brush,
     },
+    /// Gives several brushes new shapes at once, after moving, rotating or
+    /// scaling them. The selection does not change.
+    TransformBrushes {
+        /// What was done, for the Edit menu.
+        kind: TransformKind,
+        /// Each brush with its new shape.
+        brushes: Vec<(ObjectId, Brush)>,
+    },
+}
+
+/// What a [`Command::TransformBrushes`] did, for its name in the Edit menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransformKind {
+    /// Moved.
+    Move,
+    /// Rotated.
+    Rotate,
+    /// Scaled or resized.
+    Scale,
 }
 
 impl Command {
@@ -28,6 +47,18 @@ impl Command {
             Self::AddBrushes(brushes) if brushes.len() == 1 => "Create brush".into(),
             Self::AddBrushes(brushes) => format!("Create {} brushes", brushes.len()),
             Self::ReplaceBrush { .. } => "Change brush".into(),
+            Self::TransformBrushes { kind, brushes } => {
+                let verb = match kind {
+                    TransformKind::Move => "Move",
+                    TransformKind::Rotate => "Rotate",
+                    TransformKind::Scale => "Scale",
+                };
+                if brushes.len() == 1 {
+                    format!("{verb} brush")
+                } else {
+                    format!("{verb} {} brushes", brushes.len())
+                }
+            }
             Self::Remove(ids) => {
                 // The same id twice still removes one object.
                 let count = ids.iter().collect::<std::collections::BTreeSet<_>>().len();
@@ -65,6 +96,15 @@ impl Change {
                     .map(|(id, before, after)| (id, after, before))
                     .collect(),
             ),
+        }
+    }
+
+    /// True if the change leaves everything as it was (a drag that came back
+    /// to where it started).
+    pub(crate) fn is_noop(&self) -> bool {
+        match self {
+            Self::Modified(objects) => objects.iter().all(|(_, before, after)| before == after),
+            Self::Inserted(objects) | Self::Removed(objects) => objects.is_empty(),
         }
     }
 

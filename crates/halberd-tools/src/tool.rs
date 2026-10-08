@@ -6,6 +6,7 @@
 
 use crate::SceneQuery;
 use crate::camera::{Camera, Ray};
+use crate::gizmo::{Gizmo, GizmoMode, GizmoOutcome, GizmoShape};
 use crate::scene::DocumentScene;
 use glam::Vec2;
 use halberd_doc::{Command, Document, ObjectId};
@@ -81,6 +82,11 @@ pub enum ToolAction {
     ToggleSelected(ObjectId),
     /// Carry out this edit.
     Execute(Command),
+    /// Carry out this edit as part of a drag: every edit with the same key
+    /// joins one undo step.
+    ExecuteMerging(Command, u64),
+    /// A drag was cancelled: reverse and forget the edits made with this key.
+    CancelMerging(u64),
     /// Something could not be done; tell the user why.
     Refused(String),
 }
@@ -101,6 +107,7 @@ pub struct ToolController {
     box_height: f32,
     press_at: Option<Vec2>,
     drag: Option<BoxDrag>,
+    gizmo: Gizmo,
 }
 
 impl ToolController {
@@ -112,6 +119,7 @@ impl ToolController {
             box_height: DEFAULT_BOX_HEIGHT,
             press_at: None,
             drag: None,
+            gizmo: Gizmo::default(),
         }
     }
 
@@ -120,11 +128,52 @@ impl ToolController {
         self.tool
     }
 
-    /// Switches tool, cancelling anything in progress.
+    /// Switches tool, cancelling anything in progress, except during a
+    /// gizmo drag, when it does nothing. The Box tool hides the gizmo.
     pub fn set_tool(&mut self, tool: Tool) {
+        // A gizmo drag must finish (or be cancelled with Escape) first.
+        if self.gizmo.is_dragging() {
+            return;
+        }
         self.tool = tool;
         self.press_at = None;
         self.drag = None;
+        if tool == Tool::Box {
+            self.gizmo.set_mode(None);
+        }
+    }
+
+    /// The gizmo mode, or `None` for plain selection.
+    pub fn gizmo_mode(&self) -> Option<GizmoMode> {
+        self.gizmo.mode
+    }
+
+    /// Shows the gizmo in `mode` (switching to the Select tool), or hides
+    /// it with `None`. Has no effect during a gizmo drag.
+    pub fn set_gizmo_mode(&mut self, mode: Option<GizmoMode>) {
+        if self.gizmo.is_dragging() {
+            return;
+        }
+        if mode.is_some() {
+            self.set_tool(Tool::Select);
+        }
+        self.gizmo.set_mode(mode);
+    }
+
+    /// Picks `mode`, or returns to plain selection if it was already picked
+    /// (the W / R / S / T keys and toolbar buttons are toggles).
+    pub fn toggle_gizmo_mode(&mut self, mode: GizmoMode) {
+        let next = (self.gizmo.mode != Some(mode)).then_some(mode);
+        self.set_gizmo_mode(next);
+    }
+
+    /// The gizmo's shapes for drawing, in points from the viewport's
+    /// top-left corner. Empty when there is no gizmo to show.
+    pub fn gizmo_shapes(&self, camera: &Camera, size: Vec2, doc: &Document) -> Vec<GizmoShape> {
+        if self.tool != Tool::Select {
+            return Vec::new();
+        }
+        self.gizmo.shapes(camera, size.max(Vec2::ONE), doc)
     }
 
     /// The grid size boxes snap to.
@@ -148,7 +197,7 @@ impl ToolController {
 
     /// True while something is in progress that Escape would cancel.
     pub fn is_busy(&self) -> bool {
-        self.drag.is_some()
+        self.drag.is_some() || self.gizmo.is_dragging()
     }
 
     /// The box being drawn, for the preview outline.
@@ -188,12 +237,23 @@ impl ToolController {
         camera: &Camera,
         doc: &Document,
     ) -> Option<ToolAction> {
+        let cursor = input.cursor.filter(|c| c.is_finite());
+        if self.tool == Tool::Select {
+            let size = input.size.max(Vec2::ONE);
+            let input = ToolInput { size, ..*input };
+            match self.gizmo.update(&input, cursor, camera, doc, self.grid) {
+                GizmoOutcome::Used(action) => {
+                    self.press_at = None;
+                    return action;
+                }
+                GizmoOutcome::NotMine => {}
+            }
+        }
         if input.cancel && (self.drag.is_some() || self.press_at.is_some()) {
             self.press_at = None;
             self.drag = None;
             return None;
         }
-        let cursor = input.cursor.filter(|c| c.is_finite());
         let ray = cursor.map(|c| camera.ray_through(c, input.size.max(Vec2::ONE)));
         match self.tool {
             Tool::Select => self.update_select(input, cursor, ray.as_ref(), doc),

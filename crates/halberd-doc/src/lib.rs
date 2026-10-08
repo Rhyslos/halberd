@@ -17,7 +17,7 @@ mod error;
 mod history;
 mod object;
 
-pub use command::Command;
+pub use command::{Command, TransformKind};
 pub use document::{Document, MAX_OBJECTS};
 pub use error::DocError;
 pub use history::MAX_UNDO_STEPS;

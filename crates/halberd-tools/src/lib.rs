@@ -9,6 +9,9 @@
 //!   ([`CameraController`]) with the three camera modes from the feature spec.
 //! - The left-mouse tools ([`ToolController`]): Select (click, Ctrl+click)
 //!   and Box (drag to draw a box brush, snapped to the grid).
+//! - The transform gizmo ([`GizmoMode`]): move (W), rotate (R), scale (S)
+//!   or all (T) the selection by dragging handles; each drag is one undo
+//!   step.
 //! - [`DocumentScene`]: what the camera and tools see of an open map.
 //!
 //! Input arrives as plain data ([`ViewportInput`], [`ToolInput`]), so
@@ -17,6 +20,7 @@
 
 mod camera;
 mod controller;
+mod gizmo;
 mod player;
 mod scene;
 mod tool;
@@ -28,6 +32,9 @@ pub use controller::{
     CameraController, CameraMode, CameraState, DEFAULT_FLY_SPEED, FAST_MULTIPLIER, FLY_SPEED_RANGE,
     FlyKeys, GroundPlane, LOOK_SENSITIVITY, MAX_ORBIT_PIVOT_DISTANCE, MAX_PICK_DISTANCE,
     ORBIT_SENSITIVITY, SceneQuery, ViewportInput,
+};
+pub use gizmo::{
+    Axis, GIZMO_ARM_POINTS, GIZMO_GRAB_POINTS, GizmoMode, GizmoShape, Handle, ROTATE_SNAP_DEGREES,
 };
 pub use player::{PLAYER_EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, player_bounds};
 pub use scene::DocumentScene;

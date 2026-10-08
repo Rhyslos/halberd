@@ -49,3 +49,18 @@ The viewport camera and the first left-mouse tools are implemented.
 ### Player size
 
 `PLAYER_HEIGHT` (72), `PLAYER_WIDTH` (32), `PLAYER_EYE_HEIGHT` (64) and `player_bounds`: the standard Half-Life 2 player that GMod uses, for the scale figure in the viewport.
+
+### Transform gizmo
+
+With the Select tool and a gizmo mode picked, handles appear around the selection (see [decision 0010](../../docs/decisions/0010-transform-gizmo.md)):
+
+| Mode (key) | Handles | Dragging |
+| --- | --- | --- |
+| Move (W) | Arrows; squares between two axes | Moves along the arrow, or across the square's plane, in grid steps |
+| Rotate (R) | Rings | Turns around the ring's axis through the selection's middle, in 15° steps |
+| Scale (S) | A cube on each axis; one in the middle | Stretches that side, keeping the opposite side in place (never below one grid square); the middle resizes evenly from the floor, in ⅛ steps |
+| All (T) | All of the above | |
+
+- `ToolController::toggle_gizmo_mode` (the keys and toolbar are toggles), `gizmo_mode`, `gizmo_shapes` (the shapes to draw, in points, with the hovered or dragged handle highlighted).
+- Each frame of a drag returns `ToolAction::ExecuteMerging` with the drag's key; Escape returns `ToolAction::CancelMerging`.
+- Tests drive real drags through the controller and check the map, plus a stress test of 300 random drags in every mode.

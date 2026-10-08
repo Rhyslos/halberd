@@ -81,6 +81,20 @@ impl Document {
         self.record(command, Some(key))
     }
 
+    /// Throws away an unfinished drag: if the last undo step was made with
+    /// `key` and is still open, its change is reversed and forgotten (it
+    /// cannot be redone). Returns true if something was reversed. Used when
+    /// Escape cancels a gizmo drag.
+    pub fn discard_step(&mut self, key: u64) -> bool {
+        match self.history.take_open_step(key) {
+            Some(entry) => {
+                self.apply(entry.change.inverse());
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Finishes the current undo step, so the next edit starts a new one.
     /// The interface calls this whenever no drag is in progress.
     pub fn end_step(&mut self) {
@@ -262,6 +276,23 @@ impl Document {
                     return Err(DocError::NothingToDo);
                 }
                 Ok(Change::Modified(vec![(id, before.clone(), after)]))
+            }
+            Command::TransformBrushes { brushes, .. } => {
+                // Every brush is kept, changed or not, so the edits of one
+                // drag always list the same objects and merge into one step.
+                let mut seen = BTreeSet::new();
+                let mut objects = Vec::with_capacity(brushes.len());
+                for (id, brush) in brushes {
+                    if !seen.insert(id) {
+                        continue;
+                    }
+                    let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
+                    objects.push((id, before.clone(), Object::Brush(brush)));
+                }
+                if objects.iter().all(|(_, before, after)| before == after) {
+                    return Err(DocError::NothingToDo);
+                }
+                Ok(Change::Modified(objects))
             }
         }
     }

@@ -5,7 +5,8 @@
 //! - [`Plane`]: an infinite flat surface with an outward-facing side.
 //! - [`Aabb`]: an axis-aligned box, used for bounds and for drawing boxes.
 //! - [`Brush`]: a convex solid made of planes, the way Source and Hammer
-//!   store brushes, with its face polygons worked out from the planes.
+//!   store brushes, with its face polygons worked out from the planes. It
+//!   can be moved, rotated and scaled ([`Brush::transformed`]).
 //!
 //! Coordinates follow Hammer: Z is up, units are Hammer units. Shapes are
 //! never allowed beyond [`MAX_COORD`] units from the origin.
@@ -17,6 +18,7 @@ mod aabb;
 mod brush;
 mod error;
 mod plane;
+mod transform;
 
 pub use aabb::Aabb;
 pub use brush::{Brush, Face, MAX_FACES, MIN_SIZE};

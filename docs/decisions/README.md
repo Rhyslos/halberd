@@ -16,3 +16,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0007](0007-window-and-panels.md) | Editor window: eframe, egui_dock, and accepted licenses | Accepted |
 | [0008](0008-viewport-rendering-and-camera.md) | Viewport rendering and camera | Accepted |
 | [0009](0009-document-commands-and-brushes.md) | Map document, commands, undo and brushes | Accepted |
+| [0010](0010-transform-gizmo.md) | Transform gizmo | Accepted |
