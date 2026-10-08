@@ -39,10 +39,15 @@ steamlocate = "2.1"
 eframe = { version = "0.36", features = ["persistence"] }
 egui = "0.36"
 egui_dock = { version = "0.21", features = ["serde"] }
+# Must match the wgpu version eframe uses (one GPU device is shared).
+wgpu = "30.0"
+glam = { version = "0.34", features = ["serde", "bytemuck"] }
+bytemuck = { version = "1.25", features = ["derive"] }
 # Development only: temporary folders for tests.
 tempfile = "3"
 egui_kittest = "0.36"
 ron = "0.12"
+pollster = "1.0"
 
 [workspace.lints.rust]
 # Ground rule 6: no unsafe code. A crate that truly needs it must get a

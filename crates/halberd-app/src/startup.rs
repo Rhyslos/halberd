@@ -7,8 +7,16 @@ use halberd_assets::{
 };
 use halberd_config::{LoadStatus, Settings, SettingsStore};
 
-/// Runs the startup steps and returns the report lines to show.
-pub(crate) fn run(options: &Options) -> Vec<String> {
+/// What startup produced.
+pub(crate) struct Startup {
+    /// Plain-language report lines.
+    pub(crate) report: Vec<String>,
+    /// The settings in effect (loaded, corrected and possibly updated).
+    pub(crate) settings: Settings,
+}
+
+/// Runs the startup steps.
+pub(crate) fn run(options: &Options) -> Startup {
     let mut report = Vec::new();
 
     let store = match &options.settings_file {
@@ -54,7 +62,7 @@ pub(crate) fn run(options: &Options) -> Vec<String> {
             Err(err) => report.push(format!("Settings were not saved: {err}.")),
         }
     }
-    report
+    Startup { report, settings }
 }
 
 /// Finds GMod: a folder given on the command line first, then the saved

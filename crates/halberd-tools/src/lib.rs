@@ -1,18 +1,21 @@
 //! Interaction tools: select, gizmo, shape tools, radial menus.
 //!
-//! Turns mouse and keyboard input into commands: selection, the W/R/S/T gizmo, shape editing tools and radial menus.
+//! Tools turn mouse and keyboard input into actions. They never draw panels
+//! and never change the map document except by issuing commands.
 //!
-//! Status: skeleton. See this crate's README for what it must never do.
+//! Implemented so far: the viewport camera ([`Camera`]) and its controller
+//! ([`CameraController`]) with the three camera modes from the feature spec.
+//! Input arrives as a plain [`ViewportInput`], so the camera can be tested
+//! without a window.
 
-/// The name of this crate, used in logs and diagnostics.
-pub const CRATE_NAME: &str = "halberd-tools";
+mod camera;
+mod controller;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
-    }
-}
+pub use camera::{
+    Camera, DEFAULT_FOV_Y, FAR_PLANE, MAX_PITCH, NEAR_PLANE, Ray, WORLD_LIMIT, WORLD_UP,
+};
+pub use controller::{
+    CameraController, CameraMode, CameraState, DEFAULT_FLY_SPEED, FAST_MULTIPLIER, FLY_SPEED_RANGE,
+    FlyKeys, GroundPlane, LOOK_SENSITIVITY, MAX_PICK_DISTANCE, ORBIT_SENSITIVITY, SceneQuery,
+    ViewportInput,
+};

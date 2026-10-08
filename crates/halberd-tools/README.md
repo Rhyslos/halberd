@@ -12,11 +12,25 @@ Turns mouse and keyboard input into commands: selection, the W/R/S/T gizmo, shap
 
 - Draw panels
 - Change the document except by issuing commands
+- Depend on egui or the GPU: input arrives as plain data (`ViewportInput`), so everything here is testable without a window
 
 ## Depends on
 
-`halberd-doc`, `halberd-geom`
+`halberd-doc`, `halberd-geom`. Outside libraries: `glam` (vector maths), `serde`.
 
 ## Status
 
-Skeleton only. The roadmap milestone that fills this crate in will replace this line.
+The viewport camera is implemented.
+
+- **`Camera`**: position plus yaw and pitch, Z-up like Hammer. Builds its own view and projection matrices (depth 0 to 1, as wgpu expects), casts rays through the screen and projects points onto it.
+- **`CameraController`**: the three modes from the feature spec.
+
+| Mode | Right mouse | Middle mouse | Wheel |
+| --- | --- | --- | --- |
+| Default | Orbits around the surface under the pointer (the grid plane until maps exist), else the last pivot | Pans; the point under the pointer follows it | Zooms towards the pointer, stopping 8 units short of the surface |
+| Orbit | Orbits around the selection (the last pivot until selection exists) | Pans | Zooms |
+| Fly | Hold to look; WASD moves, Space/C up/down, Shift ×4 | Pans | Zooms; while holding right mouse, changes fly speed |
+
+- Fly mode is hidden when WASD movement is turned off in settings.
+- Guarantees, each covered by tests: the pivot stays exactly under the pointer while orbiting; the view never flips over; the camera stays inside ±131072 units; broken input (NaN, zero sizes, huge frame times) never breaks the camera.
+- `CameraState` (camera, mode, pivot, fly speed) is saved between sessions.

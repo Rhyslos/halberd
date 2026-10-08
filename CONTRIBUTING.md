@@ -17,7 +17,9 @@ cargo doc --workspace --no-deps --open                  # read the API docs
 
 Optional, matching CI: `cargo install cargo-deny` and run `cargo deny check`.
 
-The window smoke test (Linux only) opens the real window on a virtual screen, as CI does:
+GPU rendering tests (`cargo test -p halberd-render --test gpu`) render real frames. Without a GPU they skip with a note; set `HALBERD_REQUIRE_GPU=1` to make a missing GPU a failure instead, as CI does.
+
+The window smoke test (Linux only) opens the real window on a virtual screen, as CI does, and checks the viewport by orbiting and zooming with the mouse:
 
 ```
 sudo apt-get install xvfb xdotool imagemagick mesa-vulkan-drivers libxkbcommon-x11-0

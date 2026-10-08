@@ -17,6 +17,14 @@ layer = 3
 [dependencies]
 halberd-doc.workspace = true
 halberd-geom.workspace = true
+wgpu.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+# Same layer; used to aim the camera in GPU tests.
+halberd-tools.workspace = true
 
 [lints]
 workspace = true

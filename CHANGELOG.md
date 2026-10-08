@@ -6,6 +6,15 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **The 3D viewport:** a grid out to the edge of a Source map (±16384 units) that stays crisp at any distance, and coloured world axes (X red, Y green, Z blue). Z is up, as in Hammer.
+- **Camera controls:** middle mouse pans, right mouse orbits, the wheel zooms towards the pointer. Three modes, switched in the viewport's bottom-left corner:
+  - **Default:** orbits around the point under the pointer.
+  - **Orbit:** orbits around the selection (the last pivot until selection exists).
+  - **Fly:** hold right mouse to look; WASD to move, Space/C for up/down, Shift for 4× speed, wheel to change speed. Hidden when WASD is turned off in settings.
+- A pivot marker shows what the camera is orbiting around.
+- The camera position and mode are remembered between sessions.
+- The Console names the graphics device in use.
+- GPU rendering tests, and window smoke test checks for the viewport's colours, orbiting and zooming.
 - The editor window: a menu bar (File, View, Help) and five docked panels (Browsers, Viewport, Scene, Properties, Console) in the standard layout. Panels can be dragged, grouped and resized; **View → Reset panel layout** restores them. The layout and window size are remembered between sessions.
 - The Console panel shows the startup report.
 - If the window can't open (no suitable graphics driver, or a missing Linux system library), Halberd explains why in plain words instead of crashing.

@@ -14,3 +14,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0005](0005-safety-lints.md) | No unsafe, no panics in library code | Accepted |
 | [0006](0006-settings-file.md) | Settings file format, location and safety | Accepted |
 | [0007](0007-window-and-panels.md) | Editor window: eframe, egui_dock, and accepted licenses | Accepted |
+| [0008](0008-viewport-rendering-and-camera.md) | Viewport rendering and camera | Accepted |

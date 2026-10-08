@@ -49,7 +49,7 @@ Slow work (reading assets, booleans, compiles, lighting) runs on background thre
 | VDF (Steam config) | Yes | No |
 | `.halberd` (Halberd projects, versioned) | Yes | Yes |
 | `settings.toml` (editor settings) | Yes | Yes |
-| `app.ron` (window size, panel layout; written by eframe) | Yes | Yes |
+| `app.ron` (window size, panel layout, viewport camera; written by eframe) | Yes | Yes |
 
 Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from the user's own GMod install. Halberd never ships them.
 
@@ -65,7 +65,20 @@ Steam libraries are read with the `steamlocate` library, which reads Steam's own
 
 ## Window and panels
 
-eframe owns the window and frame loop and renders with wgpu. Each frame, `halberd-app` hands the window's `Ui` to the `halberd-ui` workbench, which draws the menu bar and the docked panels and returns any actions (such as Quit) for the app to carry out. The 3D viewport will draw into its panel with wgpu through egui paint callbacks.
+eframe owns the window and frame loop and renders with wgpu. Each frame, `halberd-app` hands the window's `Ui` to the `halberd-ui` workbench, which draws the menu bar and the docked panels and returns any actions (such as Quit) for the app to carry out.
+
+## Viewport
+
+Coordinates follow Hammer: **Z is up**, units are Hammer units, right-handed.
+
+Each frame, for each viewport:
+
+1. **Input** (`halberd-ui`): the panel turns egui's mouse and keyboard state into a plain `ViewportInput`.
+2. **Camera** (`halberd-tools`): the `CameraController` applies it in the current mode (Default, Orbit or Fly), asking the scene what is under the pointer through `SceneQuery`.
+3. **Render** (`halberd-render`, called through `halberd-app`'s `GpuViewport`): the grid and axes are drawn into the viewport's own offscreen image on the window's GPU device.
+4. **Show** (`halberd-ui`): the image is drawn into the panel as an egui texture, with the pivot marker and the camera mode switcher on top.
+
+Rendering sits behind the `ViewportRenderer` trait, so the panel runs in tests with no GPU. See [decision 0008](docs/decisions/0008-viewport-rendering-and-camera.md).
 
 ## Extension points
 

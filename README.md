@@ -4,7 +4,7 @@
 
 Halberd is a free, open-source level editor in the spirit of Unity and Godot: place and shape geometry in a 3D viewport, populate it with props, and compile it straight into a playable GMod map with Valve's own tools. Maps open in Hammer and Hammer++ too, through Export to Hammer.
 
-> **Status: pre-alpha.** The editor window opens, but there is nothing to edit yet. Follow the progress tracker below.
+> **Status: pre-alpha.** The editor window and 3D viewport work, but there is nothing to edit yet. Follow the progress tracker below.
 
 Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
@@ -12,9 +12,9 @@ Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
 Halberd is built in four phases. Each ends with a gate that must pass in real GMod before the next phase starts. This tracker is updated by the pull request that finishes each milestone.
 
-### Phase 0 · Foundations (v0.0, internal) — 7 of 13
+### Phase 0 · Foundations (v0.0, internal) — 8 of 13
 
-`███████░░░░░░` 54%
+`████████░░░░░` 62%
 
 - [x] Repository set up: license, README, security policy, contribution rules
 - [x] Automatic builds for Windows, Linux and macOS on every change
@@ -23,7 +23,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Workspace split into crates
 - [x] Settings file and GMod install detection
 - [x] Window and docking panels (Browsers, Scene, Properties, Console)
-- [ ] 3D viewport with Default, Orbit and Fly camera modes
+- [x] 3D viewport with Default, Orbit and Fly camera modes
 - [ ] Selection with left click, gizmo modes W / R / S / T
 - [ ] Undo and redo for every edit
 - [ ] Box brushes: create, move, resize, delete
@@ -115,6 +115,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-08 | First 3D viewport: grid, axes, and the Default, Orbit and Fly camera modes |
 | 2026-10-07 | First real window: menu bar and five dockable panels, with the layout remembered between sessions |
 | 2026-10-07 | Settings file and Garry's Mod detection: Halberd finds GMod through Steam and remembers it |
 | 2026-10-07 | Repository, documentation, quality checks and crate structure in place |
@@ -123,6 +124,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-08: the first 3D viewport.** The grid out to the edge of a Source map, the world axes, and the camera mode switcher.
+
+![Halberd's first 3D viewport: a grid with red, green and blue axes](docs/screenshots/2026-10-08-first-3d-viewport.png)
 
 **2026-10-07: the first window.** Five panels, an empty viewport, and the startup report in the Console.
 
