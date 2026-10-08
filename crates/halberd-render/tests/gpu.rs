@@ -8,6 +8,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stderr)]
 
 use glam::{Vec2, Vec3};
+use halberd_doc::{Command, Document};
+use halberd_geom::{Aabb, Brush};
 use halberd_render::{
     BACKGROUND, FrameParams, ViewportRenderer, ViewportTarget, best_sample_count, read_pixels,
 };
@@ -88,11 +90,22 @@ impl Shot {
 }
 
 fn render(gpu: &Gpu, renderer: &ViewportRenderer, target: &ViewportTarget, camera: Camera) -> Shot {
+    render_with_preview(gpu, renderer, target, camera, None)
+}
+
+fn render_with_preview(
+    gpu: &Gpu,
+    renderer: &ViewportRenderer,
+    target: &ViewportTarget,
+    camera: Camera,
+    preview: Option<Aabb>,
+) -> Shot {
     let size = target.size();
     let params = FrameParams {
         view_projection: camera.view_projection(Vec2::new(size[0] as f32, size[1] as f32)),
         camera_position: camera.position,
         grid_size: 16.0,
+        preview,
     };
     renderer.render(&gpu.device, &gpu.queue, target, &params);
     Shot {
@@ -227,9 +240,123 @@ fn rendering_many_frames_is_stable() {
             view_projection: camera.view_projection(Vec2::new(200.0, 150.0)),
             camera_position: camera.position,
             grid_size: 16.0,
+            preview: None,
         };
         renderer.render(&gpu.device, &gpu.queue, &target, &params);
     }
     let shot = render(&gpu, &renderer, &target, camera);
     assert_eq!(shot.pixels.len(), 200 * 150 * 4);
+}
+
+/// A map with one box standing on the grid around the Z axis, 128 wide and
+/// 128 tall, seen from above and to the side.
+fn box_scene(gpu: &Gpu, selected: bool) -> (ViewportRenderer, ViewportTarget, Camera) {
+    let mut doc = Document::new();
+    let brush = Brush::cuboid(Aabb::from_corners(
+        Vec3::new(-64.0, -64.0, 0.0),
+        Vec3::new(64.0, 64.0, 128.0),
+    ))
+    .unwrap();
+    doc.execute(Command::AddBrushes(vec![brush])).unwrap();
+    if !selected {
+        doc.clear_selection();
+    }
+    let mut renderer = ViewportRenderer::new(&gpu.device, best_sample_count(&gpu.adapter));
+    renderer.update_scene(&gpu.device, &doc);
+    let target = renderer.create_target(&gpu.device, [400, 300]);
+    let camera = Camera::looking_at(Vec3::new(-420.0, -300.0, 360.0), Vec3::new(0.0, 0.0, 64.0));
+    (renderer, target, camera)
+}
+
+fn brightness(p: [u8; 4]) -> i32 {
+    i32::from(p[0]) + i32::from(p[1]) + i32::from(p[2])
+}
+
+#[test]
+fn brushes_are_drawn_solid_and_hide_what_is_behind_them() {
+    let Some(gpu) = gpu() else { return };
+    let (renderer, target, camera) = box_scene(&gpu, false);
+    let shot = render(&gpu, &renderer, &target, camera);
+    let background = background_srgb();
+    let background = i32::from(background[0]) + i32::from(background[1]) + i32::from(background[2]);
+    let top = Vec3::new(0.0, 0.0, 128.0);
+    assert!(
+        shot.best_near(top, brightness) > background + 120,
+        "the top face should be lit"
+    );
+    assert!(shot.best_near(top, red) < 25, "an unselected box is grey");
+    // The blue Z axis runs up through the middle of the box: hidden inside.
+    assert!(
+        shot.best_near(Vec3::new(0.0, 0.0, 64.0), blue) < 20,
+        "the box hides the axis inside it"
+    );
+    // The axis is visible again above the box.
+    assert!(shot.best_near(Vec3::new(0.0, 0.0, 220.0), blue) > 60);
+}
+
+#[test]
+fn a_selected_brush_is_red() {
+    let Some(gpu) = gpu() else { return };
+    let (renderer, target, camera) = box_scene(&gpu, true);
+    let shot = render(&gpu, &renderer, &target, camera);
+    assert!(shot.best_near(Vec3::new(0.0, 0.0, 128.0), red) > 60);
+}
+
+#[test]
+fn faces_of_a_box_are_shaded_differently() {
+    let Some(gpu) = gpu() else { return };
+    let (renderer, target, camera) = box_scene(&gpu, false);
+    let shot = render(&gpu, &renderer, &target, camera);
+    // The camera sees the top, the -X side and the -Y side.
+    let top = shot.best_near(Vec3::new(0.0, 0.0, 128.0), brightness);
+    let side_x = shot.best_near(Vec3::new(-64.0, 0.0, 64.0), brightness);
+    let side_y = shot.best_near(Vec3::new(0.0, -64.0, 64.0), brightness);
+    assert!(top > side_x && top > side_y, "{top} {side_x} {side_y}");
+}
+
+#[test]
+fn the_box_being_drawn_is_outlined_in_yellow() {
+    let Some(gpu) = gpu() else { return };
+    let renderer = ViewportRenderer::new(&gpu.device, best_sample_count(&gpu.adapter));
+    let target = renderer.create_target(&gpu.device, [400, 300]);
+    let camera = Camera::looking_at(Vec3::new(-420.0, -300.0, 360.0), Vec3::new(0.0, 0.0, 64.0));
+    let preview = Aabb::from_corners(Vec3::new(-64.0, -64.0, 0.0), Vec3::new(64.0, 64.0, 128.0));
+    let yellow = |p: [u8; 4]| i32::from(p[0].min(p[1])) - i32::from(p[2]);
+    let edge = Vec3::new(0.0, -64.0, 128.0);
+    let with = render_with_preview(&gpu, &renderer, &target, camera, Some(preview));
+    assert!(with.best_near(edge, yellow) > 60);
+    let without = render(&gpu, &renderer, &target, camera);
+    assert!(
+        without.best_near(edge, yellow) < 40,
+        "no preview, no outline"
+    );
+}
+
+#[test]
+fn a_replaced_map_is_redrawn_even_at_the_same_revision() {
+    // Regression: the drawn map was only rebuilt when the revision numbers
+    // changed, so a new map that happened to reach the same numbers kept
+    // showing the old one.
+    let Some(gpu) = gpu() else { return };
+    let (mut renderer, target, camera) = box_scene(&gpu, false);
+    let before = render(&gpu, &renderer, &target, camera).pixels;
+    let mut other = Document::new();
+    let far_away = Brush::cuboid(Aabb::from_corners(
+        Vec3::new(5000.0, 5000.0, 0.0),
+        Vec3::new(5064.0, 5064.0, 64.0),
+    ))
+    .unwrap();
+    other.execute(Command::AddBrushes(vec![far_away])).unwrap();
+    other.clear_selection();
+    renderer.update_scene(&gpu.device, &other);
+    let after = render(&gpu, &renderer, &target, camera).pixels;
+    let changed = before
+        .chunks(4)
+        .zip(after.chunks(4))
+        .filter(|(a, b)| a != b)
+        .count();
+    assert!(
+        changed > 2000,
+        "the old box must be gone ({changed} pixels changed)"
+    );
 }

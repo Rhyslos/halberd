@@ -6,6 +6,12 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **Box brushes.** The Box tool (**B**, or the switcher in the viewport's top-left corner) draws a box by dragging: snapped to the grid, standing on the grid or on top of the brush under the pointer, 128 units tall. Dragging along one grid line makes a wall one grid square thick. Escape cancels.
+- **Selecting.** The Select tool clicks to select a brush (selected brushes are red and outlined through everything); Ctrl+click adds or removes; clicking empty space or pressing Escape deselects. Orbit mode turns around the selection.
+- **Edit menu** with **Undo** and **Redo** for every edit, named after what they reverse (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z), and **Delete** (the Delete key).
+- The **Scene** panel lists every object and selects on click; **Properties** shows the selection's size and extent.
+- Brushes are drawn solid, with a different shade per side, so shapes read clearly.
+- The window smoke test now draws a box with the real mouse and undoes it.
 - **The 3D viewport:** a grid out to the edge of a Source map (±16384 units) that stays crisp at any distance, and coloured world axes (X red, Y green, Z blue). Z is up, as in Hammer.
 - **Camera controls:** middle mouse pans, right mouse orbits, the wheel zooms towards the orbit point (as in 3ds Max), or towards the pointer when the orbit point is off screen and in Fly mode. Three modes, switched in the viewport's bottom-left corner:
   - **Default:** orbits around the point under the pointer. Points near the horizon (over 8192 units away) are ignored.

@@ -1461,6 +1461,7 @@ dependencies = [
 name = "halberd-doc"
 version = "0.0.1"
 dependencies = [
+ "glam",
  "halberd-geom",
 ]
 
@@ -1471,6 +1472,9 @@ version = "0.0.1"
 [[package]]
 name = "halberd-geom"
 version = "0.0.1"
+dependencies = [
+ "glam",
+]
 
 [[package]]
 name = "halberd-gma"
@@ -1526,6 +1530,7 @@ dependencies = [
  "glam",
  "halberd-config",
  "halberd-doc",
+ "halberd-geom",
  "halberd-tools",
  "ron",
  "serde",

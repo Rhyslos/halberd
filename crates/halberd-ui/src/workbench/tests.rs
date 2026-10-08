@@ -37,10 +37,10 @@ fn all_panel_tabs_are_visible() {
 }
 
 #[test]
-fn menu_bar_has_file_view_help() {
+fn menu_bar_has_file_edit_view_help() {
     let mut harness = harness_for(Workbench::new(info(), None));
     harness.run();
-    for menu in ["File", "View", "Help"] {
+    for menu in ["File", "Edit", "View", "Help"] {
         assert!(
             harness.query_by_label(menu).is_some(),
             "missing menu: {menu}"
@@ -65,7 +65,7 @@ fn console_shows_its_lines() {
 fn placeholders_explain_what_is_coming() {
     let mut harness = harness_for(Workbench::new(info(), None));
     harness.run();
-    assert!(harness.query_by_label("No map open").is_some());
+    assert!(harness.query_by_label("No brushes yet").is_some());
     assert!(harness.query_by_label("Nothing selected").is_some());
     assert!(harness.query_by_label(crate::VIEWPORT_LABEL).is_some());
 }
@@ -235,9 +235,124 @@ fn layers_is_a_tab_beside_scene() {
     let layers = harness.state().layout().find_tab(&Panel::Layers).unwrap();
     assert_eq!(scene.node_path(), layers.node_path());
     // Scene shows first; clicking the Layers tab shows the Layers placeholder.
-    assert!(harness.query_by_label("No map open").is_some());
+    assert!(harness.query_by_label("No brushes yet").is_some());
     assert!(harness.query_by_label("No layers yet").is_none());
     harness.get_by_label("Layers").click();
     harness.run();
     assert!(harness.query_by_label("No layers yet").is_some());
+}
+
+fn workbench_with_boxes(count: usize) -> Workbench {
+    let mut wb = Workbench::new(info(), None);
+    let brushes = (0..count)
+        .map(|i| {
+            let x = i as f32 * 100.0;
+            halberd_geom::Brush::cuboid(halberd_geom::Aabb::from_corners(
+                glam::Vec3::new(x, 0.0, 0.0),
+                glam::Vec3::new(x + 64.0, 64.0, 64.0),
+            ))
+            .unwrap()
+        })
+        .collect();
+    wb.document_mut()
+        .execute(halberd_doc::Command::AddBrushes(brushes))
+        .unwrap();
+    wb
+}
+
+#[test]
+fn delete_undo_and_redo_from_the_keyboard() {
+    let mut harness = harness_for(workbench_with_boxes(1));
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert!(harness.state().document().is_empty());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(harness.state().document().len(), 1);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Y);
+    harness.run();
+    assert!(harness.state().document().is_empty());
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    harness.run();
+    assert!(
+        harness.state().document().is_empty(),
+        "nothing more to redo"
+    );
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    harness.run();
+    assert!(harness.state().document().is_empty(), "Ctrl+Shift+Z redoes");
+}
+
+#[test]
+fn edit_menu_names_what_undo_would_reverse() {
+    let mut harness = harness_for(workbench_with_boxes(2));
+    harness.run();
+    harness.get_by_label("Edit").click();
+    harness.run();
+    harness
+        .get_by_label_contains("Undo Create 2 brushes")
+        .click();
+    harness.run();
+    assert!(harness.state().document().is_empty());
+    harness.get_by_label("Edit").click();
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains("Redo Create 2 brushes")
+            .is_some()
+    );
+}
+
+#[test]
+fn scene_panel_lists_objects_and_selects_them() {
+    let mut wb = workbench_with_boxes(2);
+    wb.document_mut().clear_selection();
+    let mut harness = harness_for(wb);
+    harness.run();
+    let first = harness.state().document().objects().next().unwrap().0;
+    harness.get_by_label(&format!("Brush {first}")).click();
+    harness.run();
+    let selected: Vec<_> = harness
+        .state()
+        .document()
+        .selection()
+        .iter()
+        .copied()
+        .collect();
+    assert_eq!(selected, [first]);
+}
+
+#[test]
+fn properties_panel_summarises_the_selection() {
+    let mut harness = harness_for(workbench_with_boxes(1));
+    harness.run();
+    assert!(harness.query_by_label("1 object selected").is_some());
+    assert!(harness.query_by_label("Size: 64 × 64 × 64 units").is_some());
+    harness.key_press(Key::Escape);
+    harness.run();
+    assert!(harness.query_by_label("Nothing selected").is_some());
+}
+
+#[test]
+fn backspace_also_deletes() {
+    let mut harness = harness_for(workbench_with_boxes(1));
+    harness.run();
+    harness.key_press(Key::Backspace);
+    harness.run();
+    assert!(harness.state().document().is_empty());
+}
+
+#[test]
+fn escape_that_closes_a_menu_keeps_the_selection() {
+    // Regression: Escape closed the Edit menu and also deselected.
+    let mut harness = harness_for(workbench_with_boxes(1));
+    harness.run();
+    harness.get_by_label("Edit").click();
+    harness.run();
+    harness.key_press(Key::Escape);
+    harness.run();
+    assert_eq!(harness.state().document().selection().len(), 1);
 }

@@ -8,11 +8,13 @@
 //! input and shows images drawn by a [`ViewportRenderer`] supplied by the
 //! program.
 //!
-//! This crate only draws. It never changes the map document directly; edits
-//! will go through commands once the document exists.
+//! The workbench owns the open map ([`halberd_doc::Document`]). Panels
+//! select directly, and change the map only through the document's
+//! commands, so every edit can be undone (Edit menu, Ctrl+Z / Ctrl+Y).
 
 mod layout;
 mod panel;
+mod panels;
 mod viewport;
 mod workbench;
 
@@ -21,4 +23,7 @@ pub use panel::Panel;
 pub use viewport::{
     NoRenderer, VIEWPORT_LABEL, ViewportOptions, ViewportPanel, ViewportRenderer, ViewportView,
 };
-pub use workbench::{AppInfo, QUIT_SHORTCUT, Workbench, WorkbenchAction};
+pub use workbench::{
+    AppInfo, DELETE_SHORTCUT, QUIT_SHORTCUT, REDO_SHORTCUT, UNDO_SHORTCUT, Workbench,
+    WorkbenchAction,
+};

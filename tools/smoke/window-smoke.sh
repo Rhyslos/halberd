@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Window smoke test: opens the real Halberd window on a virtual screen,
 # takes a screenshot, checks the 3D viewport (background colour, orbiting
-# with the right mouse button, zooming with the wheel), quits with Ctrl+Q (or
+# with the right mouse button, zooming with the wheel, drawing a box with the
+# Box tool and undoing it with Ctrl+Z), quits with Ctrl+Q (or
 # File > Quit as a fallback), and checks that the panel layout and camera were
 # saved.
 #
@@ -108,10 +109,37 @@ ZOOM_CHANGE="$(changed_pixels "$OUT/after-orbit.png" "$OUT/after-zoom.png")"
 echo "Pixels changed by zooming: $ZOOM_CHANGE"
 [ "$ZOOM_CHANGE" -gt 20000 ] || fail "scrolling did not zoom the camera"
 
+# 4. The Box tool draws a box (B, then left-drag), and Ctrl+Z undoes it.
+WINDOW_ID="$(xdotool search --name "Halberd Map Editor" | head -1)"
+xdotool mousemove 760 560
+xdotool windowfocus --sync "$WINDOW_ID" 2>/dev/null || true
+sleep 0.3
+xdotool key b
+sleep 0.5
+xdotool mousedown 1
+sleep 0.3
+for _ in $(seq 1 15); do
+    xdotool mousemove_relative -- 14 4
+    sleep 0.05
+done
+sleep 0.3
+xdotool mouseup 1
+sleep 2
+import -window root "$OUT/after-box.png"
+BOX_CHANGE="$(changed_pixels "$OUT/after-zoom.png" "$OUT/after-box.png")"
+echo "Pixels changed by drawing a box: $BOX_CHANGE"
+[ "$BOX_CHANGE" -gt 3000 ] || fail "dragging with the Box tool did not draw a box"
+
+xdotool key ctrl+z
+sleep 2
+import -window root "$OUT/after-undo.png"
+UNDO_CHANGE="$(changed_pixels "$OUT/after-box.png" "$OUT/after-undo.png")"
+echo "Pixels changed by undoing it: $UNDO_CHANGE"
+[ "$UNDO_CHANGE" -gt 3000 ] || fail "Ctrl+Z did not undo the box"
+
 # Quit the way a user would. Try Ctrl+Q a few times (the pointer is moved
 # over the window so it has keyboard focus), then fall back to clicking
 # File > Quit in the menu at the top-left.
-WINDOW_ID="$(xdotool search --name "Halberd Map Editor" | head -1)"
 quit_attempt() {
     local attempt=$1
     xdotool mousemove 800 450
@@ -150,4 +178,4 @@ grep -q "halberd_panel_layout" "$LAYOUT_FILE" 2>/dev/null ||
 grep -q "halberd_viewport_camera" "$LAYOUT_FILE" 2>/dev/null ||
     fail "the viewport camera was not saved to $LAYOUT_FILE"
 
-echo "Smoke test passed: window opened, viewport drew, orbit and zoom worked, quit worked, layout and camera saved."
+echo "Smoke test passed: window opened, viewport drew, orbit and zoom worked, box drawn and undone, quit worked, layout and camera saved."

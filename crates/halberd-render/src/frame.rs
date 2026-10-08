@@ -3,6 +3,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
+use halberd_geom::Aabb;
 
 /// Half the width of the drawn grid: Source maps end at ±16384 units, so the
 /// grid shows where a map can go.
@@ -21,6 +22,8 @@ pub struct FrameParams {
     pub camera_position: Vec3,
     /// The editor's grid size in units (a power of two).
     pub grid_size: f32,
+    /// A box being drawn, shown as an outline on top of everything.
+    pub preview: Option<Aabb>,
 }
 
 /// The three grid levels drawn: minor (the editor grid), major and super.
@@ -97,6 +100,7 @@ mod tests {
             view_projection: Mat4::IDENTITY,
             camera_position: Vec3::new(1.0, 2.0, 3.0),
             grid_size: 32.0,
+            preview: None,
         });
         assert_eq!(u.camera, [1.0, 2.0, 3.0, 1.0]);
         assert_eq!(u.grid, [32.0, 256.0, 1024.0, GRID_HALF_EXTENT]);

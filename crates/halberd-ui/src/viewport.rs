@@ -1,5 +1,6 @@
-//! The 3D viewport panel: turns mouse and keyboard input into camera moves,
-//! shows the rendered image, and draws the camera mode switcher.
+//! The 3D viewport panel: turns mouse and keyboard input into camera moves
+//! and tool actions, shows the rendered image, and draws the tool and
+//! camera mode switchers.
 //!
 //! Rendering itself happens elsewhere, behind the [`ViewportRenderer`]
 //! trait, so this panel (and its tests) need no GPU.
@@ -9,9 +10,14 @@ use egui::{
     pos2, vec2,
 };
 use glam::{Mat4, Vec2, Vec3};
+use halberd_doc::Document;
+use halberd_geom::Aabb;
 use halberd_tools::{
-    CameraController, CameraMode, CameraState, FlyKeys, GroundPlane, ViewportInput,
+    CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, Tool, ToolController,
+    ViewportInput,
 };
+
+mod tools;
 
 /// What a renderer needs to draw one viewport frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -24,14 +30,16 @@ pub struct ViewportView {
     pub camera_position: Vec3,
     /// The editor grid size, in units.
     pub grid_size: f32,
+    /// A box being drawn, to outline.
+    pub preview: Option<Aabb>,
 }
 
 /// Draws viewport images. The editor implements this with the GPU; tests
 /// and machines without a usable GPU use [`NoRenderer`].
 pub trait ViewportRenderer {
-    /// Draws a frame and returns the egui texture showing it, or a
+    /// Draws a frame of `doc` and returns the egui texture showing it, or a
     /// plain-language reason why it could not.
-    fn render(&mut self, view: &ViewportView) -> Result<egui::TextureId, String>;
+    fn render(&mut self, view: &ViewportView, doc: &Document) -> Result<egui::TextureId, String>;
 }
 
 /// A renderer that never draws, with a reason to show instead.
@@ -50,7 +58,7 @@ impl Default for NoRenderer {
 }
 
 impl ViewportRenderer for NoRenderer {
-    fn render(&mut self, _view: &ViewportView) -> Result<egui::TextureId, String> {
+    fn render(&mut self, _view: &ViewportView, _doc: &Document) -> Result<egui::TextureId, String> {
         Err(self.reason.clone())
     }
 }
@@ -81,7 +89,11 @@ const PIVOT_COLOR: Color32 = Color32::from_rgb(255, 196, 64);
 /// The viewport panel's state.
 pub struct ViewportPanel {
     controller: CameraController,
+    tools: ToolController,
     grid_size: f32,
+    left_was_held: bool,
+    /// A menu or popup was open when this frame began.
+    popup_was_open: bool,
     right_was_held: bool,
     middle_was_held: bool,
 }
@@ -91,7 +103,10 @@ impl ViewportPanel {
     pub fn new(saved: Option<CameraState>, options: ViewportOptions) -> Self {
         Self {
             controller: CameraController::new(saved.unwrap_or_default(), options.wasd_enabled),
+            tools: ToolController::new(options.grid_size),
             grid_size: options.grid_size,
+            left_was_held: false,
+            popup_was_open: false,
             right_was_held: false,
             middle_was_held: false,
         }
@@ -107,15 +122,40 @@ impl ViewportPanel {
         &self.controller
     }
 
-    /// Draws the viewport filling `ui` and handles its input.
-    pub fn show(&mut self, ui: &mut Ui, renderer: &mut dyn ViewportRenderer) {
+    /// The active left-mouse tool.
+    pub fn tool(&self) -> Tool {
+        self.tools.tool()
+    }
+
+    /// Switches the left-mouse tool.
+    pub fn set_tool(&mut self, tool: Tool) {
+        self.tools.set_tool(tool);
+    }
+
+    /// Tells the viewport whether a menu or popup was open when this frame
+    /// began, so an Escape that closes it does not also deselect. The
+    /// workbench calls this before drawing the menu bar.
+    pub fn note_popup_open(&mut self, open: bool) {
+        self.popup_was_open = open;
+    }
+
+    /// Draws the viewport filling `ui` and handles its input: the camera,
+    /// and the active tool, which may select in or edit `doc`. Returns
+    /// messages for the Console.
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+        renderer: &mut dyn ViewportRenderer,
+        doc: &mut Document,
+    ) -> Vec<String> {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Other, true, VIEWPORT_LABEL)
         });
 
         let input = self.gather_input(ui, &response, rect);
-        let animating = self.controller.update(&input, &GroundPlane);
+        let animating = self.controller.update(&input, &DocumentScene::new(doc));
+        let notes = self.update_tools(ui, &response, rect, doc);
         // Pointer movement already triggers redraws; only flying with a key
         // held needs frames without new input.
         if animating {
@@ -133,10 +173,11 @@ impl ViewportPanel {
             view_projection: camera.view_projection(size),
             camera_position: camera.position,
             grid_size: self.grid_size,
+            preview: self.tools.preview(),
         };
 
         let painter = ui.painter_at(rect);
-        match renderer.render(&view) {
+        match renderer.render(&view, doc) {
             Ok(texture) => {
                 let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
                 painter.image(texture, rect, uv, Color32::WHITE);
@@ -169,7 +210,9 @@ impl ViewportPanel {
             Color32::from_gray(160),
         );
 
+        self.tool_switcher(ui, rect);
         self.mode_switcher(ui, rect);
+        notes
     }
 
     /// Reads this frame's mouse and keyboard input for the viewport.

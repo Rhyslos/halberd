@@ -3,13 +3,22 @@
 //! Tools turn mouse and keyboard input into actions. They never draw panels
 //! and never change the map document except by issuing commands.
 //!
-//! Implemented so far: the viewport camera ([`Camera`]) and its controller
-//! ([`CameraController`]) with the three camera modes from the feature spec.
-//! Input arrives as a plain [`ViewportInput`], so the camera can be tested
-//! without a window.
+//! Implemented so far:
+//!
+//! - The viewport camera ([`Camera`]) and its controller
+//!   ([`CameraController`]) with the three camera modes from the feature spec.
+//! - The left-mouse tools ([`ToolController`]): Select (click, Ctrl+click)
+//!   and Box (drag to draw a box brush, snapped to the grid).
+//! - [`DocumentScene`]: what the camera and tools see of an open map.
+//!
+//! Input arrives as plain data ([`ViewportInput`], [`ToolInput`]), so
+//! everything here can be tested without a window. Tools return a
+//! [`ToolAction`] rather than changing the map themselves.
 
 mod camera;
 mod controller;
+mod scene;
+mod tool;
 
 pub use camera::{
     Camera, DEFAULT_FOV_Y, FAR_PLANE, MAX_PITCH, NEAR_PLANE, Ray, WORLD_LIMIT, WORLD_UP,
@@ -19,3 +28,5 @@ pub use controller::{
     FlyKeys, GroundPlane, LOOK_SENSITIVITY, MAX_ORBIT_PIVOT_DISTANCE, MAX_PICK_DISTANCE,
     ORBIT_SENSITIVITY, SceneQuery, ViewportInput,
 };
+pub use scene::DocumentScene;
+pub use tool::{CLICK_SLOP, DEFAULT_BOX_HEIGHT, Tool, ToolAction, ToolController, ToolInput};
