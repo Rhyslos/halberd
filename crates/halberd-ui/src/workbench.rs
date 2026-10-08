@@ -1,11 +1,10 @@
 //! The editor window's contents: menu bar, docked panels and the About box.
 //! The workbench also owns the open map, and carries out the Edit menu.
 
+use crate::console::Console;
 use crate::layout::{default_layout, restore_or_default};
 use crate::panel::Panel;
-use crate::panels::{
-    about_contents, console_contents, placeholder, properties_contents, scene_contents,
-};
+use crate::panels::{about_contents, placeholder, properties_contents, scene_contents};
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
 use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
@@ -83,7 +82,7 @@ pub enum FileIntent {
 pub struct Workbench {
     info: AppInfo,
     dock: DockState<Panel>,
-    console: Vec<String>,
+    console: Console,
     about_open: bool,
     viewport: ViewportPanel,
     doc: Document,
@@ -105,7 +104,7 @@ impl Workbench {
         let mut workbench = Self {
             info,
             dock,
-            console: Vec::new(),
+            console: Console::new(),
             about_open: false,
             viewport: ViewportPanel::new(None, ViewportOptions::default()),
             doc: Document::new(),
@@ -116,7 +115,7 @@ impl Workbench {
             error: None,
         };
         if let Some(note) = note {
-            workbench.push_console(note);
+            workbench.push_warning(note);
         }
         workbench
     }
@@ -196,7 +195,7 @@ impl Workbench {
         if !selected.is_empty()
             && let Err(e) = self.doc.execute(Command::Remove(selected))
         {
-            self.push_console(format!("Could not delete: {e}."));
+            self.push_warning(format!("Could not delete: {e}."));
         }
     }
 
@@ -208,16 +207,6 @@ impl Workbench {
     /// Puts every panel back where the standard layout has it.
     pub fn reset_layout(&mut self) {
         self.dock = default_layout();
-    }
-
-    /// Adds a line to the Console panel.
-    pub fn push_console(&mut self, line: impl Into<String>) {
-        self.console.push(line.into());
-    }
-
-    /// The lines in the Console panel, oldest first.
-    pub fn console_lines(&self) -> &[String] {
-        &self.console
     }
 
     /// Whether the About box is showing.
@@ -252,7 +241,7 @@ impl Workbench {
 
         let mut notes = Vec::new();
         let mut viewer = PanelViewer {
-            console: &self.console,
+            console: &mut self.console,
             viewport: &mut self.viewport,
             renderer,
             doc: &mut self.doc,
@@ -265,7 +254,9 @@ impl Workbench {
             .show_add_buttons(false)
             .show_leaf_close_all_buttons(false)
             .show_inside(ui, &mut viewer);
-        self.console.extend(notes);
+        for note in notes {
+            self.push_warning(note);
+        }
 
         let mut about_open = self.about_open;
         egui::Window::new("About Halberd")
@@ -276,6 +267,10 @@ impl Workbench {
             .show(ui.ctx(), |ui| about_contents(ui, &self.info));
         self.about_open = about_open;
         self.dialogs(ui, &mut actions);
+        // The Console tab's count changed after the tabs were drawn.
+        if self.console.take_badge_change() {
+            ui.ctx().request_repaint();
+        }
 
         actions
     }
@@ -380,7 +375,7 @@ impl Workbench {
 
 /// Draws each panel's contents.
 struct PanelViewer<'a> {
-    console: &'a [String],
+    console: &'a mut Console,
     viewport: &'a mut ViewportPanel,
     renderer: &'a mut dyn ViewportRenderer,
     doc: &'a mut Document,
@@ -397,6 +392,10 @@ impl TabViewer for PanelViewer<'_> {
     }
 
     fn title(&mut self, tab: &mut Panel) -> WidgetText {
+        if *tab == Panel::Console {
+            // With a count of problems that arrived while it was hidden.
+            return self.console.tab_text();
+        }
         tab.title().into()
     }
 
@@ -407,8 +406,11 @@ impl TabViewer for PanelViewer<'_> {
     fn on_tab_button(&mut self, tab: &mut Panel, response: &egui::Response) {
         // Name the tab for screen readers (and UI tests); egui_dock paints
         // the title without labelling the button.
-        let title = tab.title();
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, title));
+        let title = match tab {
+            Panel::Console => self.console.tab_title().0,
+            _ => tab.title().to_string(),
+        };
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &title));
     }
 
     fn allowed_in_windows(&self, _tab: &mut Panel) -> bool {
@@ -450,18 +452,21 @@ impl TabViewer for PanelViewer<'_> {
                  selected together. They are saved to Hammer as visgroups.",
             ),
             Panel::Properties => properties_contents(ui, self.doc, self.length_unit),
-            Panel::Console => console_contents(ui, self.console),
+            Panel::Console => self.console.show(ui),
         }
     }
 }
 
 mod files;
+mod messages;
 
 pub use files::{
     CANCEL_BUTTON, DONT_SAVE_BUTTON, NEW_SHORTCUT, OPEN_SHORTCUT, SAVE_AS_SHORTCUT, SAVE_BUTTON,
     SAVE_SHORTCUT,
 };
 
+#[cfg(test)]
+mod console_tests;
 #[cfg(test)]
 mod file_tests;
 #[cfg(test)]

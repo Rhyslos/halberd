@@ -16,4 +16,4 @@ labels: bug
 
 **Map or file involved** (attach it if you can and it is yours to share)
 
-**Console output** (copy any errors from the Console panel)
+**Console output** (press Copy in the Console panel and paste here, or attach `halberd.log` from the folder of your settings file; after a crash, attach `halberd.previous.log` if Halberd was opened again since)

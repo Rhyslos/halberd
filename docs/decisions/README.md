@@ -18,3 +18,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0009](0009-document-commands-and-brushes.md) | Map document, commands, undo and brushes | Accepted |
 | [0010](0010-transform-gizmo.md) | Transform gizmo | Accepted |
 | [0011](0011-vmf-maps.md) | Opening and saving Hammer maps (VMF) | Accepted |
+| [0012](0012-console-and-log-file.md) | The Console and the log file | Accepted |

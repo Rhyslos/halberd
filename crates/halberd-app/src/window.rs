@@ -3,13 +3,16 @@
 
 use crate::files;
 use crate::gpu::GpuViewport;
+use crate::logging::LogBook;
 use crate::preferences::PreferenceSaver;
 use eframe::egui;
 use halberd_config::{Settings, SettingsStore};
 use halberd_ui::{
-    AppInfo, FileIntent, NoRenderer, ViewportOptions, ViewportPanel, ViewportRenderer, Workbench,
+    AppInfo, FileIntent, LogEntry, NoRenderer, ViewportOptions, ViewportPanel, ViewportRenderer,
+    Workbench,
 };
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Name eframe uses for the window and its own storage folder
 /// (window size, position and the panel layout).
@@ -32,11 +35,16 @@ struct HalberdApp {
     allow_close: bool,
     /// The title last given to the window.
     title: String,
+    /// Messages from the logger, for the Console.
+    log: Arc<LogBook>,
 }
 
 impl eframe::App for HalberdApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        for entry in self.log.take() {
+            self.workbench.console_mut().push_logged(entry);
+        }
         // The window's close button: with unsaved changes, ask first.
         let close_requested = ctx.input(|i| i.viewport().close_requested());
         if close_requested && !self.allow_close && self.workbench.is_modified() {
@@ -55,7 +63,7 @@ impl eframe::App for HalberdApp {
         }
         let (unit, player) = (self.workbench.length_unit(), self.workbench.show_player());
         if let Some(note) = self.preferences.update(unit, player) {
-            self.workbench.push_console(note);
+            self.workbench.push_warning(note);
         }
     }
 
@@ -71,17 +79,20 @@ impl eframe::App for HalberdApp {
 
 /// Opens the editor window and runs until it is closed.
 ///
-/// `report` is the startup report; it becomes the first lines of the Console
-/// panel. `settings` configure the viewport and display; display choices
+/// `report` is the startup report (already in the log file); it becomes the
+/// first lines of the Console panel. Messages the Console gets later are
+/// written to the log file through `log`, which also brings in messages
+/// from the logger. `settings` configure the viewport and display; display choices
 /// made in the editor are saved back through `store`. Returns a plain-language reason
 /// if the window could not be opened (for example, no graphics driver that
 /// supports Vulkan, DirectX 12 or Metal).
 pub(crate) fn run(
     info: AppInfo,
-    report: Vec<String>,
+    report: Vec<LogEntry>,
     settings: Settings,
     store: Option<SettingsStore>,
     map: Option<PathBuf>,
+    log: Arc<LogBook>,
 ) -> Result<(), String> {
     let viewport_options = ViewportOptions {
         // Not asked yet (first launch) counts as on, until Settings can ask.
@@ -114,9 +125,17 @@ pub(crate) fn run(
                 let mut workbench = Workbench::new(info, saved_layout)
                     .with_viewport(viewport)
                     .with_display(editor.length_unit, editor.show_player_scale);
-                for line in report {
-                    workbench.push_console(line);
+                // Messages the Console has so far are sent to the file now;
+                // the report is already there (main.rs wrote it).
+                let file = Arc::clone(&log);
+                workbench
+                    .console_mut()
+                    .set_mirror(Box::new(move |entry| file.write_to_file(entry)));
+                for entry in report {
+                    workbench.console_mut().push_logged(entry);
                 }
+                let ctx = cc.egui_ctx.clone();
+                log.start_waker(move || ctx.request_repaint());
                 if let Some(path) = &map {
                     files::open_path(&mut workbench, path);
                 }
@@ -136,6 +155,7 @@ pub(crate) fn run(
                     preferences: PreferenceSaver::new(settings, store),
                     allow_close: false,
                     title: String::new(),
+                    log,
                 }))
             }),
         )

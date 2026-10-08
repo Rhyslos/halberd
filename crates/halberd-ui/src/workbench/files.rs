@@ -4,6 +4,7 @@
 //! [`WorkbenchAction`]s.
 
 use super::{FileIntent, QUIT_SHORTCUT, Workbench, WorkbenchAction};
+use crate::console::LogEntry;
 use egui::{Id, Key, KeyboardShortcut, Modifiers, RichText, Ui};
 use halberd_doc::Document;
 use std::path::{Path, PathBuf};
@@ -83,7 +84,7 @@ impl Workbench {
     /// Shows a problem in a message box (and the Console).
     pub fn show_error(&mut self, message: impl Into<String>) {
         let message = message.into();
-        self.push_console(message.clone());
+        self.console.push(LogEntry::error(message.clone()));
         self.error = Some(message);
     }
 

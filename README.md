@@ -12,9 +12,9 @@ Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
 Halberd is built in four phases. Each ends with a gate that must pass in real GMod before the next phase starts. This tracker is updated by the pull request that finishes each milestone.
 
-### Phase 0 · Foundations (v0.0, internal) — 12 of 13
+### Phase 0 · Foundations (v0.0, internal) — 13 of 13
 
-`████████████░` 92%
+`█████████████` 100%
 
 - [x] Repository set up: license, README, security policy, contribution rules
 - [x] Automatic builds for Windows, Linux and macOS on every change
@@ -28,17 +28,18 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Box brushes: draw, select with left click, delete
 - [x] Gizmo modes W / R / S / T: move, rotate, scale and resize brushes
 - [x] VMF import and export of brushes and entities
-- [ ] Console panel showing logs and errors
+- [x] Console panel showing logs and errors
 
-**Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost.
+**Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 0 of 18
+### Phase 1 · Blockout (v0.1, public alpha) — 0 of 19
 
 `░░░░░░░░░░░░░` 0%
 
 <details>
 <summary>Milestones</summary>
 
+- [ ] Select single brushes inside brush entities such as `func_detail` (like Hammer's "Ignore groups")
 - [ ] Primitives: wedge, cylinder, cone, sphere, arch, stairs
 - [ ] Face, edge and vertex selection modes
 - [ ] Shape operations: extrude, bevel, join, split, bridge, clip, mirror
@@ -116,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-08 | Console: messages with levels, filters, search and copy, and a log file that survives crashes. Phase 0 milestones complete |
 | 2026-10-08 | Hammer maps: open and save VMF files with nothing lost |
 | 2026-10-08 | Transform gizmo: move, rotate and scale brushes with W / R / S / T |
 | 2026-10-08 | First brushes: draw boxes, select them, delete them, with undo and redo |
@@ -128,6 +130,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-08: the Console.** A map with a brush Halberd can't show: the warning sits between routine messages, with filter buttons, search, Copy and Clear above.
+
+![Halberd's Console with information messages and warnings](docs/screenshots/2026-10-08-console.png)
 
 **2026-10-08: the first Hammer map.** A VMF opened from the command line: world brushes in grey, a `func_detail` in teal, point entities (spawn point, light, logic) as purple boxes, all listed in the Scene panel.
 

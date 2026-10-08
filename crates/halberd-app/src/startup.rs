@@ -6,11 +6,13 @@ use halberd_assets::{
     CompileTool, Detection, FoundBy, GmodInstall, detect_gmod, detect_gmod_in, inspect_gmod_dir,
 };
 use halberd_config::{LoadStatus, Settings, SettingsStore};
+use halberd_ui::LogEntry;
 
 /// What startup produced.
 pub(crate) struct Startup {
-    /// Plain-language report lines.
-    pub(crate) report: Vec<String>,
+    /// Plain-language report lines, each an information message or a
+    /// warning.
+    pub(crate) report: Vec<LogEntry>,
     /// The settings in effect (loaded, corrected and possibly updated).
     pub(crate) settings: Settings,
     /// Where settings are saved, if the settings folder could be found.
@@ -26,9 +28,9 @@ pub(crate) fn run(options: &Options) -> Startup {
         None => match SettingsStore::standard() {
             Ok(store) => Some(store),
             Err(err) => {
-                report.push(format!(
+                report.push(LogEntry::warning(format!(
                     "Settings: {err}. Using defaults; nothing will be saved."
-                ));
+                )));
                 None
             }
         },
@@ -37,12 +39,21 @@ pub(crate) fn run(options: &Options) -> Startup {
     let (mut settings, mut must_save) = match &store {
         Some(store) => {
             let loaded = store.load();
-            report.push(format!(
+            let line = format!(
                 "Settings: {} ({})",
                 store.path().display(),
                 describe_status(&loaded.status)
-            ));
-            report.extend(loaded.notes.iter().map(|n| format!("  Note: {n}")));
+            );
+            report.push(match loaded.status {
+                LoadStatus::Loaded | LoadStatus::NotFound => LogEntry::info(line),
+                _ => LogEntry::warning(line),
+            });
+            report.extend(
+                loaded
+                    .notes
+                    .iter()
+                    .map(|n| LogEntry::warning(format!("  Note: {n}"))),
+            );
             let first_launch = loaded.status == LoadStatus::NotFound;
             (loaded.settings, first_launch)
         }
@@ -60,8 +71,10 @@ pub(crate) fn run(options: &Options) -> Startup {
 
     if must_save && let Some(store) = &store {
         match store.save(&settings) {
-            Ok(()) => report.push("Settings saved.".to_string()),
-            Err(err) => report.push(format!("Settings were not saved: {err}.")),
+            Ok(()) => report.push(LogEntry::info("Settings saved.")),
+            Err(err) => report.push(LogEntry::warning(format!(
+                "Settings were not saved: {err}."
+            ))),
         }
     }
     Startup {
@@ -76,14 +89,14 @@ pub(crate) fn run(options: &Options) -> Startup {
 fn find_gmod(
     options: &Options,
     settings: &Settings,
-    report: &mut Vec<String>,
+    report: &mut Vec<LogEntry>,
 ) -> Option<GmodInstall> {
     if let Some(chosen) = &options.gmod_dir {
         match inspect_gmod_dir(chosen, FoundBy::UserChoice) {
             Ok(install) => return Some(install),
-            Err(problem) => report.push(format!(
+            Err(problem) => report.push(LogEntry::warning(format!(
                 "Garry's Mod: the chosen folder can't be used: {problem}. Trying the saved folder and Steam instead."
-            )),
+            ))),
         }
     }
 
@@ -94,15 +107,14 @@ fn find_gmod(
     };
     match result {
         Ok(Detection { install, notes }) => {
-            report.extend(notes.iter().map(|n| format!("  Note: {n}")));
+            report.extend(notes.iter().map(|n| LogEntry::info(format!("  Note: {n}"))));
             Some(install)
         }
         Err(err) => {
-            report.push(format!("Garry's Mod: not found. {err}"));
-            report.push(
-                "  Tip: start Halberd with --gmod-dir \"<your GarrysMod folder>\" to set it."
-                    .to_string(),
-            );
+            report.push(LogEntry::warning(format!("Garry's Mod: not found. {err}")));
+            report.push(LogEntry::info(
+                "  Tip: start Halberd with --gmod-dir \"<your GarrysMod folder>\" to set it.",
+            ));
             None
         }
     }
@@ -118,20 +130,21 @@ fn describe_status(status: &LoadStatus) -> String {
     }
 }
 
-/// Plain-language lines describing a found install.
-pub(crate) fn describe_install(install: &GmodInstall) -> Vec<String> {
+/// Plain-language lines describing a found install: information, plus a
+/// warning when compile tools are missing.
+pub(crate) fn describe_install(install: &GmodInstall) -> Vec<LogEntry> {
     let how = match &install.found_by {
         FoundBy::Settings => "from saved settings".to_string(),
         FoundBy::Steam { steam_dir } => format!("through Steam at {}", steam_dir.display()),
         FoundBy::UserChoice => "from the folder you chose".to_string(),
     };
     let mut lines = vec![
-        format!("Garry's Mod: found {how}"),
-        format!("  Folder:        {}", install.root.display()),
-        match &install.workshop_dir {
+        LogEntry::info(format!("Garry's Mod: found {how}")),
+        LogEntry::info(format!("  Folder:        {}", install.root.display())),
+        LogEntry::info(match &install.workshop_dir {
             Some(dir) => format!("  Workshop:      {}", dir.display()),
             None => "  Workshop:      no subscribed content folder found yet".to_string(),
-        },
+        }),
     ];
     let tools: Vec<String> = CompileTool::ALL
         .iter()
@@ -144,13 +157,18 @@ pub(crate) fn describe_install(install: &GmodInstall) -> Vec<String> {
             format!("{} {state}", t.name())
         })
         .collect();
-    lines.push(format!("  Compile tools: {}", tools.join(", ")));
-    if !install.tools.missing().is_empty() {
-        lines.push(
+    let missing = !install.tools.missing().is_empty();
+    let tools_line = format!("  Compile tools: {}", tools.join(", "));
+    lines.push(if missing {
+        LogEntry::warning(tools_line)
+    } else {
+        LogEntry::info(tools_line)
+    });
+    if missing {
+        lines.push(LogEntry::warning(
             "  Note: maps can't be compiled until every tool is present. On Windows, try Steam's \
-             'Verify integrity of game files'. GMod for Linux and macOS does not include them."
-                .to_string(),
-        );
+             'Verify integrity of game files'. GMod for Linux and macOS does not include them.",
+        ));
     }
     lines
 }
@@ -159,6 +177,7 @@ pub(crate) fn describe_install(install: &GmodInstall) -> Vec<String> {
 mod tests {
     use super::*;
     use halberd_assets::CompileTools;
+    use halberd_ui::LogLevel;
     use std::path::PathBuf;
 
     fn install(tools: CompileTools, workshop: Option<&str>) -> GmodInstall {
@@ -181,7 +200,9 @@ mod tests {
             vrad: Some("c".into()),
             bspzip: Some("d".into()),
         };
-        let lines = describe_install(&install(all, Some("/w/4000")));
+        let entries = describe_install(&install(all, Some("/w/4000")));
+        assert!(entries.iter().all(|e| e.level == LogLevel::Info));
+        let lines: Vec<_> = entries.iter().map(|e| e.message.as_str()).collect();
         assert!(lines[0].starts_with("Garry's Mod: found through Steam"));
         assert!(
             lines
@@ -194,7 +215,16 @@ mod tests {
 
     #[test]
     fn missing_tools_get_a_note() {
-        let lines = describe_install(&install(CompileTools::default(), None));
+        let entries = describe_install(&install(CompileTools::default(), None));
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|e| e.level == LogLevel::Warning)
+                .count(),
+            2,
+            "missing tools are a warning"
+        );
+        let lines: Vec<_> = entries.iter().map(|e| e.message.as_str()).collect();
         assert!(lines.iter().any(|l| l.contains("vbsp MISSING")));
         assert!(lines.iter().any(|l| l.contains("Verify integrity")));
         assert!(

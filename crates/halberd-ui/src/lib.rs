@@ -12,12 +12,17 @@
 //! select directly, and change the map only through the document's
 //! commands, so every edit can be undone (Edit menu, Ctrl+Z / Ctrl+Y).
 
+mod console;
 mod layout;
 mod panel;
 mod panels;
 mod viewport;
 mod workbench;
 
+pub use console::{
+    CONSOLE_CLEAR_BUTTON, CONSOLE_COPY_BUTTON, CONSOLE_SEARCH_NAME, Console, ConsoleMirror,
+    LogEntry, LogLevel, MAX_CONSOLE_ENTRIES,
+};
 pub use layout::{default_layout, is_complete, restore_or_default};
 pub use panel::Panel;
 pub use viewport::{

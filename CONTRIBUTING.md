@@ -19,7 +19,7 @@ Optional, matching CI: `cargo install cargo-deny` and run `cargo deny check`.
 
 GPU rendering tests (`cargo test -p halberd-render --test gpu`) render real frames. Without a GPU they skip with a note; set `HALBERD_REQUIRE_GPU=1` to make a missing GPU a failure instead, as CI does.
 
-The window smoke test (Linux only) opens the real window on a virtual screen, as CI does, and checks the viewport by orbiting, zooming and drawing a box with the mouse, then opens the sample Hammer map from the command line, saves it with Ctrl+S and checks it comes back unchanged:
+The window smoke test (Linux only) opens the real window on a virtual screen, as CI does, and checks the viewport by orbiting, zooming and drawing a box with the mouse, then opens the sample Hammer map from the command line, saves it with Ctrl+S and checks it comes back unchanged, and checks both runs were written to the log file:
 
 ```
 sudo apt-get install xvfb xdotool imagemagick mesa-vulkan-drivers libxkbcommon-x11-0
