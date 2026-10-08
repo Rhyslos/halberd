@@ -14,7 +14,10 @@ struct Run {
 }
 
 fn halberd(args: &[&std::ffi::OsStr]) -> Run {
+    // --report-only: print the startup report and exit, without opening the
+    // editor window (CI machines have no screen).
     let output = Command::new(env!("CARGO_BIN_EXE_halberd"))
+        .arg("--report-only")
         .args(args)
         .stdin(Stdio::null())
         .output()

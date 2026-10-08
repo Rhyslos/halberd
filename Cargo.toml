@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "tools/*"]
+members = ["crates/*", "tools/layer-check"]
 
 [workspace.package]
 version = "0.0.1"
@@ -36,8 +36,13 @@ halberd-ui = { path = "crates/halberd-ui" }
 toml = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 steamlocate = "2.1"
+eframe = { version = "0.36", features = ["persistence"] }
+egui = "0.36"
+egui_dock = { version = "0.21", features = ["serde"] }
 # Development only: temporary folders for tests.
 tempfile = "3"
+egui_kittest = "0.36"
+ron = "0.12"
 
 [workspace.lints.rust]
 # Ground rule 6: no unsafe code. A crate that truly needs it must get a

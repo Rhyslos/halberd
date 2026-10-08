@@ -12,6 +12,8 @@ pub(crate) struct Options {
     pub(crate) steam_dir: Option<PathBuf>,
     /// Use this settings file instead of the standard one.
     pub(crate) settings_file: Option<PathBuf>,
+    /// Print the startup report and exit, without opening the window.
+    pub(crate) report_only: bool,
     /// Show help and exit.
     pub(crate) help: bool,
 }
@@ -24,6 +26,7 @@ Options:
   --gmod-dir <folder>       Use this Garry's Mod folder and remember it
   --steam-dir <folder>      Look for Garry's Mod in this Steam folder
   --settings <file>         Use this settings file instead of the standard one
+  --report-only             Print what Halberd found and exit, without a window
   --help                    Show this help
 ";
 
@@ -42,6 +45,7 @@ pub(crate) fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options,
             Some("--gmod-dir") => options.gmod_dir = Some(value_for("--gmod-dir")?),
             Some("--steam-dir") => options.steam_dir = Some(value_for("--steam-dir")?),
             Some("--settings") => options.settings_file = Some(value_for("--settings")?),
+            Some("--report-only") => options.report_only = true,
             Some("--help" | "-h" | "/?") => options.help = true,
             _ => return Err(format!("unknown option: {}", arg.to_string_lossy())),
         }
@@ -71,9 +75,11 @@ mod tests {
             "S",
             "--settings",
             "F",
+            "--report-only",
             "--help",
         ]))
         .unwrap();
+        assert!(parsed.report_only);
         assert_eq!(parsed.gmod_dir, Some(PathBuf::from("G")));
         assert_eq!(parsed.steam_dir, Some(PathBuf::from("S")));
         assert_eq!(parsed.settings_file, Some(PathBuf::from("F")));

@@ -17,6 +17,13 @@ layer = 3
 [dependencies]
 halberd-doc.workspace = true
 halberd-config.workspace = true
+egui.workspace = true
+egui_dock.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+egui_kittest.workspace = true
+ron.workspace = true
 
 [lints]
 workspace = true

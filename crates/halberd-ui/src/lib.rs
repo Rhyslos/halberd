@@ -1,18 +1,18 @@
 //! The interface panels.
 //!
-//! The egui panels: Browsers, Scene, Properties, Console and Settings, docked around the viewports.
+//! The editor window is a [`Workbench`]: a menu bar on top and a dock of
+//! [`Panel`]s that users can drag, split and resize. The default arrangement
+//! ([`default_layout`]) follows the feature spec: Browsers on the left, the
+//! viewport in the middle, Scene and Properties on the right, and the
+//! Console along the bottom.
 //!
-//! Status: skeleton. See this crate's README for what it must never do.
+//! This crate only draws. It never changes the map document directly; edits
+//! will go through commands once the document exists.
 
-/// The name of this crate, used in logs and diagnostics.
-pub const CRATE_NAME: &str = "halberd-ui";
+mod layout;
+mod panel;
+mod workbench;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
-    }
-}
+pub use layout::{default_layout, is_complete, restore_or_default};
+pub use panel::Panel;
+pub use workbench::{AppInfo, QUIT_SHORTCUT, Workbench, WorkbenchAction};

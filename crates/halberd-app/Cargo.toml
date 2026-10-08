@@ -27,6 +27,7 @@ halberd-tools.workspace = true
 halberd-ui.workspace = true
 halberd-doc.workspace = true
 halberd-config.workspace = true
+eframe.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

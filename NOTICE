@@ -4,4 +4,7 @@ Copyright 2026 Rhyslos and Halberd contributors
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 Halberd was created by Rhyslos and developed with AI assistance (Claude by Anthropic).
 
+Halberd embeds third-party fonts (Ubuntu Light, Hack, Noto Emoji, emoji-icon-font)
+under their own licenses; see the licenses folder.
+
 Halberd is not affiliated with or endorsed by Valve Corporation or Facepunch Studios.
