@@ -26,7 +26,8 @@ pub use console::{
 pub use layout::{default_layout, is_complete, restore_or_default};
 pub use panel::Panel;
 pub use viewport::{
-    NoRenderer, VIEWPORT_LABEL, ViewportOptions, ViewportPanel, ViewportRenderer, ViewportView,
+    INSIDE_ENTITIES_LABEL, NoRenderer, VIEWPORT_LABEL, ViewportOptions, ViewportPanel,
+    ViewportRenderer, ViewportView,
 };
 pub use workbench::{
     AppInfo, CANCEL_BUTTON, DELETE_SHORTCUT, DONT_SAVE_BUTTON, FileIntent, NEW_SHORTCUT,

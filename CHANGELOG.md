@@ -6,6 +6,9 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **Pick single brushes inside entities.** Brush entities such as `func_detail` can hold hundreds of brushes. Turn on **Inside entities** (Ctrl+W, or the button in the viewport's toolbar), and a click picks the single brush under the pointer instead of the whole entity, like Hammer's "Ignore groups". That brush can then be moved, rotated, resized (gizmo or Properties) and deleted like any other, and it stays part of its entity when saved. The **Scene** panel lists an entity's brushes under it (click the arrow), and Properties says which entity a brush is part of.
+- Deleting a brush entity deletes its brushes; deleting all of an entity's brushes deletes the entity too, as in Hammer.
+
 - **The Console** shows every message with its time and level: information, warnings (yellow) and errors (red). Buttons show or hide each level, a search box finds messages, **Copy** puts what is shown on the clipboard for bug reports, and **Clear** empties it. A message repeated many times is shown once with a count. If warnings or errors arrive while the Console is hidden behind another tab, its tab shows how many.
 - **Log file:** every message is also written to `halberd.log`, next to the settings file, including the reason if Halberd crashes. The previous run's log is kept as `halberd.previous.log`. The Console says where the file is.
 - Problems reported by the graphics driver and window system now appear in the Console as warnings and errors.
@@ -54,3 +57,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 - Documentation: README with progress tracker, architecture overview, contributing guide, security policy, decision records, pull request and issue templates.
 - `halberd` program skeleton that reports its version. When started by double-clicking, it waits for Enter so the message can be read.
 - Downloaded builds open straight to the program, with no nested folders.
+
+### Fixed
+
+- Ctrl+W released quickly no longer also counts as W, and other shortcut keys check the modifier keys held when the key went down.

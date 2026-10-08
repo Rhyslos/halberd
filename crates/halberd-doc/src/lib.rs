@@ -9,8 +9,10 @@
 //! selecting is not an edit and is not undone (as in Hammer). Undoing an
 //! edit does select what it brings back.
 //!
-//! Objects are world brushes ([`BrushObject`], with each face's material)
-//! and entities ([`EntityObject`], with their own brushes). What a map
+//! Objects are brushes ([`BrushObject`], with each face's material) and
+//! entities ([`EntityObject`]). A brush entity's brushes (a `func_detail`'s,
+//! say) are objects of their own that name their entity, so they can be
+//! selected and edited one by one, as with Hammer's "Ignore groups". What a map
 //! file holds that the editor does not use yet is kept in
 //! [`MapFileData`] and on each object, so saving loses nothing.
 
@@ -27,5 +29,6 @@ pub use error::DocError;
 pub use history::MAX_UNDO_STEPS;
 pub use map_data::{MapFileData, TextEncoding};
 pub use object::{
-    BrushObject, DEFAULT_MATERIAL, EntityObject, FaceInfo, Object, ObjectId, POINT_ENTITY_HALF_SIZE,
+    BrushObject, DEFAULT_MATERIAL, EntityObject, FaceInfo, MapObject, Object, ObjectId,
+    POINT_ENTITY_HALF_SIZE,
 };

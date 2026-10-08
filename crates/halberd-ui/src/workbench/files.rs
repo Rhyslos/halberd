@@ -64,7 +64,7 @@ impl Workbench {
     pub fn set_document(&mut self, doc: Document, path: Option<PathBuf>) {
         let bounds = doc
             .objects()
-            .map(|(_, o)| o.bounds())
+            .filter_map(|(id, _)| doc.bounds_of(id))
             .reduce(halberd_geom::Aabb::union);
         if let Some(bounds) = bounds {
             self.viewport.frame(bounds);

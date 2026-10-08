@@ -65,6 +65,9 @@ pub struct BrushObject {
     /// What a map file stores for the brush besides its faces (its id,
     /// Hammer's editor colour and visgroups), kept as read.
     pub file_data: Vec<Entry>,
+    /// The brush entity (such as `func_detail`) this brush belongs to, or
+    /// `None` for a world brush. Set by the document.
+    entity: Option<ObjectId>,
 }
 
 impl BrushObject {
@@ -75,6 +78,7 @@ impl BrushObject {
             brush,
             faces,
             file_data: Vec::new(),
+            entity: None,
         }
     }
 
@@ -91,6 +95,7 @@ impl BrushObject {
             brush,
             faces,
             file_data,
+            entity: None,
         }
     }
 
@@ -107,7 +112,19 @@ impl BrushObject {
     /// The same brush with a new shape made from this one's faces (moved,
     /// turned or resized), keeping each face's material and file data.
     pub fn with_shape(&self, brush: Brush) -> Self {
-        Self::from_parts(brush, &self.faces, self.file_data.clone())
+        Self {
+            entity: self.entity,
+            ..Self::from_parts(brush, &self.faces, self.file_data.clone())
+        }
+    }
+
+    /// The brush entity this brush belongs to, or `None` for a world brush.
+    pub fn entity(&self) -> Option<ObjectId> {
+        self.entity
+    }
+
+    pub(crate) fn set_entity(&mut self, entity: Option<ObjectId>) {
+        self.entity = entity;
     }
 }
 
@@ -119,8 +136,6 @@ pub struct EntityObject {
     pub classname: String,
     /// Where a point entity is; brush entities may have none.
     pub origin: Option<Vec3>,
-    /// The entity's own brushes (for brush entities).
-    pub solids: Vec<BrushObject>,
     /// Everything a map file stores for the entity besides its brushes
     /// (settings, outputs, editor data), kept exactly as read and in order.
     /// Halberd does not edit entities yet.
@@ -128,15 +143,21 @@ pub struct EntityObject {
 }
 
 impl EntityObject {
-    /// The box a point entity is shown as. Brush entities are shown by
-    /// their brushes alone, even when they have an origin.
+    /// The box a point entity is shown as, around its origin. (Brush
+    /// entities are shown by their brushes alone, even when they have an
+    /// origin; the document knows which entities have brushes.)
     pub fn marker(&self) -> Option<Aabb> {
-        if !self.solids.is_empty() {
-            return None;
-        }
         let origin = self.origin?;
         let half = Vec3::splat(POINT_ENTITY_HALF_SIZE);
         Some(Aabb::from_corners(origin - half, origin + half))
+    }
+
+    /// True if the entity's file data holds brushes Halberd could not show
+    /// (kept as read, to be saved back).
+    pub fn has_kept_solids(&self) -> bool {
+        self.file_data
+            .iter()
+            .any(|e| matches!(e, Entry::Block(b) if b.name.eq_ignore_ascii_case("solid")))
     }
 
     /// The entity's settings (key and value pairs), in order.
@@ -151,9 +172,10 @@ impl EntityObject {
 /// One thing in the map.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object {
-    /// A world brush.
+    /// A brush: a world brush, or one belonging to a brush entity (see
+    /// [`BrushObject::entity`]).
     Brush(BrushObject),
-    /// An entity, with any brushes it owns.
+    /// An entity. A brush entity's brushes are objects of their own.
     Entity(EntityObject),
 }
 
@@ -166,45 +188,53 @@ impl Object {
         }
     }
 
-    /// The smallest axis-aligned box around the object.
-    pub fn bounds(&self) -> Aabb {
+    /// The box around the object itself: a brush's shape, or an entity's
+    /// marker. A brush entity without an origin has none; see
+    /// `Document::bounds_of` for the box around its brushes.
+    pub fn bounds(&self) -> Option<Aabb> {
         match self {
-            Self::Brush(b) => b.brush().bounds(),
-            Self::Entity(e) => e
-                .solids
-                .iter()
-                .map(|s| s.brush().bounds())
-                .chain(e.marker())
-                .reduce(Aabb::union)
-                .unwrap_or_else(|| Aabb::from_corners(Vec3::ZERO, Vec3::ZERO)),
+            Self::Brush(b) => Some(b.brush().bounds()),
+            Self::Entity(e) => e.marker(),
         }
     }
 
-    /// Distance along a ray to where it hits the object, if it does.
+    /// Distance along a ray to where it hits the object itself (a brush,
+    /// or an entity's marker), if it does.
     pub fn ray_hit(&self, origin: Vec3, direction: Vec3) -> Option<f32> {
         match self {
             Self::Brush(b) => b.brush().ray_hit(origin, direction),
-            Self::Entity(e) => {
-                let marker = e
-                    .marker()
-                    .and_then(|m| Brush::cuboid(m).ok())
-                    .and_then(|m| m.ray_hit(origin, direction));
-                e.solids
-                    .iter()
-                    .filter_map(|s| s.brush().ray_hit(origin, direction))
-                    .chain(marker)
-                    .reduce(f32::min)
-            }
+            Self::Entity(e) => e
+                .marker()
+                .and_then(|m| Brush::cuboid(m).ok())
+                .and_then(|m| m.ray_hit(origin, direction)),
         }
     }
 
-    /// The brush, if this is a world brush.
+    /// The brush, if this is a brush.
     pub fn as_brush(&self) -> Option<&BrushObject> {
         match self {
             Self::Brush(b) => Some(b),
             Self::Entity(_) => None,
         }
     }
+
+    /// The entity, if this is an entity.
+    pub fn as_entity(&self) -> Option<&EntityObject> {
+        match self {
+            Self::Entity(e) => Some(e),
+            Self::Brush(_) => None,
+        }
+    }
+}
+
+/// One thing read from a map file, for [`crate::Document::from_map`]: a
+/// world brush, or an entity with the brushes it owns.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MapObject {
+    /// A world brush.
+    Brush(BrushObject),
+    /// An entity and its brushes (none for a point entity).
+    Entity(EntityObject, Vec<BrushObject>),
 }
 
 #[cfg(test)]
@@ -265,36 +295,39 @@ mod tests {
     }
 
     #[test]
-    fn a_point_entity_is_a_small_box_and_a_brush_entity_is_its_brushes() {
+    fn a_point_entity_is_a_small_box() {
         let point = Object::Entity(EntityObject {
             classname: "light".into(),
             origin: Some(Vec3::new(100.0, 0.0, 50.0)),
-            solids: Vec::new(),
             file_data: vec![Entry::Pair("classname".into(), "light".into())],
         });
-        assert_eq!(point.bounds().center(), Vec3::new(100.0, 0.0, 50.0));
-        assert_eq!(point.bounds().size(), Vec3::splat(16.0));
+        let bounds = point.bounds().unwrap();
+        assert_eq!(bounds.center(), Vec3::new(100.0, 0.0, 50.0));
+        assert_eq!(bounds.size(), Vec3::splat(16.0));
         assert!(
             point
                 .ray_hit(Vec3::new(100.0, 0.0, 500.0), Vec3::NEG_Z)
                 .is_some()
         );
         assert_eq!(point.kind_name(), "Entity");
-        let Object::Entity(e) = &point else { panic!() };
+        let e = point.as_entity().unwrap();
         assert_eq!(e.settings().collect::<Vec<_>>(), [("classname", "light")]);
+        assert!(point.as_brush().is_none());
 
         let detail = Object::Entity(EntityObject {
             classname: "func_detail".into(),
             origin: None,
-            solids: vec![BrushObject::new(cube(0.0)), BrushObject::new(cube(100.0))],
             file_data: Vec::new(),
         });
-        assert_eq!(detail.bounds().size(), Vec3::new(164.0, 164.0, 164.0));
-        assert!(
-            detail
-                .ray_hit(Vec3::new(132.0, 132.0, 500.0), Vec3::NEG_Z)
-                .is_some()
-        );
-        assert!(detail.as_brush().is_none());
+        assert_eq!(detail.bounds(), None, "shown by its brushes only");
+    }
+
+    #[test]
+    fn a_brush_keeps_its_entity_through_reshaping() {
+        let mut b = BrushObject::new(cube(0.0));
+        assert_eq!(b.entity(), None);
+        b.set_entity(Some(ObjectId(7)));
+        let moved = b.with_shape(cube(32.0));
+        assert_eq!(moved.entity(), Some(ObjectId(7)));
     }
 }

@@ -163,11 +163,15 @@ mod tests {
         let mut wb = workbench();
         open_path(&mut wb, &path);
         assert_eq!(wb.file_path(), Some(path.as_path()));
-        assert_eq!(wb.document().len(), 6);
+        assert_eq!(
+            wb.document().len(),
+            7,
+            "the func_detail's brush is an object too"
+        );
         assert!(
             wb.console_lines()
                 .iter()
-                .any(|l| l.contains("2 brushes, 4 entities"))
+                .any(|l| l.contains("3 brushes, 4 entities"))
         );
         assert!(wb.window_title().starts_with("sample.vmf — "));
         assert!(save_to(&mut wb, &path));

@@ -1,8 +1,13 @@
 //! VMF → document.
 
 use crate::planes::plane_from_points;
+
+/// Name of the placeholder kept in an entity's file data where one of its
+/// shown brushes was, so saving writes each brush back in its place. Not a
+/// name a map file can contain (it has spaces and is never written).
+pub(crate) const SOLID_SLOT: &str = "halberd: solid here";
 use glam::Vec3;
-use halberd_doc::{BrushObject, Document, EntityObject, FaceInfo, MapFileData, Object};
+use halberd_doc::{BrushObject, Document, EntityObject, FaceInfo, MapFileData, MapObject};
 use halberd_geom::Brush;
 use halberd_vmf::{Block, Entry, Vmf, parse_plane, parse_vec3};
 
@@ -18,8 +23,8 @@ pub struct Imported {
 
 /// Turns a parsed VMF into a document.
 ///
-/// World brushes become [`Object::Brush`] and entities [`Object::Entity`],
-/// in file order. A brush whose shape cannot be worked out (damaged
+/// World brushes and entities (with their brushes) become objects, in
+/// file order. A brush whose shape cannot be worked out (damaged
 /// planes) is kept unchanged in the file data, so it is written back, but
 /// it is not shown; the notes say how many.
 pub fn document_from_vmf(vmf: &Vmf) -> Result<Imported, halberd_doc::DocError> {
@@ -40,7 +45,7 @@ pub fn document_from_vmf(vmf: &Vmf) -> Result<Imported, halberd_doc::DocError> {
                         Entry::Block(b) if b.name.eq_ignore_ascii_case("solid") => {
                             in_solids = true;
                             match brush_from_solid(b) {
-                                Some(brush) => objects.push(Object::Brush(brush)),
+                                Some(brush) => objects.push(MapObject::Brush(brush)),
                                 None => {
                                     hidden_brushes += 1;
                                     data.world_trailer.push(child.clone());
@@ -53,9 +58,9 @@ pub fn document_from_vmf(vmf: &Vmf) -> Result<Imported, halberd_doc::DocError> {
                 }
             }
             Entry::Block(block) if block.name.eq_ignore_ascii_case("entity") => {
-                let (entity, unshown) = entity_from_block(block);
+                let (entity, brushes, unshown) = entity_from_block(block);
                 hidden_brushes += unshown;
-                objects.push(Object::Entity(entity));
+                objects.push(MapObject::Entity(entity, brushes));
             }
             other if seen_world => data.footer.push(other.clone()),
             other => data.header.push(other.clone()),
@@ -114,16 +119,20 @@ fn brush_from_solid(solid: &Block) -> Option<BrushObject> {
     Some(BrushObject::from_parts(brush, &faces, file_data))
 }
 
-/// An entity from an `entity` block, and how many of its brushes could not
-/// be shown (they stay in its file data, in place).
-fn entity_from_block(block: &Block) -> (EntityObject, usize) {
+/// An entity from an `entity` block, its brushes, and how many of its
+/// brushes could not be shown (they stay in its file data, in place).
+fn entity_from_block(block: &Block) -> (EntityObject, Vec<BrushObject>, usize) {
     let mut solids = Vec::new();
     let mut file_data = Vec::new();
     let mut unshown = 0;
     for entry in &block.entries {
         match entry {
             Entry::Block(b) if b.name.eq_ignore_ascii_case("solid") => match brush_from_solid(b) {
-                Some(brush) => solids.push(brush),
+                Some(brush) => {
+                    // Marks the place, so saving puts it back there.
+                    file_data.push(Entry::Block(Block::new(SOLID_SLOT)));
+                    solids.push(brush);
+                }
                 None => {
                     unshown += 1;
                     file_data.push(entry.clone());
@@ -139,8 +148,7 @@ fn entity_from_block(block: &Block) -> (EntityObject, usize) {
     let entity = EntityObject {
         classname: block.get("classname").unwrap_or_default().to_string(),
         origin,
-        solids,
         file_data,
     };
-    (entity, unshown)
+    (entity, solids, unshown)
 }

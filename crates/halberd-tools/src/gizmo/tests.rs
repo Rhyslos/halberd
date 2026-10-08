@@ -113,7 +113,7 @@ fn drag(
 }
 
 fn bounds(doc: &Document) -> Aabb {
-    doc.objects().next().unwrap().1.bounds()
+    doc.objects().next().unwrap().1.bounds().unwrap()
 }
 
 /// Screen position of a world point.
@@ -287,7 +287,7 @@ fn dragging_a_ring_rotates_in_fifteen_degree_steps() {
         })
         .collect();
     drag(&mut t, &camera, &mut doc, from, &path);
-    let moved = doc.get(right).unwrap().bounds().center();
+    let moved = doc.get(right).unwrap().bounds().unwrap().center();
     assert!(
         (moved - Vec3::new(0.0, 100.0, 16.0)).length() < 0.5,
         "{moved}"
@@ -630,17 +630,45 @@ fn rings_partly_behind_the_camera_are_not_drawn() {
 
 #[test]
 fn entities_alone_get_no_gizmo() {
-    use halberd_doc::{EntityObject, Object};
+    use halberd_doc::{EntityObject, MapObject};
     let camera = angled();
-    let light = Object::Entity(EntityObject {
-        classname: "light".into(),
-        origin: Some(Vec3::new(64.0, 32.0, 64.0)),
-        solids: Vec::new(),
-        file_data: Vec::new(),
-    });
+    let light = MapObject::Entity(
+        EntityObject {
+            classname: "light".into(),
+            origin: Some(Vec3::new(64.0, 32.0, 64.0)),
+            file_data: Vec::new(),
+        },
+        Vec::new(),
+    );
     let mut doc = Document::from_map(vec![light], Default::default()).unwrap();
     let id = doc.objects().next().unwrap().0;
     doc.set_selection([id]);
     let t = tools(GizmoMode::Move);
     assert!(t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
+}
+
+#[test]
+fn a_brush_picked_inside_an_entity_gets_the_gizmo_but_the_entity_does_not() {
+    use halberd_doc::{BrushObject, EntityObject, MapObject};
+    let camera = angled();
+    let cube = Brush::cuboid(Aabb::from_corners(Vec3::ZERO, Vec3::splat(64.0))).unwrap();
+    let detail = MapObject::Entity(
+        EntityObject {
+            classname: "func_detail".into(),
+            origin: None,
+            file_data: Vec::new(),
+        },
+        vec![BrushObject::new(cube)],
+    );
+    let mut doc = Document::from_map(vec![detail], Default::default()).unwrap();
+    let entity = doc.objects().next().unwrap().0;
+    let t = tools(GizmoMode::Move);
+    doc.set_selection([entity]);
+    assert!(
+        t.gizmo_shapes(&camera, SIZE, &doc).is_empty(),
+        "entities can't be moved yet"
+    );
+    let brush = doc.brushes_of(entity).next().unwrap();
+    doc.set_selection([brush]);
+    assert!(!t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
 }

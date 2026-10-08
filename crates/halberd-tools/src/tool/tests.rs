@@ -304,3 +304,33 @@ fn new_boxes_use_the_chosen_height() {
     tools.set_box_height(1e9);
     assert_eq!(tools.box_height(), BOX_HEIGHT_RANGE.1);
 }
+
+#[test]
+fn clicking_a_brush_entity_picks_it_whole_unless_picking_inside() {
+    use halberd_doc::{BrushObject, EntityObject, MapObject};
+    let camera = top_down();
+    let cube = Brush::cuboid(Aabb::from_corners(Vec3::ZERO, Vec3::splat(64.0))).unwrap();
+    let detail = MapObject::Entity(
+        EntityObject {
+            classname: "func_detail".into(),
+            origin: None,
+            file_data: Vec::new(),
+        },
+        vec![BrushObject::new(cube)],
+    );
+    let doc = Document::from_map(vec![detail], Default::default()).unwrap();
+    let entity = doc.objects().next().unwrap().0;
+    let brush = doc.brushes_of(entity).next().unwrap();
+    let mut tools = ToolController::new(16.0);
+    let on_box = screen(&camera, Vec3::new(32.0, 32.0, 64.0));
+    assert!(!tools.inside_entities(), "off at first, as in Hammer");
+    assert_eq!(
+        drag(&mut tools, &camera, &doc, on_box, on_box),
+        Some(ToolAction::Select(Some(entity)))
+    );
+    tools.set_inside_entities(true);
+    assert_eq!(
+        drag(&mut tools, &camera, &doc, on_box, on_box),
+        Some(ToolAction::Select(Some(brush)))
+    );
+}

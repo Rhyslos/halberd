@@ -21,6 +21,8 @@ use halberd_tools::{
 mod gizmo;
 mod tools;
 
+pub use tools::INSIDE_ENTITIES_LABEL;
+
 /// What a renderer needs to draw one viewport frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ViewportView {

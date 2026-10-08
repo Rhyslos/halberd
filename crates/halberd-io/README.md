@@ -22,7 +22,7 @@ Converts between the document and files: VMF import and Export to Hammer, and th
 
 VMF import and export are implemented (see [decision 0011](../../docs/decisions/0011-vmf-maps.md)); the `.halberd` project format comes later.
 
-- `document_from_vmf`: world brushes and entities become objects; everything else is kept (`MapFileData`, and each object's and face's `file_data`). Brushes whose planes do not make a shape are kept unchanged but not shown, with a note.
+- `document_from_vmf`: world brushes, entities and the entities' brushes become objects (each entity brush naming its entity); everything else is kept (`MapFileData`, and each object's and face's `file_data`). Brushes whose planes do not make a shape are kept unchanged but not shown, with a note.
 - `vmf_from_document`: puts everything back. Unchanged faces (checked exactly) keep their exact plane text, so an untouched map is written back byte for byte. New objects get fresh ids above every id in the file, hidden objects included; new maps get Hammer's standard blocks; new faces get `DEV/DEV_MEASUREGENERIC01B` with world-aligned texture axes.
 - `open_map` (512 MB limit; UTF-8 with or without a byte-order mark, else Latin-1, so no byte changes) and `save_map` (temporary file, old file kept as `.vmx`, then swap; marks the map saved; a backup that cannot be written becomes a note, not a failure).
 

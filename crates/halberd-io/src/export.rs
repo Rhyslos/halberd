@@ -1,5 +1,6 @@
 //! Document → VMF.
 
+use crate::import::SOLID_SLOT;
 use crate::planes::{plane_from_points, points_of_face, same_plane};
 use halberd_doc::{BrushObject, Document, Object};
 use halberd_geom::Face;
@@ -28,14 +29,16 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
         data.world_header.clone()
     };
     for (_, object) in doc.objects() {
-        if let Object::Brush(brush) = object {
+        if let Object::Brush(brush) = object
+            && brush.entity().is_none()
+        {
             world.push_block(solid_block(brush, &mut ids));
         }
     }
     world.entries.extend(data.world_trailer.iter().cloned());
     entries.push(Entry::Block(world));
 
-    for (_, object) in doc.objects() {
+    for (id, object) in doc.objects() {
         if let Object::Entity(entity) = object {
             let mut block = Block::new("entity");
             block.entries = entity.file_data.clone();
@@ -44,12 +47,21 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
                     .entries
                     .insert(0, Entry::Pair("id".into(), ids.next().to_string()));
             }
-            let solids = entity
-                .solids
-                .iter()
-                .map(|s| Entry::Block(solid_block(s, &mut ids)))
-                .collect();
-            insert_before_editor(&mut block.entries, solids);
+            let mut solids = doc
+                .brushes_of(id)
+                .filter_map(|b| doc.get(b)?.as_brush())
+                .map(|s| Entry::Block(solid_block(s, &mut ids)));
+            // Each brush goes back where one was read; a slot whose brush
+            // was deleted is dropped; any more go before `editor`.
+            let mut placed = Vec::with_capacity(block.entries.len());
+            for entry in std::mem::take(&mut block.entries) {
+                match entry {
+                    Entry::Block(b) if b.name == SOLID_SLOT => placed.extend(solids.next()),
+                    other => placed.push(other),
+                }
+            }
+            block.entries = placed;
+            insert_before_editor(&mut block.entries, solids.collect());
             entries.push(Entry::Block(block));
         }
     }
@@ -193,12 +205,7 @@ impl IdSource {
         for (_, object) in doc.objects() {
             match object {
                 Object::Brush(b) => see_brush(b, &mut see),
-                Object::Entity(e) => {
-                    see(&e.file_data);
-                    for s in &e.solids {
-                        see_brush(s, &mut see);
-                    }
-                }
+                Object::Entity(e) => see(&e.file_data),
             }
         }
         let data = doc.file_data();

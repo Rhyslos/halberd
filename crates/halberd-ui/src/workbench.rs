@@ -468,6 +468,8 @@ pub use files::{
 #[cfg(test)]
 mod console_tests;
 #[cfg(test)]
+mod entity_tests;
+#[cfg(test)]
 mod file_tests;
 #[cfg(test)]
 mod tests;
