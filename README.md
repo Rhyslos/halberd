@@ -32,9 +32,9 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 2 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 3 of 19
 
-`█░░░░░░░░░░░░` 11%
+`██░░░░░░░░░░░` 16%
 
 <details>
 <summary>Milestones</summary>
@@ -56,7 +56,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [ ] Quick-test compile, then launch GMod
 - [ ] Leak detection with a visual leak path
 - [ ] Settings page: key bindings, WASD toggle, camera speeds, memory budget
-- [ ] Keybinds viewer: a visual keyboard showing every bound key, with hover and search
+- [x] Keybinds viewer: a visual keyboard showing every bound key, with hover and search
 - [ ] Signed Windows release and first public announcement
 
 </details>
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-09 | Keybinds viewer: a drawn keyboard with every key, hover to see what it does, search to light up keys |
 | 2026-10-09 | Shapes: draw wedges, cylinders, cones, spheres, arches and stairs |
 | 2026-10-09 | Brushes inside entities: pick, move, resize and delete single brushes of a `func_detail` (Ctrl+W) |
 | 2026-10-08 | Console: messages with levels, filters, search and copy, and a log file that survives crashes. Phase 0 milestones complete |
@@ -132,6 +133,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-09: the Keybinds viewer.** Searching "draw" lights up every key involved in drawing: B, R, Q, Shift, Alt and Esc, with what each does listed below.
+
+![Halberd's Keybinds window with the keys for drawing lit up](docs/screenshots/2026-10-09-keybinds.png)
 
 **2026-10-09: the first shapes.** A wedge, a 12-sided cylinder, a cone, a sphere, an arch and a flight of stairs (and a box, just out of view), all drawn with the Draw tool.
 

@@ -21,3 +21,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0012](0012-console-and-log-file.md) | The Console and the log file | Accepted |
 | [0013](0013-brushes-inside-entities.md) | Brushes inside brush entities | Accepted |
 | [0014](0014-primitive-shapes.md) | Ready-made shapes | Accepted |
+| [0015](0015-keybinds-viewer.md) | The Keybinds viewer | Accepted |
