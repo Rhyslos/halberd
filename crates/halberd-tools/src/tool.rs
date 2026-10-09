@@ -49,10 +49,12 @@ impl Tool {
     /// One-line explanation, for tooltips.
     pub fn description(self) -> &'static str {
         match self {
-            Self::Select => "Click to select; Ctrl+click to add or remove (Esc)",
+            Self::Select => "Click to select; Ctrl+click to add or remove; Esc deselects (Q)",
             Self::Box => {
                 "Drag on the grid or on a brush to draw the chosen shape; drag along a line \
-                 for a wall. Wedges and stairs climb, and arches span, the way you drag (B)"
+                 for a wall. Wedges and stairs climb, and arches span, the way you drag; R \
+                 while drawing turns the shape. Shift: as wide as long and tall; Alt: the \
+                 same, around where you started. B again lists the shapes (B)"
             }
         }
     }
@@ -75,6 +77,12 @@ pub struct ToolInput {
     pub additive: bool,
     /// Escape was pressed: cancel what is in progress.
     pub cancel: bool,
+    /// Shift is held: a shape being drawn is as wide, deep and tall as its
+    /// longest side, from the corner where the drag started.
+    pub uniform: bool,
+    /// Alt is held: like `uniform`, but the drag's start is the middle of
+    /// the shape's ground plan.
+    pub centered: bool,
 }
 
 /// What a tool asks the interface to do.
@@ -101,6 +109,11 @@ struct BoxDrag {
     start: Vec2,
     base: f32,
     end: Vec2,
+    /// Quarter turns clockwise (seen from above) given with R.
+    turns: u8,
+    /// Shift or Alt as last held (see [`ToolInput`]).
+    uniform: bool,
+    centered: bool,
 }
 
 /// Runs the active tool.
@@ -266,6 +279,25 @@ impl ToolController {
         }
     }
 
+    /// Turns the shape being drawn a quarter turn clockwise (seen from
+    /// above) inside its box (R while drawing): stairs then climb, and an
+    /// arch spans, the next way round. Returns false if nothing is being
+    /// drawn.
+    pub fn turn_drawing(&mut self) -> bool {
+        match self.drag.as_mut() {
+            Some(drag) => {
+                drag.turns = (drag.turns + 1) % 4;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// True while a shape is being drawn.
+    pub fn is_drawing(&self) -> bool {
+        self.drag.is_some()
+    }
+
     /// True while something is in progress that Escape would cancel.
     pub fn is_busy(&self) -> bool {
         self.drag.is_some() || self.gizmo.is_dragging()
@@ -283,6 +315,24 @@ impl ToolController {
         let moved = (drag.end - drag.start).abs();
         if moved.max_element() < half {
             return None;
+        }
+        if drag.uniform || drag.centered {
+            // As wide, deep and tall as the longest side of the drag.
+            let side = moved.max_element();
+            let base = drag.start.extend(drag.base);
+            return Some(if drag.centered {
+                let reach = Vec2::splat(side);
+                Aabb::from_corners(
+                    (drag.start - reach).extend(drag.base),
+                    (drag.start + reach).extend(drag.base + side * 2.0),
+                )
+            } else {
+                let toward = Vec2::new(
+                    if drag.end.x < drag.start.x { -1.0 } else { 1.0 },
+                    if drag.end.y < drag.start.y { -1.0 } else { 1.0 },
+                );
+                Aabb::from_corners(base, (drag.start + toward * side).extend(drag.base + side))
+            });
         }
         let thicken = |start: f32, end: f32| {
             if (end - start).abs() < half {
@@ -374,7 +424,14 @@ impl ToolController {
                 start,
                 base: self.snap_one(point.z),
                 end: start,
+                turns: 0,
+                uniform: false,
+                centered: false,
             });
+        }
+        if let Some(drag) = self.drag.as_mut() {
+            drag.uniform = input.uniform;
+            drag.centered = input.centered;
         }
         if let Some(drag) = self.drag.as_mut()
             && let Some(ray) = ray
@@ -398,7 +455,7 @@ impl ToolController {
         let bounds = self.box_bounds(drag).ok_or(None)?;
         let key = (
             bounds,
-            Heading::of_drag(drag.end - drag.start),
+            Heading::of_drag(drag.end - drag.start).turned_clockwise(drag.turns),
             self.shape,
             self.shape_settings,
         );

@@ -360,3 +360,12 @@ fn long_ovals_with_many_sides_stay_on_whole_units() {
         assert_on_grid_inside(&brushes, b);
     }
 }
+
+#[test]
+fn headings_turn_clockwise_seen_from_above() {
+    assert_eq!(Heading::PosX.turned_clockwise(1), Heading::NegY);
+    assert_eq!(Heading::NegY.turned_clockwise(1), Heading::NegX);
+    assert_eq!(Heading::PosY.turned_clockwise(1), Heading::PosX);
+    assert_eq!(Heading::PosX.turned_clockwise(4), Heading::PosX);
+    assert_eq!(Heading::NegX.turned_clockwise(6), Heading::PosX);
+}

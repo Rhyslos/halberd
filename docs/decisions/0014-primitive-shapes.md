@@ -17,6 +17,10 @@ Blocking out a map with boxes alone is slow: a ramp, a pillar, a dome, a doorway
 Option 2. The Box tool becomes **Draw** (still B), with a **Shape** picker; Box stays the default.
 
 - **Every shape fills the drawn box** (the drag on the ground plus the height field), so drawing one is the same as drawing a box.
+- **Keys:**
+  - **B** picks Draw; **B** again opens the shape list (arrow keys move, Enter or Space picks, Escape closes); **Q** goes back to Select.
+  - **R** while drawing turns the shape a quarter turn clockwise (seen from above) inside its box; the gizmo keys wait until the drawing is done.
+  - **Shift** while drawing makes the shape as wide, deep and tall as the drag's longest side, from the corner where it started; **Alt** does the same around the starting point, which becomes the middle of its ground plan (the shape still stands on the ground). On some Linux desktops Alt+drag moves the window instead.
 - **Direction comes from the drag:** wedges and stairs climb, and arches span, along the drag's longer side, towards where it ended. Drawing stairs from bottom to top therefore does what one expects, and nothing else needs choosing. The gizmo can turn shapes afterwards.
 - **Shapes:**
   - **Wedge:** a ramp, full height at one end.

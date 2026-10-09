@@ -301,16 +301,91 @@ fn clicking_selects_and_escape_or_empty_space_deselects() {
 }
 
 #[test]
-fn b_switches_between_select_and_box() {
+fn b_picks_draw_then_opens_the_shape_list_and_q_goes_back_to_select() {
     let mut h = harness(ViewportOptions::default());
     h.run();
     assert_eq!(h.state().panel.tool(), Tool::Select);
     h.key_press(Key::B);
     h.run();
     assert_eq!(h.state().panel.tool(), Tool::Box);
+    assert!(h.query_by_label("Cylinder").is_none(), "list closed");
+    // B again opens the list; arrows move, Enter picks.
     h.key_press(Key::B);
     h.run();
+    assert!(h.query_by_label("Cylinder").is_some(), "list open");
+    for _ in 0..2 {
+        h.key_press(Key::ArrowDown);
+        h.run();
+    }
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(
+        h.state().panel.tools().shape(),
+        halberd_geom::Shape::Cylinder
+    );
+    assert!(
+        h.query_by_label("Cylinder").is_none(),
+        "closed after picking"
+    );
+    assert_eq!(h.state().panel.tool(), Tool::Box);
+    // Up wraps round to the last shape; Space picks too.
+    h.key_press(Key::B);
+    h.run();
+    for _ in 0..3 {
+        h.key_press(Key::ArrowUp);
+        h.run();
+    }
+    h.key_press(Key::Space);
+    h.run();
+    assert_eq!(h.state().panel.tools().shape(), halberd_geom::Shape::Stairs);
+    // Q is Select.
+    h.key_press(Key::Q);
+    h.run();
     assert_eq!(h.state().panel.tool(), Tool::Select);
+}
+
+#[test]
+fn escape_closes_the_shape_list_but_keeps_the_selection() {
+    let mut h = harness(ViewportOptions::default());
+    let brush =
+        halberd_geom::Brush::cuboid(Aabb::from_corners(Vec3::ZERO, Vec3::splat(64.0))).unwrap();
+    h.state_mut()
+        .doc
+        .execute(halberd_doc::Command::AddBrushes(vec![brush]))
+        .unwrap();
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.run();
+    h.key_press(Key::B);
+    h.run();
+    assert!(h.query_by_label("Wedge").is_some());
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(h.query_by_label("Wedge").is_none());
+    assert_eq!(h.state().doc.selection().len(), 1, "still selected");
+    assert_eq!(h.state().panel.tools().shape(), halberd_geom::Shape::Box);
+}
+
+#[test]
+fn r_while_drawing_turns_the_shape_and_gizmo_keys_wait() {
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.run();
+    let (from, to) = (egui::pos2(300.0, 420.0), egui::pos2(480.0, 470.0));
+    h.hover_at(from);
+    press(&h, PointerButton::Primary, from, true);
+    h.run();
+    h.hover_at(to);
+    h.run();
+    h.key_press(Key::R);
+    h.run();
+    h.key_press(Key::W);
+    h.run();
+    assert_eq!(h.state().panel.tool(), Tool::Box, "still drawing");
+    assert!(h.state().panel.tools().is_drawing());
+    assert_eq!(h.state().panel.tools().gizmo_mode(), None);
+    press(&h, PointerButton::Primary, to, false);
+    h.run();
+    assert_eq!(h.state().doc.len(), 1, "the drawing finished");
 }
 
 #[test]

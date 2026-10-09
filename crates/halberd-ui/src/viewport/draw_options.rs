@@ -87,26 +87,89 @@ impl ViewportPanel {
             });
     }
 
+    /// Opens the shape list, or closes it if open (B in the Draw tool).
+    pub(super) fn toggle_shape_menu(&mut self) {
+        self.shape_menu = match self.shape_menu {
+            Some(_) => None,
+            None => Shape::ALL.iter().position(|s| *s == self.tools.shape()),
+        };
+    }
+
     fn shape_picker(&mut self, ui: &mut Ui) {
         ui.label("Shape");
-        let mut shape = self.tools.shape();
-        let picker = egui::ComboBox::from_id_salt("halberd_shape_picker")
-            .selected_text(shape.label())
-            .show_ui(ui, |ui| {
-                for option in Shape::ALL {
-                    ui.selectable_value(&mut shape, option, option.label());
-                }
-            });
-        picker.response.widget_info(|| {
+        let shape = self.tools.shape();
+        let button = ui.button(format!("{} ⏷", shape.label()));
+        button.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, SHAPE_PICKER_NAME)
         });
+        let clicked = button.clicked();
         let hint = if shape.has_direction() {
-            "Wedges and stairs climb, and arches span, the way you drag."
+            "Wedges and stairs climb, and arches span, the way you drag (R while drawing \
+             turns it). B opens this list."
         } else {
-            "What the Draw tool makes."
+            "What the Draw tool makes. B opens this list; arrow keys and Enter pick."
         };
-        picker.response.on_hover_text(hint);
-        self.tools.set_shape(shape);
+        let below = button.rect.left_bottom();
+        let button_rect = button.rect;
+        button.on_hover_text(hint);
+        if clicked {
+            self.toggle_shape_menu();
+        }
+        self.shape_menu_list(ui, below, button_rect);
+    }
+
+    /// The open shape list: click a shape, or move with the arrow keys and
+    /// pick with Enter or Space. Escape, or a click elsewhere, closes it.
+    fn shape_menu_list(&mut self, ui: &Ui, at: egui::Pos2, button: Rect) {
+        let Some(mut highlight) = self.shape_menu else {
+            return;
+        };
+        let count = Shape::ALL.len();
+        let (down, up, pick, close) = ui.input_mut(|i| {
+            let mut key = |k| i.consume_key(egui::Modifiers::NONE, k);
+            (
+                key(egui::Key::ArrowDown),
+                key(egui::Key::ArrowUp),
+                key(egui::Key::Enter) || key(egui::Key::Space),
+                key(egui::Key::Escape),
+            )
+        });
+        if down {
+            highlight = (highlight + 1) % count;
+        }
+        if up {
+            highlight = (highlight + count - 1) % count;
+        }
+        let mut chosen = pick.then_some(Shape::ALL[highlight]);
+        let area = egui::Area::new(egui::Id::new("halberd_shape_menu"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(at)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    for (index, shape) in Shape::ALL.into_iter().enumerate() {
+                        if ui
+                            .selectable_label(index == highlight, shape.label())
+                            .clicked()
+                        {
+                            chosen = Some(shape);
+                        }
+                    }
+                });
+            });
+        let clicked_elsewhere = ui.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !area.response.rect.contains(p) && !button.contains(p))
+        });
+        if let Some(shape) = chosen {
+            self.tools.set_shape(shape);
+            self.shape_menu = None;
+        } else if close || clicked_elsewhere {
+            self.shape_menu = None;
+        } else {
+            self.shape_menu = Some(highlight);
+        }
     }
 
     /// Sides, arch thickness or step height, for the shapes that have them.

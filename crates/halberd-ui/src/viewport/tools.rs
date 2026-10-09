@@ -43,30 +43,45 @@ impl ViewportPanel {
         // Escape that closes a menu or popup is for that menu only. The menu
         // may already have closed itself this frame, so also ask whether one
         // was open when the frame began.
-        let popup_open = egui::Popup::is_any_open(ui.ctx()) || self.popup_was_open;
-        let (left_down, additive, escape, box_key, inside_key) = ui.input(|i| {
+        let popup_open =
+            egui::Popup::is_any_open(ui.ctx()) || self.popup_was_open || self.shape_menu.is_some();
+        let (left_down, additive, escape, box_key, inside_key, select_key) = ui.input(|i| {
             (
                 i.pointer.button_down(PointerButton::Primary),
                 i.modifiers.command,
                 !typing && !popup_open && i.key_pressed(Key::Escape),
                 !typing && first_press(i, Key::B, |m| m.is_none()),
                 !typing && first_press(i, Key::W, |m| m.command_only()),
+                !typing && first_press(i, Key::Q, |m| m.is_none()),
             )
         });
+        let (uniform, centered) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
         if inside_key {
             let on = !self.tools.inside_entities();
             self.tools.set_inside_entities(on);
         }
         if !typing {
-            self.gizmo_keys(ui);
+            if self.tools.is_drawing() {
+                // While drawing, R turns the shape; the gizmo keys wait.
+                let turn = ui.input(|i| first_press(i, Key::R, |m| !m.command));
+                if turn {
+                    self.tools.turn_drawing();
+                }
+            } else {
+                self.gizmo_keys(ui);
+            }
         }
         if box_key {
-            let next = if self.tools.tool() == Tool::Box {
-                Tool::Select
+            // B picks Draw; B again opens the shape list.
+            if self.tools.tool() == Tool::Box {
+                self.toggle_shape_menu();
             } else {
-                Tool::Box
-            };
-            self.tools.set_tool(next);
+                self.tools.set_tool(Tool::Box);
+            }
+        }
+        if select_key {
+            self.shape_menu = None;
+            self.tools.set_tool(Tool::Select);
         }
         // A left press while the right or middle button is moving the camera
         // belongs to the camera, not the tool.
@@ -92,6 +107,8 @@ impl ViewportPanel {
             released,
             additive,
             cancel: escape,
+            uniform,
+            centered,
         };
         let camera = *self.controller.camera();
         let mut notes = Vec::new();
@@ -148,6 +165,9 @@ impl ViewportPanel {
 
     /// The tool buttons in the viewport's top-left corner.
     pub(super) fn tool_switcher(&mut self, ui: &mut Ui, rect: Rect) {
+        if self.tools.tool() != Tool::Box {
+            self.shape_menu = None;
+        }
         let area = Rect::from_min_size(
             rect.left_top() + vec2(8.0, 26.0),
             vec2((rect.width() - 16.0).max(0.0), 30.0),

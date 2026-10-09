@@ -109,6 +109,9 @@ pub struct ViewportPanel {
     popup_was_open: bool,
     /// A box ("save changes?", a problem) is showing: tool keys wait.
     keys_blocked: bool,
+    /// The shape list is open (B in the Draw tool), with this entry
+    /// highlighted.
+    shape_menu: Option<usize>,
     length_unit: LengthUnit,
     show_player: bool,
     right_was_held: bool,
@@ -125,6 +128,7 @@ impl ViewportPanel {
             left_was_held: false,
             popup_was_open: false,
             keys_blocked: false,
+            shape_menu: None,
             length_unit: LengthUnit::Units,
             show_player: true,
             right_was_held: false,

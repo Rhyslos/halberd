@@ -123,6 +123,14 @@ pub enum Heading {
 }
 
 impl Heading {
+    /// This heading turned `quarters` quarter turns clockwise, seen from
+    /// above (Z up): +X, then −Y, −X, +Y.
+    pub fn turned_clockwise(self, quarters: u8) -> Self {
+        let order = [Self::PosX, Self::NegY, Self::NegX, Self::PosY];
+        let at = order.iter().position(|h| *h == self).unwrap_or(0);
+        order[(at + usize::from(quarters % 4)) % 4]
+    }
+
     /// The heading of a drag along the ground: its longer direction.
     pub fn of_drag(delta: Vec2) -> Self {
         if delta.y.abs() > delta.x.abs() {
