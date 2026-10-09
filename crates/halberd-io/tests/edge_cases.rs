@@ -174,3 +174,40 @@ fn a_byte_order_mark_is_kept() {
     save_map(&mut doc, &out).unwrap();
     assert_eq!(std::fs::read(&out).unwrap(), bytes);
 }
+
+/// The sample with a broken solid (id 77) inside the func_detail, after its
+/// shown solid (id 23).
+fn sample_with_broken_entity_solid() -> String {
+    let after = SAMPLE.find("\"id\" \"23\"").unwrap();
+    let at = after + SAMPLE[after..].find("\r\n\teditor\r\n").unwrap() + 2;
+    let broken = "\tsolid\r\n\t{\r\n\t\t\"id\" \"77\"\r\n\t\tside\r\n\t\t{\r\n\t\t\t\"plane\" \"(0 0 0) (1 0 0) (0 1 0)\"\r\n\t\t}\r\n\t}\r\n";
+    format!("{}{broken}{}", &SAMPLE[..at], &SAMPLE[at..])
+}
+
+#[test]
+fn entity_brushes_go_back_in_their_places_around_unshown_ones() {
+    // Regression: shown brushes were all put just before `editor`, so an
+    // unshown brush after them moved in front.
+    let text = sample_with_broken_entity_solid();
+    let doc = open(&text);
+    assert_eq!(saved_text(&doc), text);
+}
+
+#[test]
+fn deleting_an_entitys_shown_brushes_keeps_its_unshown_ones() {
+    let text = sample_with_broken_entity_solid();
+    let mut doc = open(&text);
+    let (detail, _) = doc
+        .objects()
+        .find(|(_, o)| matches!(o, halberd_doc::Object::Entity(e) if e.classname == "func_detail"))
+        .unwrap();
+    let brushes: Vec<_> = doc.brushes_of(detail).collect();
+    doc.execute(Command::Remove(brushes)).unwrap();
+    assert!(doc.get(detail).is_some(), "the entity stays");
+    let saved = saved_text(&doc);
+    assert!(
+        saved.contains("\"id\" \"77\""),
+        "the unshown brush is saved"
+    );
+    assert!(!saved.contains("\"id\" \"23\""));
+}

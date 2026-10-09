@@ -92,13 +92,20 @@ impl SceneGeometry {
     pub fn from_document(doc: &Document) -> Self {
         let mut scene = Self::default();
         for (id, object) in doc.objects() {
-            let selected = doc.is_selected(id);
+            // A brush entity's brushes are selected with it, or one by one.
+            let selected = doc.is_shown_selected(id);
             match object {
-                Object::Brush(brush) => scene.add_brush(brush.brush(), BRUSH_COLOR, selected),
+                Object::Brush(brush) => {
+                    let base = if brush.entity().is_some() {
+                        ENTITY_BRUSH_COLOR
+                    } else {
+                        BRUSH_COLOR
+                    };
+                    scene.add_brush(brush.brush(), base, selected);
+                }
+                // A brush entity is drawn as its brushes, even with an origin.
+                Object::Entity(_) if doc.has_brushes(id) => {}
                 Object::Entity(entity) => {
-                    for solid in &entity.solids {
-                        scene.add_brush(solid.brush(), ENTITY_BRUSH_COLOR, selected);
-                    }
                     if let Some(marker) = entity.marker().and_then(|m| Brush::cuboid(m).ok()) {
                         scene.add_brush(&marker, POINT_ENTITY_COLOR, selected);
                     }
@@ -256,5 +263,45 @@ mod tests {
         let lines = box_outline(Aabb::from_corners(Vec3::ZERO, Vec3::ONE), PREVIEW_COLOR);
         assert_eq!(lines.len(), 24);
         assert!(lines.iter().all(|v| v.color == PREVIEW_COLOR));
+    }
+
+    /// A func_detail with an origin (which must not be drawn) and two
+    /// brushes, then a light.
+    fn doc_with_entities() -> Document {
+        use halberd_doc::{BrushObject, EntityObject, MapObject};
+        let cube = |x: f32| {
+            Brush::cuboid(Aabb::from_corners(Vec3::splat(x), Vec3::splat(x + 64.0))).unwrap()
+        };
+        let entity = |classname: &str, origin| EntityObject {
+            classname: classname.into(),
+            origin,
+            file_data: Vec::new(),
+        };
+        let detail = MapObject::Entity(
+            entity("func_detail", Some(Vec3::splat(500.0))),
+            vec![BrushObject::new(cube(0.0)), BrushObject::new(cube(100.0))],
+        );
+        let light = MapObject::Entity(entity("light", Some(Vec3::splat(300.0))), Vec::new());
+        Document::from_map(vec![detail, light], Default::default()).unwrap()
+    }
+
+    #[test]
+    fn entity_brushes_are_teal_and_select_with_their_entity() {
+        let mut doc = doc_with_entities();
+        let scene = SceneGeometry::from_document(&doc);
+        let count =
+            |scene: &SceneGeometry, color| scene.faces.iter().filter(|v| v.color == color).count();
+        assert_eq!(count(&scene, ENTITY_BRUSH_COLOR), 2 * 36);
+        assert_eq!(count(&scene, POINT_ENTITY_COLOR), 36, "the light only");
+        let detail = doc.objects().next().unwrap().0;
+        doc.set_selection([detail]);
+        let scene = SceneGeometry::from_document(&doc);
+        assert_eq!(count(&scene, SELECTED_COLOR), 2 * 36, "both brushes");
+        // One brush on its own.
+        let first = doc.brushes_of(detail).next().unwrap();
+        doc.set_selection([first]);
+        let scene = SceneGeometry::from_document(&doc);
+        assert_eq!(count(&scene, SELECTED_COLOR), 36);
+        assert_eq!(count(&scene, ENTITY_BRUSH_COLOR), 36);
     }
 }

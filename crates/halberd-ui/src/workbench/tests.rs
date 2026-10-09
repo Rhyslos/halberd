@@ -370,7 +370,7 @@ pub(super) fn type_into(harness: &mut Harness<'static, Workbench>, field: &str, 
 }
 
 fn only_bounds(wb: &Workbench) -> halberd_geom::Aabb {
-    wb.document().objects().next().unwrap().1.bounds()
+    wb.document().objects().next().unwrap().1.bounds().unwrap()
 }
 
 #[test]

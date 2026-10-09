@@ -29,9 +29,9 @@ fn brushes_and_entities_are_read() {
     let doc = open(SAMPLE);
     let brushes = doc
         .objects()
-        .filter(|(_, o)| o.as_brush().is_some())
+        .filter(|(_, o)| o.as_brush().is_some_and(|b| b.entity().is_none()))
         .count();
-    assert_eq!(brushes, 2);
+    assert_eq!(brushes, 2, "world brushes");
     let entities: Vec<&str> = doc
         .objects()
         .filter_map(|(_, o)| match o {
@@ -44,8 +44,11 @@ fn brushes_and_entities_are_read() {
         ["info_player_start", "light", "func_detail", "logic_relay"]
     );
     let floor = doc.objects().next().unwrap().1;
-    assert_eq!(floor.bounds().min, Vec3::new(-256.0, -256.0, -16.0));
-    assert_eq!(floor.bounds().max, Vec3::new(256.0, 256.0, 0.0));
+    assert_eq!(
+        floor.bounds().unwrap().min,
+        Vec3::new(-256.0, -256.0, -16.0)
+    );
+    assert_eq!(floor.bounds().unwrap().max, Vec3::new(256.0, 256.0, 0.0));
     let floor = floor.as_brush().unwrap();
     assert!(
         floor
@@ -53,18 +56,14 @@ fn brushes_and_entities_are_read() {
             .iter()
             .all(|f| f.material == "DEV/DEV_MEASUREGENERIC01B")
     );
-    let detail = doc
+    let (detail, _) = doc
         .objects()
-        .find_map(|(_, o)| match o {
-            Object::Entity(e) if e.classname == "func_detail" => Some(e),
-            _ => None,
-        })
+        .find(|(_, o)| matches!(o, Object::Entity(e) if e.classname == "func_detail"))
         .unwrap();
-    assert_eq!(detail.solids.len(), 1);
-    assert!(
-        detail.marker().is_none(),
-        "brush entities show their brushes"
-    );
+    let brushes: Vec<_> = doc.brushes_of(detail).collect();
+    assert_eq!(brushes.len(), 1);
+    let brush = doc.get(brushes[0]).unwrap().as_brush().unwrap();
+    assert_eq!(brush.entity(), Some(detail));
     assert!(!doc.is_modified());
 }
 
@@ -116,7 +115,7 @@ fn a_moved_brush_keeps_its_ids_materials_and_editor_data() {
     assert_eq!(rewritten, 4);
     // Reading it back gives the moved brush.
     let again = open(&text);
-    let bounds = again.objects().next().unwrap().1.bounds();
+    let bounds = again.objects().next().unwrap().1.bounds().unwrap();
     assert_eq!(bounds.min, Vec3::new(-224.0, -256.0, 48.0));
     // Everything else is untouched: only the moved brush's planes differ.
     let changed_lines = text
@@ -185,7 +184,7 @@ fn a_new_map_is_a_complete_hammer_file() {
     // And it reads back as the same box.
     let again = open(&text);
     assert_eq!(
-        again.objects().next().unwrap().1.bounds().size(),
+        again.objects().next().unwrap().1.bounds().unwrap().size(),
         Vec3::new(128.0, 64.0, 128.0)
     );
 }
@@ -359,4 +358,51 @@ fn fuzz_damaged_maps_never_crash() {
             assert!(open_map_text(&saved, TextEncoding::Utf8).is_ok());
         }
     }
+}
+
+#[test]
+fn a_brush_inside_an_entity_can_be_moved_and_saved() {
+    let mut doc = open(SAMPLE);
+    let (detail, _) = doc
+        .objects()
+        .find(|(_, o)| matches!(o, Object::Entity(e) if e.classname == "func_detail"))
+        .unwrap();
+    let brush = doc.brushes_of(detail).next().unwrap();
+    let moved = doc
+        .get(brush)
+        .unwrap()
+        .as_brush()
+        .unwrap()
+        .brush()
+        .translated(Vec3::new(0.0, 0.0, 64.0))
+        .unwrap();
+    doc.execute(Command::TransformBrushes {
+        kind: TransformKind::Move,
+        brushes: vec![(brush, moved)],
+    })
+    .unwrap();
+    let text = saved_text(&doc);
+    let vmf = Vmf::parse(&text).unwrap();
+    // Still inside the func_detail, still solid 23, now 64 units higher.
+    let entity = vmf
+        .entities()
+        .find(|e| e.get("classname") == Some("func_detail"))
+        .unwrap();
+    let solid = entity.blocks("solid").next().unwrap();
+    assert_eq!(solid.get("id"), Some("23"));
+    let again = open(&text);
+    let (detail, _) = again
+        .objects()
+        .find(|(_, o)| matches!(o, Object::Entity(e) if e.classname == "func_detail"))
+        .unwrap();
+    let bounds = again.bounds_of(detail).unwrap();
+    let before = open(SAMPLE);
+    let (old, _) = before
+        .objects()
+        .find(|(_, o)| matches!(o, Object::Entity(e) if e.classname == "func_detail"))
+        .unwrap();
+    assert_eq!(bounds.min.z, before.bounds_of(old).unwrap().min.z + 64.0);
+    // Undoing gives back the exact file.
+    doc.undo();
+    assert_eq!(saved_text(&doc), SAMPLE);
 }

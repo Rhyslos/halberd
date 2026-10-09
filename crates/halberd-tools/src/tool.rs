@@ -108,6 +108,9 @@ pub struct ToolController {
     press_at: Option<Vec2>,
     drag: Option<BoxDrag>,
     gizmo: Gizmo,
+    /// Clicks pick single brushes inside brush entities (Hammer's
+    /// "Ignore groups") instead of the whole entity.
+    inside_entities: bool,
 }
 
 impl ToolController {
@@ -120,7 +123,19 @@ impl ToolController {
             press_at: None,
             drag: None,
             gizmo: Gizmo::default(),
+            inside_entities: false,
         }
+    }
+
+    /// True if clicks pick single brushes inside brush entities (such as
+    /// one brush of a `func_detail`) rather than the whole entity.
+    pub fn inside_entities(&self) -> bool {
+        self.inside_entities
+    }
+
+    /// Turns picking inside brush entities on or off.
+    pub fn set_inside_entities(&mut self, on: bool) {
+        self.inside_entities = on;
     }
 
     /// The active tool.
@@ -279,7 +294,9 @@ impl ToolController {
         if cursor.distance(pressed_at) > CLICK_SLOP {
             return None;
         }
-        let hit = ray.and_then(|r| DocumentScene::new(doc).pick_object(r));
+        let hit = ray
+            .and_then(|r| DocumentScene::new(doc).pick_object(r))
+            .map(|(id, point)| (doc.selectable(id, self.inside_entities), point));
         match (hit, input.additive) {
             (Some((id, _)), true) => Some(ToolAction::ToggleSelected(id)),
             (None, true) => None,

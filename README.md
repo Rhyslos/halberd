@@ -32,14 +32,14 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 0 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 1 of 19
 
-`░░░░░░░░░░░░░` 0%
+`█░░░░░░░░░░░░` 5%
 
 <details>
 <summary>Milestones</summary>
 
-- [ ] Select single brushes inside brush entities such as `func_detail` (like Hammer's "Ignore groups")
+- [x] Select single brushes inside brush entities such as `func_detail` (like Hammer's "Ignore groups")
 - [ ] Primitives: wedge, cylinder, cone, sphere, arch, stairs
 - [ ] Face, edge and vertex selection modes
 - [ ] Shape operations: extrude, bevel, join, split, bridge, clip, mirror
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-09 | Brushes inside entities: pick, move, resize and delete single brushes of a `func_detail` (Ctrl+W) |
 | 2026-10-08 | Console: messages with levels, filters, search and copy, and a log file that survives crashes. Phase 0 milestones complete |
 | 2026-10-08 | Hammer maps: open and save VMF files with nothing lost |
 | 2026-10-08 | Transform gizmo: move, rotate and scale brushes with W / R / S / T |
@@ -130,6 +131,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-09: a brush inside an entity.** With *Inside entities* on, the `func_detail`'s brush is picked on its own: the Move gizmo is on it, Scene shows it under its entity, and Properties says what it is part of.
+
+![A brush inside a func_detail selected on its own, with the Move gizmo](docs/screenshots/2026-10-09-brush-inside-entity.png)
 
 **2026-10-08: the Console.** A map with a brush Halberd can't show: the warning sits between routine messages, with filter buttons, search, Copy and Clear above.
 

@@ -2,19 +2,33 @@
 //! they ask, and the tool switcher.
 
 use super::ViewportPanel;
-use egui::{Align, Color32, Key, Layout, PointerButton, Rect, Ui, UiBuilder, vec2};
+use egui::{Align, Color32, Key, Layout, Modifiers, PointerButton, Rect, Ui, UiBuilder, vec2};
 use glam::Vec2;
 use halberd_config::LengthUnit;
 use halberd_doc::Document;
 use halberd_tools::{BOX_HEIGHT_RANGE, GizmoMode, Tool, ToolAction, ToolInput};
 
-/// True if `key` went down this frame, not counting the repeats a held key
-/// sends: holding W while flying must not flip the gizmo on and off.
-fn first_press(input: &egui::InputState, key: Key) -> bool {
-    input.events.iter().any(
-        |e| matches!(e, egui::Event::Key { key: k, pressed: true, repeat: false, .. } if *k == key),
-    )
+/// True if `key` went down this frame with modifiers `held` accepts, not
+/// counting the repeats a held key sends (holding W while flying must not
+/// flip the gizmo on and off). The modifiers are the ones held when the key
+/// went down: Ctrl may already be let go by the frame that reads it (fast
+/// typing, scripted input), and Ctrl+W must not count as a plain W.
+fn first_press(input: &egui::InputState, key: Key, held: impl Fn(Modifiers) -> bool) -> bool {
+    input.events.iter().any(|e| {
+        matches!(
+            e,
+            egui::Event::Key { key: k, pressed: true, repeat: false, modifiers, .. }
+                if *k == key && held(*modifiers)
+        )
+    })
 }
+
+/// The button that picks single brushes inside brush entities (its label
+/// also shows the key: Ctrl+W, or Cmd+W on macOS).
+pub const INSIDE_ENTITIES_LABEL: &str = "Inside entities";
+/// The key for [`INSIDE_ENTITIES_LABEL`].
+const INSIDE_ENTITIES_SHORTCUT: egui::KeyboardShortcut =
+    egui::KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 
 /// Screen-reader name of the Box tool's height field.
 pub(crate) const NEW_BOX_HEIGHT_NAME: &str = "New box height";
@@ -34,14 +48,19 @@ impl ViewportPanel {
         // may already have closed itself this frame, so also ask whether one
         // was open when the frame began.
         let popup_open = egui::Popup::is_any_open(ui.ctx()) || self.popup_was_open;
-        let (left_down, additive, escape, box_key) = ui.input(|i| {
+        let (left_down, additive, escape, box_key, inside_key) = ui.input(|i| {
             (
                 i.pointer.button_down(PointerButton::Primary),
                 i.modifiers.command,
                 !typing && !popup_open && i.key_pressed(Key::Escape),
-                !typing && i.modifiers.is_none() && first_press(i, Key::B),
+                !typing && first_press(i, Key::B, |m| m.is_none()),
+                !typing && first_press(i, Key::W, |m| m.command_only()),
             )
         });
+        if inside_key {
+            let on = !self.tools.inside_entities();
+            self.tools.set_inside_entities(on);
+        }
         if !typing {
             self.gizmo_keys(ui);
         }
@@ -108,20 +127,23 @@ impl ViewportPanel {
     /// Move and Scale instead; R and T work either way.
     fn gizmo_keys(&mut self, ui: &Ui) {
         let flying = self.right_was_held;
+        let move_or_scale_ok = move |m: Modifiers| {
+            if flying { m.shift_only() } else { m.is_none() }
+        };
+        let rotate_or_all_ok = move |m: Modifiers| m.is_none() || (flying && m.shift_only());
         let picked = ui.input(|i| {
-            let plain = i.modifiers.is_none();
-            let shift_only = i.modifiers.shift_only();
-            let move_or_scale_ok = if flying { shift_only } else { plain };
-            let rotate_or_all_ok = plain || (flying && shift_only);
             [
-                (Key::W, GizmoMode::Move, move_or_scale_ok),
-                (Key::R, GizmoMode::Rotate, rotate_or_all_ok),
-                (Key::S, GizmoMode::Scale, move_or_scale_ok),
-                (Key::T, GizmoMode::All, rotate_or_all_ok),
+                (Key::W, GizmoMode::Move),
+                (Key::R, GizmoMode::Rotate),
+                (Key::S, GizmoMode::Scale),
+                (Key::T, GizmoMode::All),
             ]
             .into_iter()
-            .find(|(key, _, allowed)| *allowed && first_press(i, *key))
-            .map(|(_, mode, _)| mode)
+            .find(|(key, mode)| match mode {
+                GizmoMode::Move | GizmoMode::Scale => first_press(i, *key, move_or_scale_ok),
+                GizmoMode::Rotate | GizmoMode::All => first_press(i, *key, rotate_or_all_ok),
+            })
+            .map(|(_, mode)| mode)
         });
         if let Some(mode) = picked {
             self.tools.toggle_gizmo_mode(mode);
@@ -166,6 +188,24 @@ impl ViewportPanel {
                     {
                         self.tools.toggle_gizmo_mode(mode);
                     }
+                }
+                ui.separator();
+                let mut inside = self.tools.inside_entities();
+                if ui
+                    .toggle_value(
+                        &mut inside,
+                        format!(
+                            "{INSIDE_ENTITIES_LABEL} {}",
+                            ui.ctx().format_shortcut(&INSIDE_ENTITIES_SHORTCUT)
+                        ),
+                    )
+                    .on_hover_text(
+                        "Click picks single brushes inside brush entities such as \
+                         func_detail, instead of the whole entity (Hammer's \"Ignore groups\").",
+                    )
+                    .changed()
+                {
+                    self.tools.set_inside_entities(inside);
                 }
                 if current == Tool::Box {
                     ui.separator();

@@ -259,7 +259,7 @@ pub(super) fn only_id(doc: &Document) -> ObjectId {
 }
 
 fn bounds_of(doc: &Document, id: ObjectId) -> Aabb {
-    doc.get(id).unwrap().bounds()
+    doc.bounds_of(id).unwrap()
 }
 
 #[test]

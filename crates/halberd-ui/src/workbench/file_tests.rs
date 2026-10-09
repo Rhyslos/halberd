@@ -124,27 +124,31 @@ fn problems_show_in_a_message_box_until_ok() {
 
 /// A workbench showing a map with a light and a func_detail.
 fn workbench_with_entities() -> Workbench {
-    use halberd_doc::{BrushObject, EntityObject, Object};
-    let light = Object::Entity(EntityObject {
-        classname: "light".into(),
-        origin: Some(glam::Vec3::new(0.0, 0.0, 64.0)),
-        solids: Vec::new(),
-        file_data: vec![
-            halberd_vmf_pair("classname", "light"),
-            halberd_vmf_pair("_light", "255 240 200 300"),
-        ],
-    });
+    use halberd_doc::{BrushObject, EntityObject, MapObject};
+    let light = MapObject::Entity(
+        EntityObject {
+            classname: "light".into(),
+            origin: Some(glam::Vec3::new(0.0, 0.0, 64.0)),
+            file_data: vec![
+                halberd_vmf_pair("classname", "light"),
+                halberd_vmf_pair("_light", "255 240 200 300"),
+            ],
+        },
+        Vec::new(),
+    );
     let cube = halberd_geom::Brush::cuboid(halberd_geom::Aabb::from_corners(
         glam::Vec3::ZERO,
         glam::Vec3::splat(64.0),
     ))
     .unwrap();
-    let detail = Object::Entity(EntityObject {
-        classname: "func_detail".into(),
-        origin: None,
-        solids: vec![BrushObject::new(cube)],
-        file_data: Vec::new(),
-    });
+    let detail = MapObject::Entity(
+        EntityObject {
+            classname: "func_detail".into(),
+            origin: None,
+            file_data: Vec::new(),
+        },
+        vec![BrushObject::new(cube)],
+    );
     let doc = halberd_doc::Document::from_map(vec![light, detail], Default::default()).unwrap();
     let mut wb = Workbench::new(info(), None);
     wb.set_document(doc, Some("demo.vmf".into()));
@@ -281,7 +285,7 @@ fn resizing_a_box_keeps_each_face_material_on_its_side() {
     // Regression: the size fields built a fresh cuboid, whose faces come in
     // a different order from a box opened from Hammer, so materials (and
     // face ids, displacements…) swapped sides.
-    use halberd_doc::{BrushObject, FaceInfo, Object};
+    use halberd_doc::{BrushObject, FaceInfo};
     use halberd_geom::Plane;
     let sides = [
         ("TOP", glam::Vec3::Z, 64.0),
@@ -303,7 +307,7 @@ fn resizing_a_box_keeps_each_face_material_on_its_side() {
         })
         .collect();
     let brush = halberd_geom::Brush::from_planes(&planes).unwrap();
-    let object = Object::Brush(BrushObject::from_parts(brush, &infos, Vec::new()));
+    let object = halberd_doc::MapObject::Brush(BrushObject::from_parts(brush, &infos, Vec::new()));
     let doc = halberd_doc::Document::from_map(vec![object], Default::default()).unwrap();
     let id = doc.objects().next().unwrap().0;
     let mut wb = Workbench::new(info(), None);

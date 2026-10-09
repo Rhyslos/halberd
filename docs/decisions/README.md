@@ -19,3 +19,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0010](0010-transform-gizmo.md) | Transform gizmo | Accepted |
 | [0011](0011-vmf-maps.md) | Opening and saving Hammer maps (VMF) | Accepted |
 | [0012](0012-console-and-log-file.md) | The Console and the log file | Accepted |
+| [0013](0013-brushes-inside-entities.md) | Brushes inside brush entities | Accepted |

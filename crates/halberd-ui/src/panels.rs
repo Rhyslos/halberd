@@ -7,9 +7,21 @@ use glam::Vec3;
 use halberd_config::LengthUnit;
 use halberd_doc::{Command, Document, Object, ObjectId};
 use halberd_geom::{Aabb, Brush, MIN_SIZE, Plane};
+use std::collections::BTreeSet;
+
+/// One line of the Scene list.
+struct SceneRow {
+    id: ObjectId,
+    name: String,
+    /// For a brush entity: its brush count, and whether its list is open.
+    group: Option<(usize, bool)>,
+    /// A brush listed under its entity.
+    nested: bool,
+}
 
 /// The Scene panel: every object in the map. Click to select; Ctrl+click
-/// to add or remove.
+/// to add or remove. A brush entity's brushes are listed under it, folded
+/// away until its arrow is clicked (or one of them is selected).
 pub(crate) fn scene_contents(ui: &mut Ui, doc: &mut Document) {
     if doc.is_empty() {
         placeholder(
@@ -19,27 +31,128 @@ pub(crate) fn scene_contents(ui: &mut Ui, doc: &mut Document) {
         );
         return;
     }
-    let rows: Vec<(ObjectId, String)> = doc.objects().map(|(id, o)| (id, object_name(o))).collect();
+    // Which lists were opened or closed by hand, for this map only (ids
+    // start again in every map).
+    let fold_id = egui::Id::new("halberd_scene_folding");
+    let mut folding: SceneFolding = ui
+        .data(|d| d.get_temp(fold_id))
+        .filter(|f: &SceneFolding| f.map == doc.instance())
+        .unwrap_or(SceneFolding {
+            map: doc.instance(),
+            ..SceneFolding::default()
+        });
+    let rows = scene_rows(doc, &folding);
     let additive = ui.input(|i| i.modifiers.command);
     let row_height = ui.spacing().interact_size.y;
     ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, rows.len(), |ui, range| {
-            for (id, name) in &rows[range] {
-                let id = *id;
-                let selected = doc.is_selected(id);
-                if ui
-                    .selectable_label(selected, format!("{name} {id}"))
-                    .clicked()
-                {
-                    if additive {
-                        doc.toggle_selected(id);
-                    } else {
-                        doc.set_selection([id]);
+            for row in &rows[range] {
+                ui.horizontal(|ui| {
+                    let indent = ui.spacing().indent;
+                    match row.group {
+                        Some((_, expanded)) => {
+                            let arrow = if expanded { "⏷" } else { "⏵" };
+                            let toggle = ui.add(egui::Button::new(arrow).frame(false));
+                            let label = if expanded { "Fold" } else { "Unfold" };
+                            toggle.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::WidgetType::Button,
+                                    true,
+                                    format!("{label} {} {}", row.name, row.id),
+                                )
+                            });
+                            if toggle.clicked() {
+                                folding.set_open(row.id, !expanded);
+                            }
+                        }
+                        None if row.nested => ui.add_space(indent * 1.5),
+                        None => ui.add_space(indent * 0.75),
                     }
-                }
+                    let text = match row.group {
+                        Some((count, _)) => format!(
+                            "{} {} ({count} brush{})",
+                            row.name,
+                            row.id,
+                            if count == 1 { "" } else { "es" }
+                        ),
+                        None => format!("{} {}", row.name, row.id),
+                    };
+                    if ui.selectable_label(doc.is_selected(row.id), text).clicked() {
+                        if additive {
+                            doc.toggle_selected(row.id);
+                        } else {
+                            doc.set_selection([row.id]);
+                        }
+                    }
+                });
             }
         });
+    ui.data_mut(|d| d.insert_temp(fold_id, folding));
+}
+
+/// Brush entity lists in the Scene panel opened or closed by hand. A list
+/// not mentioned is open while one of its brushes is selected.
+#[derive(Clone, Default)]
+struct SceneFolding {
+    /// The map these belong to ([`Document::instance`]).
+    map: u64,
+    opened: BTreeSet<ObjectId>,
+    closed: BTreeSet<ObjectId>,
+}
+
+impl SceneFolding {
+    fn set_open(&mut self, id: ObjectId, open: bool) {
+        if open {
+            self.closed.remove(&id);
+            self.opened.insert(id);
+        } else {
+            self.opened.remove(&id);
+            self.closed.insert(id);
+        }
+    }
+
+    fn is_open(&self, id: ObjectId, brush_selected: bool) -> bool {
+        self.opened.contains(&id) || (brush_selected && !self.closed.contains(&id))
+    }
+}
+
+/// The Scene list's lines: objects in map order, with a brush entity's
+/// brushes under it while it is open.
+fn scene_rows(doc: &Document, folding: &SceneFolding) -> Vec<SceneRow> {
+    let mut rows = Vec::new();
+    for (id, object) in doc.objects() {
+        if object.as_brush().and_then(|b| b.entity()).is_some() {
+            continue; // Listed under its entity.
+        }
+        let name = object_name(object);
+        if !doc.has_brushes(id) {
+            rows.push(SceneRow {
+                id,
+                name,
+                group: None,
+                nested: false,
+            });
+            continue;
+        }
+        let brushes: Vec<ObjectId> = doc.brushes_of(id).collect();
+        let expanded = folding.is_open(id, brushes.iter().any(|b| doc.is_selected(*b)));
+        rows.push(SceneRow {
+            id,
+            name,
+            group: Some((brushes.len(), expanded)),
+            nested: false,
+        });
+        if expanded {
+            rows.extend(brushes.into_iter().map(|b| SceneRow {
+                id: b,
+                name: "Brush".to_string(),
+                group: None,
+                nested: true,
+            }));
+        }
+    }
+    rows
 }
 
 /// The Properties panel: the selection's size and position. A single box
@@ -47,6 +160,19 @@ pub(crate) fn scene_contents(ui: &mut Ui, doc: &mut Document) {
 /// objects show a summary.
 pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthUnit) {
     let count = doc.selection().len();
+    let single = (count == 1)
+        .then(|| doc.selection().iter().next().copied())
+        .flatten();
+    // An entity is described even when it has no box (no origin, and no
+    // brushes Halberd can show).
+    if let Some(id) = single
+        && let Some(Object::Entity(entity)) = doc.get(id)
+    {
+        ui.add_space(8.0);
+        ui.label(RichText::new("1 object selected").strong());
+        entity_details(ui, entity, doc.brushes_of(id).count());
+        return;
+    }
     let Some(bounds) = doc.selection_bounds() else {
         placeholder(
             ui,
@@ -70,14 +196,11 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthU
             Some(Object::Brush(brush)) => brush.brush().is_axis_aligned_box(),
             Some(Object::Entity(_)) | None => false,
         });
-    let single = (count == 1)
-        .then(|| doc.selection().iter().next().copied())
-        .flatten();
-    if let Some(Object::Entity(entity)) = single.and_then(|id| doc.get(id)) {
-        entity_details(ui, entity);
-        return;
-    }
     if let Some(Object::Brush(brush)) = single.and_then(|id| doc.get(id)) {
+        if let Some(owner) = brush.entity() {
+            let name = doc.get(owner).map(object_name).unwrap_or_default();
+            ui.label(format!("Part of {name} {owner}"));
+        }
         ui.label(materials_summary(brush));
     }
     match editable_box {
@@ -126,7 +249,7 @@ fn materials_summary(brush: &halberd_doc::BrushObject) -> String {
 }
 
 /// An entity's class and settings, read-only for now.
-fn entity_details(ui: &mut Ui, entity: &halberd_doc::EntityObject) {
+fn entity_details(ui: &mut Ui, entity: &halberd_doc::EntityObject, brushes: usize) {
     ui.label(RichText::new(&entity.classname).strong().size(15.0));
     ui.label(RichText::new("Editing entities comes in Phase 2.").weak());
     ui.add_space(4.0);
@@ -141,12 +264,18 @@ fn entity_details(ui: &mut Ui, entity: &halberd_doc::EntityObject) {
                 ui.end_row();
             }
         });
-    if !entity.solids.is_empty() {
+    if brushes > 0 {
         ui.label(format!(
-            "{} brush{}",
-            entity.solids.len(),
-            if entity.solids.len() == 1 { "" } else { "es" }
+            "{brushes} brush{}",
+            if brushes == 1 { "" } else { "es" }
         ));
+        ui.label(
+            RichText::new(
+                "To pick single brushes, turn on \"Inside entities\" (Ctrl+W) in the \
+                 viewport, or open the entity's list in Scene.",
+            )
+            .weak(),
+        );
     }
 }
 

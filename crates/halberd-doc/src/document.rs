@@ -2,7 +2,7 @@
 
 use crate::command::{Change, Command};
 use crate::history::{Entry, History};
-use crate::{BrushObject, DocError, MapFileData, Object, ObjectId};
+use crate::{BrushObject, DocError, MapFileData, MapObject, Object, ObjectId};
 use glam::Vec3;
 use halberd_geom::Aabb;
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,6 +22,8 @@ pub struct Document {
     objects: BTreeMap<ObjectId, Object>,
     next_id: u64,
     selection: BTreeSet<ObjectId>,
+    /// Each brush entity's brushes, worked out from the brushes.
+    members: BTreeMap<ObjectId, BTreeSet<ObjectId>>,
     history: History,
     revision: u64,
     selection_revision: u64,
@@ -36,6 +38,7 @@ impl Default for Document {
             objects: BTreeMap::new(),
             next_id: 0,
             selection: BTreeSet::new(),
+            members: BTreeMap::new(),
             history: History::default(),
             revision: 0,
             selection_revision: 0,
@@ -53,6 +56,7 @@ impl Clone for Document {
             objects: self.objects.clone(),
             next_id: self.next_id,
             selection: self.selection.clone(),
+            members: self.members.clone(),
             history: self.history.clone(),
             revision: self.revision,
             selection_revision: self.selection_revision,
@@ -68,12 +72,19 @@ impl Document {
         Self::default()
     }
 
-    /// A map read from a file: these objects (given ids in order), and the
-    /// rest of the file's contents. Nothing is selected, there is nothing to
-    /// undo, and it counts as saved. Objects beyond [`MAX_OBJECTS`] are
-    /// refused.
-    pub fn from_map(objects: Vec<Object>, file_data: MapFileData) -> Result<Self, DocError> {
-        if objects.len() > MAX_OBJECTS {
+    /// A map read from a file: these objects (given ids in order, each
+    /// entity before its brushes), and the rest of the file's contents.
+    /// Nothing is selected, there is nothing to undo, and it counts as
+    /// saved. Objects beyond [`MAX_OBJECTS`] (brushes included) are refused.
+    pub fn from_map(objects: Vec<MapObject>, file_data: MapFileData) -> Result<Self, DocError> {
+        let count: usize = objects
+            .iter()
+            .map(|o| match o {
+                MapObject::Brush(_) => 1,
+                MapObject::Entity(_, brushes) => 1 + brushes.len(),
+            })
+            .sum();
+        if count > MAX_OBJECTS {
             return Err(DocError::TooManyObjects);
         }
         let mut doc = Self {
@@ -81,8 +92,21 @@ impl Document {
             ..Self::default()
         };
         for object in objects {
-            let id = doc.new_id();
-            doc.objects.insert(id, object);
+            match object {
+                MapObject::Brush(brush) => {
+                    let id = doc.new_id();
+                    doc.insert(id, Object::Brush(brush));
+                }
+                MapObject::Entity(entity, brushes) => {
+                    let owner = doc.new_id();
+                    doc.insert(owner, Object::Entity(entity));
+                    for mut brush in brushes {
+                        brush.set_entity(Some(owner));
+                        let id = doc.new_id();
+                        doc.insert(id, Object::Brush(brush));
+                    }
+                }
+            }
         }
         Ok(doc)
     }
@@ -147,7 +171,14 @@ impl Document {
     }
 
     fn record(&mut self, command: Command, merge_key: Option<u64>) -> Result<(), DocError> {
-        let label = command.describe();
+        let label = match &command {
+            // Name everything that goes: an entity takes its brushes along.
+            Command::Remove(ids) => {
+                let all = self.with_dependents(ids.iter().copied().collect());
+                Command::Remove(all.into_iter().collect()).describe()
+            }
+            other => other.describe(),
+        };
         let change = self.prepare(command)?;
         let change = self.apply(change);
         self.history.record(Entry {
@@ -206,6 +237,54 @@ impl Document {
         self.objects.get(&id)
     }
 
+    /// The brushes of a brush entity, in file order (none for a point
+    /// entity or a brush).
+    pub fn brushes_of(&self, entity: ObjectId) -> impl Iterator<Item = ObjectId> + '_ {
+        self.members.get(&entity).into_iter().flatten().copied()
+    }
+
+    /// True if `entity` is a brush entity with brushes in the map.
+    pub fn has_brushes(&self, entity: ObjectId) -> bool {
+        self.members.contains_key(&entity)
+    }
+
+    /// What clicking `id` selects: a brush entity's brush selects the whole
+    /// entity, unless `inside_entities` is on (Hammer's "Ignore groups").
+    pub fn selectable(&self, id: ObjectId, inside_entities: bool) -> ObjectId {
+        if inside_entities {
+            return id;
+        }
+        self.objects
+            .get(&id)
+            .and_then(Object::as_brush)
+            .and_then(BrushObject::entity)
+            .unwrap_or(id)
+    }
+
+    /// True if `id` is selected, or belongs to a selected brush entity.
+    pub fn is_shown_selected(&self, id: ObjectId) -> bool {
+        self.selection.contains(&id)
+            || self
+                .objects
+                .get(&id)
+                .and_then(Object::as_brush)
+                .and_then(BrushObject::entity)
+                .is_some_and(|e| self.selection.contains(&e))
+    }
+
+    /// The box around an object: a brush's shape, a point entity's
+    /// marker, or a brush entity's brushes.
+    pub fn bounds_of(&self, id: ObjectId) -> Option<Aabb> {
+        let object = self.objects.get(&id)?;
+        if self.has_brushes(id) {
+            return self
+                .brushes_of(id)
+                .filter_map(|b| self.objects.get(&b)?.bounds())
+                .reduce(Aabb::union);
+        }
+        object.bounds()
+    }
+
     /// How many objects the map holds.
     pub fn len(&self) -> usize {
         self.objects.len()
@@ -250,8 +329,18 @@ impl Document {
     }
 
     /// Adds the object to the selection, or takes it out if it was in.
+    /// Taking out a brush that is selected through its entity selects the
+    /// entity's other brushes instead, so the click visibly removes it.
     pub fn toggle_selected(&mut self, id: ObjectId) {
         if !self.objects.contains_key(&id) {
+            return;
+        }
+        let owner = self.selectable(id, false);
+        if owner != id && self.selection.contains(&owner) && !self.selection.contains(&id) {
+            self.selection.remove(&owner);
+            let others: Vec<ObjectId> = self.brushes_of(owner).filter(|b| *b != id).collect();
+            self.selection.extend(others);
+            self.selection_revision += 1;
             return;
         }
         if !self.selection.remove(&id) {
@@ -269,16 +358,19 @@ impl Document {
     pub fn selection_bounds(&self) -> Option<Aabb> {
         self.selection
             .iter()
-            .filter_map(|id| self.objects.get(id))
-            .map(Object::bounds)
+            .filter_map(|id| self.bounds_of(*id))
             .reduce(Aabb::union)
     }
 
     /// The nearest object a ray (from `origin` along unit `direction`) hits,
-    /// with the distance to it.
+    /// with the distance to it: a brush (world or entity brush) or a point
+    /// entity's marker. Use [`Self::selectable`] to turn an entity's brush
+    /// into the entity.
     pub fn pick(&self, origin: Vec3, direction: Vec3) -> Option<(ObjectId, f32)> {
         self.objects
             .iter()
+            // A brush entity is hit through its brushes, not its origin.
+            .filter(|(id, _)| !self.has_brushes(**id))
             .filter_map(|(id, object)| Some((*id, object.ray_hit(origin, direction)?)))
             .min_by(|a, b| a.1.total_cmp(&b.1))
     }
@@ -301,7 +393,7 @@ impl Document {
                 Ok(Change::Inserted(objects))
             }
             Command::Remove(ids) => {
-                let ids: BTreeSet<ObjectId> = ids.into_iter().collect();
+                let ids = self.with_dependents(ids.into_iter().collect());
                 if ids.is_empty() {
                     return Err(DocError::NothingToDo);
                 }
@@ -349,13 +441,22 @@ impl Document {
         match &change {
             Change::Inserted(objects) => {
                 for (id, object) in objects {
-                    self.objects.insert(*id, object.clone());
+                    self.insert(*id, object.clone());
                 }
-                self.selection = objects.iter().map(|(id, _)| *id).collect();
+                // Select what came in, as one would pick it: an entity's
+                // brushes come in with it and are selected through it.
+                self.selection = objects
+                    .iter()
+                    .map(|(id, _)| *id)
+                    .filter(|id| {
+                        let owner = self.selectable(*id, false);
+                        owner == *id || !objects.iter().any(|(other, _)| *other == owner)
+                    })
+                    .collect();
             }
             Change::Removed(objects) => {
                 for (id, _) in objects {
-                    self.objects.remove(id);
+                    self.remove(*id);
                     self.selection.remove(id);
                 }
             }
@@ -368,6 +469,56 @@ impl Document {
         self.revision += 1;
         self.selection_revision += 1;
         change
+    }
+
+    /// Puts an object in the map, keeping the entity index up to date.
+    fn insert(&mut self, id: ObjectId, object: Object) {
+        if let Some(entity) = object.as_brush().and_then(BrushObject::entity) {
+            self.members.entry(entity).or_default().insert(id);
+        }
+        self.objects.insert(id, object);
+    }
+
+    /// Takes an object out of the map, keeping the entity index up to date.
+    fn remove(&mut self, id: ObjectId) {
+        let Some(object) = self.objects.remove(&id) else {
+            return;
+        };
+        if let Some(entity) = object.as_brush().and_then(BrushObject::entity)
+            && let Some(members) = self.members.get_mut(&entity)
+        {
+            members.remove(&id);
+            if members.is_empty() {
+                self.members.remove(&entity);
+            }
+        }
+    }
+
+    /// `ids` plus what must go with them: a brush entity's brushes go with
+    /// it, and a brush entity goes when all its brushes do (a brush entity
+    /// without brushes is not valid in a map file; Hammer does the same),
+    /// unless it still holds brushes Halberd could not show, which must
+    /// not be lost.
+    fn with_dependents(&self, ids: BTreeSet<ObjectId>) -> BTreeSet<ObjectId> {
+        let mut all = ids.clone();
+        for id in &ids {
+            all.extend(self.brushes_of(*id));
+        }
+        let emptied: Vec<ObjectId> = self
+            .members
+            .iter()
+            .filter(|(_, brushes)| brushes.iter().all(|b| all.contains(b)))
+            .map(|(entity, _)| *entity)
+            .filter(|entity| {
+                !self
+                    .objects
+                    .get(entity)
+                    .and_then(Object::as_entity)
+                    .is_some_and(crate::EntityObject::has_kept_solids)
+            })
+            .collect();
+        all.extend(emptied);
+        all
     }
 
     fn new_id(&mut self) -> ObjectId {
