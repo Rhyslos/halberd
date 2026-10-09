@@ -64,8 +64,9 @@ import -window root "$OUT/window.png"
 # y=50..675 on a 1600x900 screen.
 
 # 1. The sky above the horizon shows the background colour, (24, 25, 30).
+#    Sampled right of the toolbars (the Select tool has two rows).
 #    A wrong colour-space setting shows up here as near-black.
-SKY="$(convert "$OUT/window.png" -format '%[fx:int(255*p{500,120}.r)] %[fx:int(255*p{500,120}.g)] %[fx:int(255*p{500,120}.b)]' info:)"
+SKY="$(convert "$OUT/window.png" -format '%[fx:int(255*p{1000,120}.r)] %[fx:int(255*p{1000,120}.g)] %[fx:int(255*p{1000,120}.b)]' info:)"
 read -r SKY_R SKY_G SKY_B <<<"$SKY"
 echo "Viewport sky colour: $SKY_R $SKY_G $SKY_B (expected about 24 25 30)"
 for pair in "$SKY_R 24" "$SKY_G 25" "$SKY_B 30"; do

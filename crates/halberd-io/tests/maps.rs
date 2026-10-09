@@ -406,3 +406,49 @@ fn a_brush_inside_an_entity_can_be_moved_and_saved() {
     doc.undo();
     assert_eq!(saved_text(&doc), SAMPLE);
 }
+
+#[test]
+fn a_corner_edit_saves_with_unique_face_ids_and_reads_back() {
+    use halberd_doc::ElementKind;
+    let mut doc = open(SAMPLE);
+    let (id, object) = doc.objects().next().unwrap();
+    let brush = object.as_brush().unwrap().brush().clone();
+    // Pull the floor's top corner at (256, 256, 0) out and up.
+    let corner = brush
+        .points()
+        .iter()
+        .position(|p| *p == Vec3::new(256.0, 256.0, 0.0))
+        .unwrap();
+    let (bent, fates) = brush
+        .with_moved_points(&[(corner, Vec3::new(272.0, 272.0, 32.0))])
+        .unwrap();
+    doc.execute(Command::EditBrushes {
+        kind: TransformKind::Move,
+        parts: (ElementKind::Vertex, 1),
+        brushes: vec![(id, bent.clone(), fates)],
+    })
+    .unwrap();
+    let text = saved_text(&doc);
+    let solid = first_world_solid(&text);
+    let ids: Vec<&str> = solid.blocks("side").map(|s| s.get("id").unwrap()).collect();
+    assert_eq!(ids.len(), bent.faces().len());
+    let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+    assert_eq!(unique.len(), ids.len(), "no two faces share an id: {ids:?}");
+    assert!(
+        solid
+            .blocks("side")
+            .all(|s| s.get("material") == Some("DEV/DEV_MEASUREGENERIC01B"))
+    );
+    let again = open(&text);
+    let read = again
+        .objects()
+        .next()
+        .unwrap()
+        .1
+        .as_brush()
+        .unwrap()
+        .brush()
+        .clone();
+    assert_eq!(read.faces().len(), bent.faces().len());
+    assert_eq!(read.bounds(), bent.bounds());
+}

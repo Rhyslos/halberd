@@ -539,3 +539,25 @@ fn delete_and_undo_wait_while_a_box_is_being_drawn() {
     harness.run();
     assert_eq!(harness.state().document().len(), 2, "the box was drawn");
 }
+
+#[test]
+fn delete_waits_in_vertex_edge_and_face_modes() {
+    let mut harness = harness_for(workbench_with_boxes(1));
+    harness.run();
+    harness.key_press(Key::Num2);
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert_eq!(harness.state().document().len(), 1, "the brush is kept");
+    let warned = harness
+        .state()
+        .console()
+        .entries()
+        .any(|e| e.message.contains("Deleting corners, edges or faces"));
+    assert!(warned, "the Console says why");
+    harness.key_press(Key::Num1);
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert!(harness.state().document().is_empty(), "Object mode deletes");
+}

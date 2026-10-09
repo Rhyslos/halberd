@@ -37,6 +37,7 @@ Slow work (reading assets, booleans, compiles, lighting) runs on background thre
 - Editable shapes may be concave; they are split into Source's convex brushes only on export or compile.
 - Brushes are stored as planes, as in VMF (`halberd-geom`); face polygons are worked out from them.
 - The selection lives in the document but is not an edit, so it is not undone.
+- Picked corners, edges and faces (Vertex, Edge and Face modes) live in the tools, not the document: they are remembered by position, since a brush's corners are renumbered whenever its shape changes. Reshaping rebuilds a brush as the convex hull of its moved corners, so it is always a valid Source brush. See [decision 0016](docs/decisions/0016-element-modes.md).
 
 ### How an edit flows
 

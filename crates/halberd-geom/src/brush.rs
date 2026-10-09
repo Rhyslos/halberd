@@ -22,6 +22,9 @@ const EPSILON: f64 = 1e-3;
 /// Corners within this of a whole unit are moved onto it.
 const SNAP: f64 = 1e-2;
 
+mod edit;
+pub use edit::{FaceFate, Topology};
+
 /// One flat side of a brush.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Face {
@@ -89,6 +92,13 @@ impl Brush {
         if planes.len() > MAX_FACES {
             return Err(GeomError::TooManyFaces);
         }
+        Self::from_any_planes(planes)
+    }
+
+    /// [`Brush::from_planes`] without the limit on how many planes are
+    /// given (the result may then have more than [`MAX_FACES`] faces), for
+    /// working out which of many planes matter.
+    pub(crate) fn from_any_planes(planes: &[Plane]) -> Result<Self, GeomError> {
         let finite = |p: &Plane| p.normal.is_finite() && p.distance.is_finite();
         if !planes.iter().all(finite) {
             return Err(GeomError::NotFinite);

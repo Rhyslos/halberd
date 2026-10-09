@@ -257,8 +257,28 @@ pub const KEYBINDS: &[Keybind] = &[
         KeyContext::Viewport,
     ),
     bind(
+        &[k(Key::Num1)],
+        "Object mode: clicks pick whole objects",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::Num2)],
+        "Vertex mode: pick corners of the selected brushes",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::Num3)],
+        "Edge mode: pick edges of the selected brushes",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::Num4)],
+        "Face mode: pick faces of the selected brushes",
+        KeyContext::Viewport,
+    ),
+    bind(
         &[k(Key::Escape)],
-        "Deselect, or cancel a drag",
+        "Let go of picked corners, edges or faces; again: deselect. Also cancels a drag",
         KeyContext::Viewport,
     ),
     // While drawing.
@@ -324,7 +344,10 @@ pub fn mouse_binds() -> [(&'static str, String); 6] {
     [
         (
             "Left click",
-            format!("Select ({}+click adds or removes)", KeyCap::Ctrl.name()),
+            format!(
+                "Select, or pick a corner, edge or face in modes 2 to 4 ({}+click adds or removes)",
+                KeyCap::Ctrl.name()
+            ),
         ),
         (
             "Left drag",

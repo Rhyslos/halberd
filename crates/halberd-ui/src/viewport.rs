@@ -19,6 +19,7 @@ use halberd_tools::{
 };
 
 mod draw_options;
+mod elements;
 mod gizmo;
 mod tools;
 
@@ -285,6 +286,12 @@ impl ViewportPanel {
             );
         }
 
+        if let Some(overlay) = self.tools.element_overlay(&camera, size, doc) {
+            elements::draw(&painter, rect, &overlay);
+            if doc.selection().is_empty() {
+                elements::hint(&painter, rect, self.tools.select_mode());
+            }
+        }
         let gizmo_shapes = self.tools.gizmo_shapes(&camera, size, doc);
         gizmo::draw(&painter, rect, &gizmo_shapes);
 

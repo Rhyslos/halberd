@@ -43,6 +43,10 @@ fn searching_finds_actions_contexts_and_keys() {
     assert_eq!(found("ctrl+s"), ["Save"], "exact combination");
     assert_eq!(found("cmd + shift + s"), ["Save as…"], "Cmd means Ctrl");
     assert!(found("while draw").contains(&"Cancel the shape"));
+    assert_eq!(
+        found("vertex"),
+        ["Vertex mode: pick corners of the selected brushes"]
+    );
     assert!(found("").is_empty() && found("   ").is_empty());
     assert!(found("teleport").is_empty());
 }

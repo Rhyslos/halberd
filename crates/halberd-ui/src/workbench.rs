@@ -11,6 +11,7 @@ use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 use halberd_config::LengthUnit;
 use halberd_doc::{Command, Document};
+use halberd_tools::SelectMode;
 
 /// Facts about the program shown in the window and the About box.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,12 +198,30 @@ impl Workbench {
 
     /// Edit → Delete: removes the selected objects (an undoable edit).
     pub fn delete_selection(&mut self) {
+        // In Vertex, Edge or Face mode, Delete would surprise: it would
+        // remove the whole brushes, not the picked parts.
+        if self.delete_waits() {
+            self.push_warning(
+                "Deleting corners, edges or faces is not possible yet. Press 1 for Object \
+                 mode to delete whole brushes.",
+            );
+            return;
+        }
         let selected: Vec<_> = self.doc.selection().iter().copied().collect();
         if !selected.is_empty()
             && let Err(e) = self.doc.execute(Command::Remove(selected))
         {
             self.push_warning(format!("Could not delete: {e}."));
         }
+    }
+
+    /// True if Delete waits because the Select tool is picking corners,
+    /// edges or faces of selected brushes.
+    fn delete_waits(&self) -> bool {
+        let tools = self.viewport.tools();
+        tools.tool() == halberd_tools::Tool::Select
+            && tools.select_mode() != SelectMode::Object
+            && !self.doc.selection().is_empty()
     }
 
     /// The current panel arrangement, for saving between sessions.
@@ -337,7 +356,7 @@ impl Workbench {
         );
         let can_undo = self.doc.undo_label().is_some();
         let can_redo = self.doc.redo_label().is_some();
-        let can_delete = !self.doc.selection().is_empty();
+        let can_delete = !self.doc.selection().is_empty() && !self.delete_waits();
         if ui
             .add_enabled(can_undo, egui::Button::new(undo).shortcut_text(undo_keys))
             .clicked()
