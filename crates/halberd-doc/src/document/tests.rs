@@ -517,7 +517,10 @@ fn editing_corners_reshapes_brushes_and_undoes_in_one_step() {
     let same = Command::EditBrushes {
         kind: TransformKind::Scale,
         parts: (ElementKind::Face, 3),
-        brushes: vec![(id, brush.clone(), brush.with_moved_points(&[]).unwrap().1)],
+        brushes: vec![{
+            let (same, fates) = brush.with_moved_points(&[]).unwrap();
+            (id, same, fates)
+        }],
     };
     assert_eq!(same.describe(), "Scale 3 faces");
     assert_eq!(doc.execute(same), Err(DocError::NothingToDo));

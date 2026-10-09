@@ -224,20 +224,6 @@ impl ViewportPanel {
                     }
                 }
                 ui.separator();
-                ui.label("Pick:");
-                let current = self.tools.select_mode();
-                for mode in SelectMode::ALL {
-                    let text = format!("{} {}", mode.label(), mode.key());
-                    if ui
-                        .selectable_label(current == mode, text)
-                        .on_hover_text(mode.description())
-                        .clicked()
-                    {
-                        self.shape_menu = None;
-                        self.tools.set_select_mode(mode);
-                    }
-                }
-                ui.separator();
                 let mut inside = self.tools.inside_entities();
                 if ui
                     .toggle_value(
@@ -258,6 +244,39 @@ impl ViewportPanel {
             });
         if self.tools.tool() == Tool::Box {
             self.draw_options(ui, rect);
+        } else {
+            self.pick_options(ui, rect);
         }
+    }
+
+    /// The Select tool's second toolbar row: what clicks pick (1 to 4).
+    fn pick_options(&mut self, ui: &mut Ui, rect: Rect) {
+        let area = Rect::from_min_size(
+            rect.left_top() + vec2(8.0, 60.0),
+            vec2((rect.width() - 16.0).max(0.0), 30.0),
+        );
+        let mut child = ui.new_child(
+            UiBuilder::new()
+                .max_rect(area)
+                .layout(Layout::left_to_right(Align::Center)),
+        );
+        egui::Frame::new()
+            .fill(Color32::from_black_alpha(170))
+            .corner_radius(4.0)
+            .inner_margin(4.0)
+            .show(&mut child, |ui| {
+                ui.label("Pick:");
+                let current = self.tools.select_mode();
+                for mode in SelectMode::ALL {
+                    let text = format!("{} {}", mode.label(), mode.key());
+                    if ui
+                        .selectable_label(current == mode, text)
+                        .on_hover_text(mode.description())
+                        .clicked()
+                    {
+                        self.tools.set_select_mode(mode);
+                    }
+                }
+            });
     }
 }

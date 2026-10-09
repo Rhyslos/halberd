@@ -183,10 +183,8 @@ impl ToolController {
             return;
         }
         self.set_tool(Tool::Select);
-        if mode != self.select_mode {
-            self.elements = Elements::default();
-            self.hovered_element = None;
-        }
+        self.elements = Elements::default();
+        self.hovered_element = None;
         self.select_mode = mode;
     }
 
@@ -272,7 +270,11 @@ impl ToolController {
         self.press_at = None;
         self.drag = None;
         if tool == Tool::Box {
+            // Picked parts are hidden while drawing; let go of them, so
+            // Escape there deselects as it looks like it should.
             self.gizmo.set_mode(None);
+            self.elements = Elements::default();
+            self.hovered_element = None;
         }
     }
 

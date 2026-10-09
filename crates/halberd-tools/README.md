@@ -70,8 +70,8 @@ With the Select tool and a gizmo mode picked, handles appear around the selectio
 
 `SelectMode` (Object 1, Vertex 2, Edge 3, Face 4; `set_select_mode`) chooses what clicks pick in the Select tool (see [decision 0016](../../docs/decisions/0016-element-modes.md)):
 
-- In Vertex, Edge and Face modes a click picks a corner, edge or face of the selected brushes (and of a selected brush entity's brushes): corners and edges within 8 points on screen (the nearer one if two overlap), faces where the pointer's ray meets them. Ctrl+click adds or removes; a click on another object selects it; a click on nothing lets go of the picked parts. `picked_elements`, `picked_bounds`, `clear_elements` (Escape).
-- Picked parts (`PickedElement`) are remembered by position, so they survive the brush being rebuilt; parts that no longer exist drop out on the next frame.
+- In Vertex, Edge and Face modes a click picks a corner, edge or face of the selected brushes (and of a selected brush entity's brushes): corners and edges within 8 points on screen (the nearer one if two overlap), faces where the pointer's ray meets them (unless another object is in front). Ctrl+click adds or removes; a click on another object selects it; a click on nothing lets go of the picked parts. `picked_elements`, `picked_bounds`, `clear_elements` (Escape).
+- Picked parts (`PickedElement`) are remembered by position, so they survive the brush being rebuilt; parts that no longer exist drop out on the next frame, and a cancelled drag puts them back. Picking a mode or the Draw tool lets go of them.
 - The gizmo appears around the picked parts and moves, rotates or scales their corners, returning `Command::EditBrushes` (via `Brush::with_moved_points`) each frame of the drag, and moves the picked positions along.
 - `element_overlay` gives what to draw: every corner or edge that can be picked, the picked ones, and the one under the pointer, in screen points.
 - Tests drive clicks and drags through the controller: picking each kind, moving a face, a corner and an edge, turning a face, Escape, entity brushes, and 60 random drags.

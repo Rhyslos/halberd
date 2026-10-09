@@ -200,7 +200,7 @@ impl Workbench {
     pub fn delete_selection(&mut self) {
         // In Vertex, Edge or Face mode, Delete would surprise: it would
         // remove the whole brushes, not the picked parts.
-        if self.viewport.tools().select_mode() != SelectMode::Object {
+        if self.delete_waits() {
             self.push_warning(
                 "Deleting corners, edges or faces is not possible yet. Press 1 for Object \
                  mode to delete whole brushes.",
@@ -213,6 +213,15 @@ impl Workbench {
         {
             self.push_warning(format!("Could not delete: {e}."));
         }
+    }
+
+    /// True if Delete waits because the Select tool is picking corners,
+    /// edges or faces of selected brushes.
+    fn delete_waits(&self) -> bool {
+        let tools = self.viewport.tools();
+        tools.tool() == halberd_tools::Tool::Select
+            && tools.select_mode() != SelectMode::Object
+            && !self.doc.selection().is_empty()
     }
 
     /// The current panel arrangement, for saving between sessions.
@@ -347,7 +356,7 @@ impl Workbench {
         );
         let can_undo = self.doc.undo_label().is_some();
         let can_redo = self.doc.redo_label().is_some();
-        let can_delete = !self.doc.selection().is_empty();
+        let can_delete = !self.doc.selection().is_empty() && !self.delete_waits();
         if ui
             .add_enabled(can_undo, egui::Button::new(undo).shortcut_text(undo_keys))
             .clicked()

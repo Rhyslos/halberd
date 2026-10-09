@@ -60,7 +60,7 @@ pub(super) fn hint(painter: &Painter, rect: Rect, mode: SelectMode) {
         SelectMode::Face => "faces",
     };
     painter.text(
-        rect.left_top() + vec2(12.0, 64.0),
+        rect.left_top() + vec2(12.0, 98.0),
         Align2::LEFT_TOP,
         format!(
             "{} mode: click a brush to select it, then click its {part}.",

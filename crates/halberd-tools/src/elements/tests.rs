@@ -2,7 +2,9 @@
 //! gizmo, driven through the tool controller like the interface does.
 
 use super::*;
+use crate::camera::Camera;
 use crate::{Axis, GizmoMode, Handle, Tool, ToolAction, ToolController, ToolInput};
+use glam::Vec2;
 use halberd_doc::Command;
 
 const SIZE: Vec2 = Vec2::new(1600.0, 900.0);
@@ -398,6 +400,14 @@ fn escape_cancels_a_part_drag() {
     step(&mut t, &camera, &mut doc, &cancel);
     assert_eq!(the_brush(&doc), before);
     assert_eq!(doc.undo_label(), Some("Create brush"));
+    // Regression: the pick went back with the map instead of vanishing.
+    let picked = t.picked_elements().to_vec();
+    step(&mut t, &camera, &mut doc, &input(Vec2::new(5.0, 5.0)));
+    assert_eq!(t.picked_elements(), picked.as_slice());
+    match &picked[0].shape {
+        ElementShape::Face(corners) => assert!(corners.iter().all(|c| c.z == 128.0)),
+        other => panic!("picked {other:?}"),
+    }
 }
 
 #[test]
@@ -614,4 +624,76 @@ fn random_part_drags_never_break_the_map() {
             }
         }
     }
+}
+
+#[test]
+fn grabbing_a_handle_without_moving_changes_nothing() {
+    // Regression: rebuilding a brush reordered its faces, so a click on a
+    // handle (or turning a single corner) left an undo step behind.
+    let camera = angled();
+    let mut doc = one_box();
+    let before = the_brush(&doc);
+    for (mode, gizmo, handle) in [
+        (SelectMode::Face, GizmoMode::Move, Handle::MoveAxis(Axis::Z)),
+        (
+            SelectMode::Vertex,
+            GizmoMode::Rotate,
+            Handle::Rotate(Axis::Z),
+        ),
+        (SelectMode::Vertex, GizmoMode::Scale, Handle::ScaleUniform),
+    ] {
+        let mut t = tools(mode);
+        t.set_gizmo_mode(Some(gizmo));
+        let at = match mode {
+            SelectMode::Face => Vec3::new(64.0, 32.0, 128.0),
+            _ => Vec3::new(128.0, 0.0, 128.0),
+        };
+        click(&mut t, &camera, &mut doc, screen(&camera, at), false);
+        let world = if gizmo == GizmoMode::Move {
+            Vec3::new(0.0, 0.0, 2.0)
+        } else {
+            Vec3::new(40.0, 0.0, 40.0)
+        };
+        assert!(drag_handle(&mut t, &camera, &mut doc, handle, world));
+        assert_eq!(the_brush(&doc), before, "{mode:?} {gizmo:?}");
+        assert_eq!(doc.undo_label(), Some("Create brush"), "{mode:?} {gizmo:?}");
+    }
+}
+
+#[test]
+fn a_face_behind_another_object_is_not_picked() {
+    let camera = angled();
+    let mut doc = one_box();
+    // A wall between the camera and the selected box.
+    let wall = Brush::cuboid(Aabb::from_corners(
+        Vec3::new(200.0, -300.0, 0.0),
+        Vec3::new(216.0, 300.0, 300.0),
+    ))
+    .unwrap();
+    let boxed = *doc.selection().iter().next().unwrap();
+    doc.execute(Command::AddBrushes(vec![wall])).unwrap();
+    doc.set_selection([boxed]);
+    let mut t = tools(SelectMode::Face);
+    let behind = screen(&camera, Vec3::new(128.0, 32.0, 64.0));
+    click(&mut t, &camera, &mut doc, behind, false);
+    assert!(t.picked_elements().is_empty());
+    assert_ne!(
+        doc.selection().iter().next(),
+        Some(&boxed),
+        "the wall was selected"
+    );
+}
+
+#[test]
+fn picking_a_mode_or_drawing_starts_afresh() {
+    let camera = angled();
+    let mut doc = one_box();
+    let mut t = tools(SelectMode::Vertex);
+    let corner = screen(&camera, Vec3::new(128.0, 0.0, 128.0));
+    click(&mut t, &camera, &mut doc, corner, false);
+    t.set_select_mode(SelectMode::Vertex);
+    assert!(t.picked_elements().is_empty(), "the same mode again");
+    click(&mut t, &camera, &mut doc, corner, false);
+    t.set_tool(Tool::Box);
+    assert!(t.picked_elements().is_empty(), "the Draw tool");
 }

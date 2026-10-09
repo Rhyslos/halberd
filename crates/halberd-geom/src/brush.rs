@@ -23,7 +23,7 @@ const EPSILON: f64 = 1e-3;
 const SNAP: f64 = 1e-2;
 
 mod edit;
-pub use edit::FaceFate;
+pub use edit::{FaceFate, Topology};
 
 /// One flat side of a brush.
 #[derive(Debug, Clone, PartialEq)]
@@ -92,6 +92,13 @@ impl Brush {
         if planes.len() > MAX_FACES {
             return Err(GeomError::TooManyFaces);
         }
+        Self::from_any_planes(planes)
+    }
+
+    /// [`Brush::from_planes`] without the limit on how many planes are
+    /// given (the result may then have more than [`MAX_FACES`] faces), for
+    /// working out which of many planes matter.
+    pub(crate) fn from_any_planes(planes: &[Plane]) -> Result<Self, GeomError> {
         let finite = |p: &Plane| p.normal.is_finite() && p.distance.is_finite();
         if !planes.iter().all(finite) {
             return Err(GeomError::NotFinite);
@@ -189,13 +196,6 @@ impl Brush {
             })
             .collect();
         Self::from_planes(&planes)
-    }
-
-    /// Sets each face's [`Face::source`], in face order.
-    pub(crate) fn set_sources(&mut self, sources: &[usize]) {
-        for (face, &source) in self.faces.iter_mut().zip(sources) {
-            face.source = source;
-        }
     }
 
     /// Distance along a ray (from `origin` along unit `direction`) to where

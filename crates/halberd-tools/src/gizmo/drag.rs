@@ -192,6 +192,14 @@ impl Drag {
         self.handle
     }
 
+    /// The picked parts as they were when the drag began, if it holds parts.
+    pub(crate) fn picked_at_start(&self) -> Option<&[PickedElement]> {
+        match &self.held {
+            Held::Parts { picked, .. } => Some(picked),
+            Held::Brushes(_) => None,
+        }
+    }
+
     pub(crate) fn key(&self) -> u64 {
         self.key
     }

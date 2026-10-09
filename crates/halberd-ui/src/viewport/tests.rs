@@ -930,3 +930,20 @@ fn dragging_a_picked_corner_reshapes_the_box_in_one_undo_step() {
         .clone();
     assert_eq!(brush.faces().len(), 6, "one step");
 }
+
+#[test]
+fn both_toolbar_rows_fit_an_800_point_viewport() {
+    // Regression: with the Pick buttons in the first row, "Inside entities"
+    // was cut off at common window sizes.
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    let viewport = h.get_by_label(VIEWPORT_LABEL).rect();
+    for label in ["Face 4", "Object 1"] {
+        assert!(
+            viewport.contains_rect(h.get_by_label(label).rect()),
+            "{label}"
+        );
+    }
+    let inside = h.get_by_label_contains(INSIDE_ENTITIES_LABEL).rect();
+    assert!(viewport.contains_rect(inside), "{inside:?} in {viewport:?}");
+}

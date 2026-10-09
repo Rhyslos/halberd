@@ -459,6 +459,9 @@ impl Gizmo {
             return match &self.drag {
                 Some(drag) if input.cancel => {
                     let key = drag.key();
+                    if let (Some(parts), Some(picked)) = (parts, drag.picked_at_start()) {
+                        parts.items = picked.to_vec();
+                    }
                     self.drag = None;
                     GizmoOutcome::Used(Some(ToolAction::CancelMerging(key)))
                 }
@@ -472,7 +475,11 @@ impl Gizmo {
         };
         if let Some(drag) = &mut self.drag {
             if input.cancel {
+                // The picked parts go back to where they were, with the map.
                 let key = drag.key();
+                if let (Some(parts), Some(picked)) = (parts, drag.picked_at_start()) {
+                    parts.items = picked.to_vec();
+                }
                 self.drag = None;
                 return GizmoOutcome::Used(Some(ToolAction::CancelMerging(key)));
             }

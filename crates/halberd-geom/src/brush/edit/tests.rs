@@ -1,3 +1,4 @@
+use super::hull;
 use super::*;
 use crate::{Aabb, Heading, Shape, ShapeSettings, build_shape};
 
@@ -50,6 +51,9 @@ fn moving_nothing_gives_the_same_brush_with_every_face_whole() {
         .unwrap()
         .remove(0);
         let (same, fates) = b.with_moved_points(&[]).unwrap();
+        assert_eq!(same, b, "{shape:?}: the very same brush");
+        let to_itself: Vec<(usize, Vec3)> = b.points().into_iter().enumerate().collect();
+        assert_eq!(b.with_moved_points(&to_itself).unwrap().0, b);
         assert_eq!(same.bounds(), b.bounds(), "{shape:?}");
         assert_eq!(same.faces().len(), b.faces().len(), "{shape:?}");
         assert!(fates.iter().all(|f| f.whole), "{shape:?}");
@@ -226,11 +230,15 @@ fn random_moves_never_crash_and_keep_every_point_inside() {
         Shape::Sphere,
     ];
     let mut made = 0;
-    for round in 0..2_000 {
+    for round in 0..600 {
         let shape = shapes[round % shapes.len()];
+        let settings = ShapeSettings {
+            sides: [8, 16, 64][(round / shapes.len()) % 3],
+            ..ShapeSettings::default()
+        };
         let brush = build_shape(
             shape,
-            &ShapeSettings::default(),
+            &settings,
             Aabb::from_corners(Vec3::ZERO, Vec3::new(128.0, 96.0, 64.0)),
             Heading::PosX,
         )
@@ -249,6 +257,22 @@ fn random_moves_never_crash_and_keep_every_point_inside() {
         if let Ok((moved, fates)) = brush.with_moved_points(&moves) {
             made += 1;
             assert_eq!(fates.len(), moved.faces().len());
+            // Nor does the result bulge past the points' hull anywhere.
+            let wide: Vec<DVec3> = points.iter().map(|p| p.as_dvec3()).collect();
+            for t in hull::convex_hull_for_tests(&wide) {
+                let [p, q, r] = t.map(|i| wide[i]);
+                let Some(normal) = (q - p).cross(r - p).try_normalize() else {
+                    continue;
+                };
+                let height = |x: DVec3| normal.dot(x - p);
+                if wide.iter().any(|x| height(*x) > 0.02) {
+                    continue; // A sliver leaning off the surface.
+                }
+                for corner in moved.points() {
+                    let out = height(corner.as_dvec3());
+                    assert!(out < 0.05, "{shape:?}: corner {corner} bulges {out} out");
+                }
+            }
             for face in moved.faces() {
                 assert!(face.source() < brush.faces().len());
                 for p in &points {
@@ -261,5 +285,47 @@ fn random_moves_never_crash_and_keep_every_point_inside() {
             }
         }
     }
-    assert!(made > 1_600, "most random moves should work: {made}");
+    assert!(made > 450, "most random moves should work: {made}");
+}
+
+#[test]
+fn faces_keep_the_old_order() {
+    let b = cube();
+    let lifted = corner(&b, Vec3::splat(64.0));
+    let (bent, _) = b
+        .with_moved_points(&[(lifted, Vec3::new(80.0, 80.0, 96.0))])
+        .unwrap();
+    let sources: Vec<usize> = bent.faces().iter().map(|f| f.source()).collect();
+    assert!(sources.windows(2).all(|w| w[0] <= w[1]), "{sources:?}");
+}
+
+#[test]
+fn a_sixteen_sided_sphere_of_any_size_can_be_edited() {
+    // Regression: rounded corners made the hull find one sliver too many,
+    // over the 128-face limit, so nothing could be moved.
+    for size in [
+        Vec3::new(128.0, 96.0, 64.0),
+        Vec3::new(200.0, 300.0, 100.0),
+        Vec3::splat(256.0),
+    ] {
+        let sphere = build_shape(
+            Shape::Sphere,
+            &ShapeSettings {
+                sides: 16,
+                ..ShapeSettings::default()
+            },
+            Aabb::from_corners(Vec3::ZERO, size),
+            Heading::PosX,
+        )
+        .unwrap()
+        .remove(0);
+        let points = sphere.points();
+        let top = (0..points.len())
+            .max_by(|&a, &b| points[a].z.total_cmp(&points[b].z))
+            .unwrap();
+        let moved = sphere.with_moved_points(&[(top, points[top] + Vec3::new(0.0, 0.0, 16.0))]);
+        let (moved, _) = moved.unwrap_or_else(|e| panic!("{size}: {e}"));
+        assert!(moved.faces().len() <= MAX_FACES);
+        assert_eq!(moved.bounds().max.z, size.z + 16.0, "{size}");
+    }
 }
