@@ -1,0 +1,494 @@
+//! Picking the corners, edges and faces of selected brushes, to move,
+//! rotate or scale them with the gizmo (like Hammer's vertex tool).
+//!
+//! Picked parts are remembered by where they are, not by number: a brush's
+//! corners are numbered afresh whenever its shape changes, while a corner's
+//! position only changes when it is moved, and then the gizmo moves the
+//! remembered position along with it. Parts that no longer exist (undone,
+//! merged away) drop out of the pick on the next frame.
+
+use crate::camera::{Camera, Ray};
+use glam::{Vec2, Vec3};
+use halberd_doc::{Document, ElementKind, Object, ObjectId};
+use halberd_geom::{Aabb, Brush};
+
+/// How close the pointer must be to a corner or edge to pick it, in points.
+pub const ELEMENT_GRAB_POINTS: f32 = 8.0;
+/// Corners within this many units of a remembered position are the same
+/// corner (positions pass through rounding when a brush is rebuilt).
+const SAME_PLACE: f32 = 0.1;
+
+/// What a click picks in the Select tool: whole objects, or the corners,
+/// edges or faces of the selected brushes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SelectMode {
+    /// Whole objects (1).
+    #[default]
+    Object,
+    /// Corners (2).
+    Vertex,
+    /// Edges (3).
+    Edge,
+    /// Faces (4).
+    Face,
+}
+
+impl SelectMode {
+    /// Every mode, in the order the toolbar shows them.
+    pub const ALL: [SelectMode; 4] = [Self::Object, Self::Vertex, Self::Edge, Self::Face];
+
+    /// Short name for the toolbar.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Object => "Object",
+            Self::Vertex => "Vertex",
+            Self::Edge => "Edge",
+            Self::Face => "Face",
+        }
+    }
+
+    /// The key that picks this mode.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Object => "1",
+            Self::Vertex => "2",
+            Self::Edge => "3",
+            Self::Face => "4",
+        }
+    }
+
+    /// One-line explanation, for tooltips.
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Object => "Clicks pick whole objects (1)",
+            Self::Vertex => {
+                "Clicks pick corners of the selected brushes; move them with the gizmo (2)"
+            }
+            Self::Edge => "Clicks pick edges of the selected brushes; move them with the gizmo (3)",
+            Self::Face => "Clicks pick faces of the selected brushes; move them with the gizmo (4)",
+        }
+    }
+
+    /// The kind of part this mode picks, or `None` for whole objects.
+    pub fn element(self) -> Option<ElementKind> {
+        match self {
+            Self::Object => None,
+            Self::Vertex => Some(ElementKind::Vertex),
+            Self::Edge => Some(ElementKind::Edge),
+            Self::Face => Some(ElementKind::Face),
+        }
+    }
+}
+
+/// Where a picked part is: a corner, an edge's two ends, or a face's
+/// corners.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ElementShape {
+    /// A corner.
+    Vertex(Vec3),
+    /// An edge's two ends.
+    Edge([Vec3; 2]),
+    /// A face's corners.
+    Face(Vec<Vec3>),
+}
+
+impl ElementShape {
+    /// The kind of part.
+    pub fn kind(&self) -> ElementKind {
+        match self {
+            Self::Vertex(_) => ElementKind::Vertex,
+            Self::Edge(_) => ElementKind::Edge,
+            Self::Face(_) => ElementKind::Face,
+        }
+    }
+
+    /// Its corners.
+    pub fn corners(&self) -> &[Vec3] {
+        match self {
+            Self::Vertex(p) => std::slice::from_ref(p),
+            Self::Edge(ends) => ends,
+            Self::Face(corners) => corners,
+        }
+    }
+
+    /// The same part with every corner passed through `f`.
+    pub(crate) fn mapped(&self, f: impl Fn(Vec3) -> Vec3) -> Self {
+        match self {
+            Self::Vertex(p) => Self::Vertex(f(*p)),
+            Self::Edge([a, b]) => Self::Edge([f(*a), f(*b)]),
+            Self::Face(corners) => Self::Face(corners.iter().map(|p| f(*p)).collect()),
+        }
+    }
+}
+
+/// A picked part of a brush.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PickedElement {
+    /// The brush it belongs to.
+    pub brush: ObjectId,
+    /// Where it is.
+    pub shape: ElementShape,
+}
+
+impl PickedElement {
+    /// The part's corners as places in [`Brush::points`], or `None` if the
+    /// brush no longer has this part.
+    pub(crate) fn resolve(&self, brush: &Brush) -> Option<Vec<usize>> {
+        let points = brush.points();
+        let find = |at: Vec3| points.iter().position(|p| p.distance(at) < SAME_PLACE);
+        match &self.shape {
+            ElementShape::Vertex(at) => Some(vec![find(*at)?]),
+            ElementShape::Edge([a, b]) => {
+                let ends = (find(*a)?, find(*b)?);
+                let edge = (ends.0.min(ends.1), ends.0.max(ends.1));
+                brush.edges().contains(&edge).then(|| vec![ends.0, ends.1])
+            }
+            ElementShape::Face(corners) => {
+                let mut wanted: Vec<usize> =
+                    corners.iter().map(|c| find(*c)).collect::<Option<_>>()?;
+                wanted.sort_unstable();
+                brush
+                    .face_points()
+                    .into_iter()
+                    .find(|face| {
+                        let mut face = face.clone();
+                        face.sort_unstable();
+                        face == wanted
+                    })
+                    .map(|_| wanted)
+            }
+        }
+    }
+
+    /// The same part, with its remembered corners moved onto the brush's
+    /// actual corners.
+    fn settled(&self, brush: &Brush, indices: &[usize]) -> Self {
+        let points = brush.points();
+        let at = |i: usize| points[indices[i]];
+        let shape = match &self.shape {
+            ElementShape::Vertex(_) => ElementShape::Vertex(at(0)),
+            ElementShape::Edge(_) => ElementShape::Edge([at(0), at(1)]),
+            ElementShape::Face(corners) => ElementShape::Face(
+                corners
+                    .iter()
+                    .map(|c| {
+                        points
+                            .iter()
+                            .copied()
+                            .find(|p| p.distance(*c) < SAME_PLACE)
+                            .unwrap_or(*c)
+                    })
+                    .collect(),
+            ),
+        };
+        Self {
+            brush: self.brush,
+            shape,
+        }
+    }
+}
+
+/// The brushes whose parts can be picked: the selected brushes, and the
+/// brushes of selected brush entities.
+pub(crate) fn editable_brushes(doc: &Document) -> Vec<(ObjectId, &Brush)> {
+    let mut out = Vec::new();
+    for &id in doc.selection() {
+        let ids: Vec<ObjectId> = if doc.has_brushes(id) {
+            doc.brushes_of(id).collect()
+        } else {
+            vec![id]
+        };
+        for id in ids {
+            if let Some(Object::Brush(b)) = doc.get(id)
+                && !out.iter().any(|(o, _)| *o == id)
+            {
+                out.push((id, b.brush()));
+            }
+        }
+    }
+    out
+}
+
+/// The picked parts.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct Elements {
+    pub(crate) items: Vec<PickedElement>,
+}
+
+/// The brushes to change for the picked parts: each with its shape now and
+/// the places of the corners to move.
+pub(crate) type Targets = Vec<(ObjectId, Brush, Vec<usize>)>;
+
+impl Elements {
+    /// Drops parts of brushes no longer selected or no longer there, and
+    /// settles the rest onto their brushes' actual corners.
+    pub(crate) fn refresh(&mut self, doc: &Document, kind: Option<ElementKind>) {
+        let brushes = editable_brushes(doc);
+        self.items = self
+            .items
+            .iter()
+            .filter(|item| Some(item.shape.kind()) == kind)
+            .filter_map(|item| {
+                let (_, brush) = brushes.iter().find(|(id, _)| *id == item.brush)?;
+                let indices = item.resolve(brush)?;
+                Some(item.settled(brush, &indices))
+            })
+            .collect();
+    }
+
+    /// Picks only `item`, or nothing.
+    pub(crate) fn set(&mut self, item: Option<PickedElement>) {
+        self.items = item.into_iter().collect();
+    }
+
+    /// Adds `item`, or takes it out if it was picked.
+    pub(crate) fn toggle(&mut self, item: PickedElement) {
+        match self.items.iter().position(|i| same_part(i, &item)) {
+            Some(at) => {
+                self.items.remove(at);
+            }
+            None => self.items.push(item),
+        }
+    }
+
+    /// True if `item` is picked.
+    pub(crate) fn contains(&self, item: &PickedElement) -> bool {
+        self.items.iter().any(|i| same_part(i, item))
+    }
+
+    /// The brushes and corners the picked parts cover.
+    pub(crate) fn targets(&self, doc: &Document) -> Targets {
+        let brushes = editable_brushes(doc);
+        let mut out: Targets = Vec::new();
+        for item in &self.items {
+            let Some((_, brush)) = brushes.iter().find(|(id, _)| *id == item.brush) else {
+                continue;
+            };
+            let Some(indices) = item.resolve(brush) else {
+                continue;
+            };
+            let at = match out.iter().position(|(id, ..)| *id == item.brush) {
+                Some(at) => at,
+                None => {
+                    out.push((item.brush, (*brush).clone(), Vec::new()));
+                    out.len() - 1
+                }
+            };
+            let entry = &mut out[at];
+            for i in indices {
+                if !entry.2.contains(&i) {
+                    entry.2.push(i);
+                }
+            }
+        }
+        out
+    }
+
+    /// The box around every picked corner.
+    pub(crate) fn bounds(&self) -> Option<Aabb> {
+        Aabb::from_points(
+            self.items
+                .iter()
+                .flat_map(|i| i.shape.corners().iter().copied()),
+        )
+    }
+}
+
+/// True if both are the same part of the same brush.
+fn same_part(a: &PickedElement, b: &PickedElement) -> bool {
+    if a.brush != b.brush || a.shape.kind() != b.shape.kind() {
+        return false;
+    }
+    let (ca, cb) = (a.shape.corners(), b.shape.corners());
+    ca.len() == cb.len()
+        && ca
+            .iter()
+            .all(|p| cb.iter().any(|q| p.distance(*q) < SAME_PLACE))
+}
+
+/// The part of kind `kind` under `cursor`, among the editable brushes.
+/// Corners and edges are picked on screen, nearest first (the one nearer
+/// the camera if two overlap); faces by where the pointer's ray meets them.
+pub(crate) fn pick(
+    doc: &Document,
+    kind: ElementKind,
+    camera: &Camera,
+    size: Vec2,
+    cursor: Vec2,
+) -> Option<PickedElement> {
+    let brushes = editable_brushes(doc);
+    let project = |p: Vec3| camera.project(p, size).filter(|s| s.is_finite());
+    // Best so far: (distance on screen, depth, part).
+    let mut best: Option<(f32, f32, PickedElement)> = None;
+    let mut offer = |distance: f32, depth: f32, item: PickedElement| {
+        let better = best
+            .as_ref()
+            .is_none_or(|(d, z, _)| distance < d - 0.5 || (distance < d + 0.5 && depth < *z));
+        if distance <= ELEMENT_GRAB_POINTS && better {
+            best = Some((distance, depth, item));
+        }
+    };
+    match kind {
+        ElementKind::Vertex => {
+            for (id, brush) in &brushes {
+                for p in brush.points() {
+                    if let Some(s) = project(p) {
+                        let item = PickedElement {
+                            brush: *id,
+                            shape: ElementShape::Vertex(p),
+                        };
+                        offer(s.distance(cursor), camera.depth_of(p), item);
+                    }
+                }
+            }
+        }
+        ElementKind::Edge => {
+            for (id, brush) in &brushes {
+                let points = brush.points();
+                for (a, b) in brush.edges() {
+                    let (pa, pb) = (points[a], points[b]);
+                    if let (Some(sa), Some(sb)) = (project(pa), project(pb)) {
+                        let item = PickedElement {
+                            brush: *id,
+                            shape: ElementShape::Edge([pa, pb]),
+                        };
+                        let depth = camera.depth_of((pa + pb) * 0.5);
+                        offer(distance_to_segment(cursor, sa, sb), depth, item);
+                    }
+                }
+            }
+        }
+        ElementKind::Face => {
+            let ray = camera.ray_through(cursor, size);
+            let mut nearest: Option<(f32, PickedElement)> = None;
+            for (id, brush) in &brushes {
+                if let Some((t, face)) = face_hit(brush, &ray)
+                    && nearest.as_ref().is_none_or(|(n, _)| t < *n)
+                {
+                    let corners = brush.faces()[face].vertices().to_vec();
+                    nearest = Some((
+                        t,
+                        PickedElement {
+                            brush: *id,
+                            shape: ElementShape::Face(corners),
+                        },
+                    ));
+                }
+            }
+            return nearest.map(|(_, item)| item);
+        }
+    }
+    best.map(|(_, _, item)| item)
+}
+
+/// The nearest face of `brush` facing the ray that the ray meets, with the
+/// distance to it.
+fn face_hit(brush: &Brush, ray: &Ray) -> Option<(f32, usize)> {
+    let mut best: Option<(f32, usize)> = None;
+    for (i, face) in brush.faces().iter().enumerate() {
+        let plane = face.plane();
+        let facing = plane.normal.dot(ray.direction);
+        if facing >= -1e-6 {
+            continue;
+        }
+        let t = -plane.signed_distance(ray.origin) / facing;
+        if !(t > 0.0 && t.is_finite()) {
+            continue;
+        }
+        let at = ray.at(t);
+        let inside = brush
+            .faces()
+            .iter()
+            .enumerate()
+            .all(|(j, other)| j == i || other.plane().signed_distance(at) <= 0.01);
+        if inside && best.is_none_or(|(b, _)| t < b) {
+            best = Some((t, i));
+        }
+    }
+    best
+}
+
+fn distance_to_segment(p: Vec2, a: Vec2, b: Vec2) -> f32 {
+    let ab = b - a;
+    let t = if ab.length_squared() > 0.0 {
+        ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    p.distance(a + ab * t)
+}
+
+/// One part as drawn on screen, in points from the viewport's top-left.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScreenElement {
+    /// A corner.
+    Point(Vec2),
+    /// An edge.
+    Segment(Vec2, Vec2),
+    /// A face's outline.
+    Polygon(Vec<Vec2>),
+}
+
+/// What to draw over the viewport in a part-picking mode.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ElementOverlay {
+    /// Every part that can be picked (corners or edges; faces are left
+    /// out, the brush already shows them).
+    pub candidates: Vec<ScreenElement>,
+    /// The picked parts.
+    pub picked: Vec<ScreenElement>,
+    /// The part under the pointer, if any.
+    pub hovered: Option<ScreenElement>,
+}
+
+/// `shape` on screen, or `None` if any of it is behind the camera.
+pub(crate) fn on_screen(
+    shape: &ElementShape,
+    camera: &Camera,
+    size: Vec2,
+) -> Option<ScreenElement> {
+    let project = |p: Vec3| camera.project(p, size).filter(|s| s.is_finite());
+    Some(match shape {
+        ElementShape::Vertex(p) => ScreenElement::Point(project(*p)?),
+        ElementShape::Edge([a, b]) => ScreenElement::Segment(project(*a)?, project(*b)?),
+        ElementShape::Face(corners) => {
+            ScreenElement::Polygon(corners.iter().map(|c| project(*c)).collect::<Option<_>>()?)
+        }
+    })
+}
+
+/// Every corner or edge of the editable brushes, on screen.
+pub(crate) fn candidates(
+    doc: &Document,
+    kind: ElementKind,
+    camera: &Camera,
+    size: Vec2,
+) -> Vec<ScreenElement> {
+    let project = |p: Vec3| camera.project(p, size).filter(|s| s.is_finite());
+    let mut out = Vec::new();
+    for (_, brush) in editable_brushes(doc) {
+        let points = brush.points();
+        match kind {
+            ElementKind::Vertex => {
+                out.extend(
+                    points
+                        .iter()
+                        .filter_map(|p| project(*p))
+                        .map(ScreenElement::Point),
+                );
+            }
+            ElementKind::Edge => {
+                for (a, b) in brush.edges() {
+                    if let (Some(sa), Some(sb)) = (project(points[a]), project(points[b])) {
+                        out.push(ScreenElement::Segment(sa, sb));
+                    }
+                }
+            }
+            ElementKind::Face => {}
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests;

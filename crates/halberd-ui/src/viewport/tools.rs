@@ -5,7 +5,7 @@ use super::ViewportPanel;
 use egui::{Align, Color32, Key, Layout, Modifiers, PointerButton, Rect, Ui, UiBuilder, vec2};
 use glam::Vec2;
 use halberd_doc::Document;
-use halberd_tools::{GizmoMode, Tool, ToolAction, ToolInput};
+use halberd_tools::{GizmoMode, SelectMode, Tool, ToolAction, ToolInput};
 
 /// True if `key` went down this frame with modifiers `held` accepts, not
 /// counting the repeats a held key sends (holding W while flying must not
@@ -69,6 +69,7 @@ impl ViewportPanel {
                 }
             } else {
                 self.gizmo_keys(ui);
+                self.select_mode_keys(ui);
             }
         }
         if box_key {
@@ -92,7 +93,9 @@ impl ViewportPanel {
         let released = self.left_was_held && !left_down;
         self.left_was_held = held;
 
-        if escape && !self.tools.is_busy() {
+        // Escape lets go of picked corners, edges or faces first, and
+        // deselects the brushes the next time.
+        if escape && !self.tools.is_busy() && !self.tools.clear_elements() {
             doc.clear_selection();
         }
         let input = ToolInput {
@@ -163,6 +166,21 @@ impl ViewportPanel {
         }
     }
 
+    /// The keys 1 to 4: what clicks pick (objects, corners, edges, faces).
+    fn select_mode_keys(&mut self, ui: &Ui) {
+        let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4];
+        let picked = ui.input(|i| {
+            keys.into_iter()
+                .zip(SelectMode::ALL)
+                .find(|(key, _)| first_press(i, *key, |m| m.is_none()))
+                .map(|(_, mode)| mode)
+        });
+        if let Some(mode) = picked {
+            self.shape_menu = None;
+            self.tools.set_select_mode(mode);
+        }
+    }
+
     /// The tool buttons in the viewport's top-left corner.
     pub(super) fn tool_switcher(&mut self, ui: &mut Ui, rect: Rect) {
         if self.tools.tool() != Tool::Box {
@@ -203,6 +221,20 @@ impl ViewportPanel {
                         .clicked()
                     {
                         self.tools.toggle_gizmo_mode(mode);
+                    }
+                }
+                ui.separator();
+                ui.label("Pick:");
+                let current = self.tools.select_mode();
+                for mode in SelectMode::ALL {
+                    let text = format!("{} {}", mode.label(), mode.key());
+                    if ui
+                        .selectable_label(current == mode, text)
+                        .on_hover_text(mode.description())
+                        .clicked()
+                    {
+                        self.shape_menu = None;
+                        self.tools.set_select_mode(mode);
                     }
                 }
                 ui.separator();

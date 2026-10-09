@@ -1,7 +1,7 @@
 //! The things a map is made of.
 
 use glam::Vec3;
-use halberd_geom::{Aabb, Brush, Plane};
+use halberd_geom::{Aabb, Brush, FaceFate, Plane};
 use halberd_kv::Entry;
 use std::fmt;
 
@@ -116,6 +116,25 @@ impl BrushObject {
             entity: self.entity,
             ..Self::from_parts(brush, &self.faces, self.file_data.clone())
         }
+    }
+
+    /// The same brush with a new shape from editing its corners, edges or
+    /// faces ([`Brush::with_moved_points`]), with what became of each face.
+    /// Faces keep their material and file data, except that a face that was
+    /// split or merged (not `whole`) loses its saved id and displacement:
+    /// two faces must not share an id, and a displacement only fits the
+    /// face it was made for. A new id is given when saving.
+    pub fn with_shape_mapped(&self, brush: Brush, fates: &[FaceFate]) -> Self {
+        let mut shaped = self.with_shape(brush);
+        for (info, fate) in shaped.faces.iter_mut().zip(fates) {
+            if !fate.whole {
+                info.file_data.retain(|entry| match entry {
+                    Entry::Pair(key, _) => !key.eq_ignore_ascii_case("id"),
+                    Entry::Block(block) => !block.name.eq_ignore_ascii_case("dispinfo"),
+                });
+            }
+        }
+        shaped
     }
 
     /// The brush entity this brush belongs to, or `None` for a world brush.
@@ -329,5 +348,59 @@ mod tests {
         b.set_entity(Some(ObjectId(7)));
         let moved = b.with_shape(cube(32.0));
         assert_eq!(moved.entity(), Some(ObjectId(7)));
+    }
+
+    #[test]
+    fn split_faces_lose_their_id_and_displacement_but_keep_their_material() {
+        use halberd_kv::Block;
+        let info: Vec<FaceInfo> = (0..6)
+            .map(|i| FaceInfo {
+                material: format!("MAT{i}"),
+                file_data: vec![
+                    Entry::Pair("id".into(), (i + 1).to_string()),
+                    Entry::Pair("material".into(), format!("MAT{i}")),
+                    Entry::Block(Block::new("dispinfo")),
+                ],
+                ..FaceInfo::default()
+            })
+            .collect();
+        let object = BrushObject::from_parts(cube(0.0), &info, Vec::new());
+        let lifted = object
+            .brush()
+            .points()
+            .iter()
+            .position(|p| *p == Vec3::splat(64.0))
+            .unwrap();
+        let (bent, fates) = object
+            .brush()
+            .with_moved_points(&[(lifted, Vec3::new(80.0, 80.0, 96.0))])
+            .unwrap();
+        let edited = object.with_shape_mapped(bent, &fates);
+        assert_eq!(edited.faces().len(), 9);
+        for (info, fate) in edited.faces().iter().zip(&fates) {
+            assert!(info.material.starts_with("MAT"));
+            let has_id = info
+                .file_data
+                .iter()
+                .any(|e| matches!(e, Entry::Pair(k, _) if k == "id"));
+            let has_disp = info
+                .file_data
+                .iter()
+                .any(|e| matches!(e, Entry::Block(b) if b.name == "dispinfo"));
+            assert_eq!(has_id, fate.whole);
+            assert_eq!(has_disp, fate.whole);
+        }
+        // No two faces share an id.
+        let ids: Vec<&String> = edited
+            .faces()
+            .iter()
+            .flat_map(|f| &f.file_data)
+            .filter_map(|e| match e {
+                Entry::Pair(k, v) if k == "id" => Some(v),
+                _ => None,
+            })
+            .collect();
+        let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len());
     }
 }

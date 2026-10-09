@@ -12,6 +12,10 @@
 //! - The transform gizmo ([`GizmoMode`]): move (W), rotate (R), scale (S)
 //!   or all (T) the selection by dragging handles; each drag is one undo
 //!   step.
+//! - Part picking ([`SelectMode`]): in Vertex, Edge or Face mode (keys 2,
+//!   3, 4; 1 returns to Object), clicks pick corners, edges or faces of the
+//!   selected brushes, and the gizmo moves, rotates or scales them,
+//!   reshaping the brushes ([`halberd_geom::Brush::with_moved_points`]).
 //! - [`DocumentScene`]: what the camera and tools see of an open map.
 //!
 //! Input arrives as plain data ([`ViewportInput`], [`ToolInput`]), so
@@ -20,6 +24,7 @@
 
 mod camera;
 mod controller;
+mod elements;
 mod gizmo;
 mod player;
 mod scene;
@@ -32,6 +37,9 @@ pub use controller::{
     CameraController, CameraMode, CameraState, DEFAULT_FLY_SPEED, FAST_MULTIPLIER, FLY_SPEED_RANGE,
     FlyKeys, GroundPlane, LOOK_SENSITIVITY, MAX_ORBIT_PIVOT_DISTANCE, MAX_PICK_DISTANCE,
     ORBIT_SENSITIVITY, SceneQuery, ViewportInput,
+};
+pub use elements::{
+    ELEMENT_GRAB_POINTS, ElementOverlay, ElementShape, PickedElement, ScreenElement, SelectMode,
 };
 pub use gizmo::{
     Axis, GIZMO_ARM_POINTS, GIZMO_GRAB_POINTS, GizmoMode, GizmoShape, Handle, ROTATE_SNAP_DEGREES,

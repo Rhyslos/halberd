@@ -22,6 +22,9 @@ const EPSILON: f64 = 1e-3;
 /// Corners within this of a whole unit are moved onto it.
 const SNAP: f64 = 1e-2;
 
+mod edit;
+pub use edit::FaceFate;
+
 /// One flat side of a brush.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Face {
@@ -186,6 +189,13 @@ impl Brush {
             })
             .collect();
         Self::from_planes(&planes)
+    }
+
+    /// Sets each face's [`Face::source`], in face order.
+    pub(crate) fn set_sources(&mut self, sources: &[usize]) {
+        for (face, &source) in self.faces.iter_mut().zip(sources) {
+            face.source = source;
+        }
     }
 
     /// Distance along a ray (from `origin` along unit `direction`) to where

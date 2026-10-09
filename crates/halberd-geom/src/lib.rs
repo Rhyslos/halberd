@@ -25,7 +25,7 @@ mod primitive;
 mod transform;
 
 pub use aabb::Aabb;
-pub use brush::{Brush, Face, MAX_FACES, MIN_SIZE};
+pub use brush::{Brush, Face, FaceFate, MAX_FACES, MIN_SIZE};
 pub use error::GeomError;
 pub use plane::Plane;
 pub use primitive::{
