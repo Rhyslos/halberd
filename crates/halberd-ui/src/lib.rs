@@ -13,6 +13,8 @@
 //! commands, so every edit can be undone (Edit menu, Ctrl+Z / Ctrl+Y).
 
 mod console;
+mod keybinds;
+mod keymap;
 mod layout;
 mod panel;
 mod panels;
@@ -23,6 +25,8 @@ pub use console::{
     CONSOLE_CLEAR_BUTTON, CONSOLE_COPY_BUTTON, CONSOLE_SEARCH_NAME, Console, ConsoleMirror,
     LogEntry, LogLevel, MAX_CONSOLE_ENTRIES,
 };
+pub use keybinds::{KEYBINDS_SEARCH_NAME, KEYBINDS_TITLE, KeybindsViewer, drawn_keys};
+pub use keymap::{KEYBINDS, KeyCap, KeyContext, Keybind, binds_with, mouse_binds};
 pub use layout::{default_layout, is_complete, restore_or_default};
 pub use panel::Panel;
 pub use viewport::{

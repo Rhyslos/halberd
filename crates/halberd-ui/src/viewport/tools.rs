@@ -49,7 +49,7 @@ impl ViewportPanel {
             (
                 i.pointer.button_down(PointerButton::Primary),
                 i.modifiers.command,
-                !typing && !popup_open && i.key_pressed(Key::Escape),
+                !typing && !popup_open && !self.text_focus_was && i.key_pressed(Key::Escape),
                 !typing && first_press(i, Key::B, |m| m.is_none()),
                 !typing && first_press(i, Key::W, |m| m.command_only()),
                 !typing && first_press(i, Key::Q, |m| m.is_none()),

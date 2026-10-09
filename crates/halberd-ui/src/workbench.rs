@@ -2,6 +2,7 @@
 //! The workbench also owns the open map, and carries out the Edit menu.
 
 use crate::console::Console;
+use crate::keybinds::{KEYBINDS_TITLE, KeybindsViewer};
 use crate::layout::{default_layout, restore_or_default};
 use crate::panel::Panel;
 use crate::panels::{about_contents, placeholder, properties_contents, scene_contents};
@@ -84,6 +85,9 @@ pub struct Workbench {
     dock: DockState<Panel>,
     console: Console,
     about_open: bool,
+    /// The Keybinds window is showing.
+    keybinds_open: bool,
+    keybinds: KeybindsViewer,
     viewport: ViewportPanel,
     doc: Document,
     length_unit: LengthUnit,
@@ -106,6 +110,8 @@ impl Workbench {
             dock,
             console: Console::new(),
             about_open: false,
+            keybinds_open: false,
+            keybinds: KeybindsViewer::default(),
             viewport: ViewportPanel::new(None, ViewportOptions::default()),
             doc: Document::new(),
             length_unit: LengthUnit::Units,
@@ -266,7 +272,21 @@ impl Workbench {
             .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ui.ctx(), |ui| about_contents(ui, &self.info));
         self.about_open = about_open;
+        let mut keybinds_open = self.keybinds_open;
+        let keybinds = &mut self.keybinds;
+        // Placed by its top edge, so it grows downwards, never off the top.
+        let screen = ui.ctx().content_rect();
+        egui::Window::new(KEYBINDS_TITLE)
+            .open(&mut keybinds_open)
+            .pivot(Align2::CENTER_TOP)
+            .default_pos(egui::pos2(screen.center().x, screen.top() + 60.0))
+            .collapsible(false)
+            .resizable(false)
+            .show(ui.ctx(), |ui| keybinds.show(ui));
+        self.keybinds_open = keybinds_open;
         self.dialogs(ui, &mut actions);
+        self.viewport
+            .note_text_focus(ui.ctx().egui_wants_keyboard_input());
         // The Console tab's count changed after the tabs were drawn.
         if self.console.take_badge_change() {
             ui.ctx().request_repaint();
@@ -365,6 +385,13 @@ impl Workbench {
             ui.checkbox(&mut self.show_player, PLAYER_TOGGLE_LABEL)
                 .on_hover_text("A 72-unit (1.83 m) player figure next to what you are working on");
         });
+        if ui
+            .button(KEYBINDS_TITLE)
+            .on_hover_text("Every key and what it does, on a drawn keyboard")
+            .clicked()
+        {
+            self.keybinds_open = !self.keybinds_open;
+        }
         ui.menu_button("Help", |ui| {
             if ui.button("About Halberd").clicked() {
                 self.about_open = true;
@@ -471,5 +498,7 @@ mod console_tests;
 mod entity_tests;
 #[cfg(test)]
 mod file_tests;
+#[cfg(test)]
+mod keybinds_tests;
 #[cfg(test)]
 mod tests;

@@ -112,6 +112,8 @@ pub struct ViewportPanel {
     /// The shape list is open (B in the Draw tool), with this entry
     /// highlighted.
     shape_menu: Option<usize>,
+    /// A text box had the keyboard when the last frame ended.
+    text_focus_was: bool,
     length_unit: LengthUnit,
     show_player: bool,
     right_was_held: bool,
@@ -129,6 +131,7 @@ impl ViewportPanel {
             popup_was_open: false,
             keys_blocked: false,
             shape_menu: None,
+            text_focus_was: false,
             length_unit: LengthUnit::Units,
             show_player: true,
             right_was_held: false,
@@ -183,6 +186,14 @@ impl ViewportPanel {
     /// workbench calls this before drawing the menu bar.
     pub fn note_popup_open(&mut self, open: bool) {
         self.popup_was_open = open;
+    }
+
+    /// Tells the viewport whether a text box had the keyboard at the end of
+    /// the frame. egui lets go of a text box at the very start of the frame
+    /// in which Escape is pressed, so without this, the Escape that leaves a
+    /// text box would also deselect. The workbench calls this every frame.
+    pub fn note_text_focus(&mut self, focused: bool) {
+        self.text_focus_was = focused;
     }
 
     /// Tells the viewport whether a message box is showing. While one is,
