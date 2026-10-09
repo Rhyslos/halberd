@@ -256,20 +256,24 @@ pub const KEYBINDS: &[Keybind] = &[
         "Pick single brushes inside entities (on/off)",
         KeyContext::Viewport,
     ),
-    bind(&[k(Key::Num1)], "Pick whole objects", KeyContext::Viewport),
+    bind(
+        &[k(Key::Num1)],
+        "Object mode: clicks pick whole objects",
+        KeyContext::Viewport,
+    ),
     bind(
         &[k(Key::Num2)],
-        "Pick corners (vertices) of the selected brushes",
+        "Vertex mode: pick corners of the selected brushes",
         KeyContext::Viewport,
     ),
     bind(
         &[k(Key::Num3)],
-        "Pick edges of the selected brushes",
+        "Edge mode: pick edges of the selected brushes",
         KeyContext::Viewport,
     ),
     bind(
         &[k(Key::Num4)],
-        "Pick faces of the selected brushes",
+        "Face mode: pick faces of the selected brushes",
         KeyContext::Viewport,
     ),
     bind(
