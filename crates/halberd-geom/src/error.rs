@@ -15,6 +15,8 @@ pub enum GeomError {
     TooManyFaces,
     /// The planes do not enclose a solid.
     NotClosed,
+    /// A shape would need more than [`crate::MAX_SHAPE_BRUSHES`] brushes.
+    TooManyPieces,
 }
 
 impl fmt::Display for GeomError {
@@ -25,6 +27,9 @@ impl fmt::Display for GeomError {
             Self::TooLarge => "the shape reaches beyond the edge of the world",
             Self::TooManyFaces => "the shape has too many faces",
             Self::NotClosed => "the faces do not enclose a solid shape",
+            Self::TooManyPieces => {
+                "it would need more than 256 pieces (for stairs: use taller steps or a lower height)"
+            }
         })
     }
 }

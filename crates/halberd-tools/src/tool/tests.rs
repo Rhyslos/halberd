@@ -276,6 +276,8 @@ fn broken_input_never_panics() {
             released: true,
             additive: true,
             cancel: false,
+            uniform: true,
+            centered: true,
         };
         tools.update(&bad, &camera, &doc);
         let no_cursor = ToolInput {
@@ -333,4 +335,212 @@ fn clicking_a_brush_entity_picks_it_whole_unless_picking_inside() {
         drag(&mut tools, &camera, &doc, on_box, on_box),
         Some(ToolAction::Select(Some(brush)))
     );
+}
+
+fn added_brushes(action: Option<ToolAction>) -> Vec<Brush> {
+    match action {
+        Some(ToolAction::Execute(Command::AddBrushes(brushes))) => brushes,
+        other => panic!("expected new brushes, got {other:?}"),
+    }
+}
+
+#[test]
+fn stairs_climb_the_way_the_drag_went() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = ToolController::new(16.0);
+    tools.set_tool(Tool::Box);
+    tools.set_shape(halberd_geom::Shape::Stairs);
+    tools.set_box_height(64.0);
+    let west = screen(&camera, Vec3::new(0.0, 0.0, 0.0));
+    let east = screen(&camera, Vec3::new(256.0, 64.0, 0.0));
+    let up_east = added_brushes(drag(&mut tools, &camera, &doc, west, east));
+    assert_eq!(up_east.len(), 8, "64 units in 8-unit steps");
+    let top = up_east.last().unwrap().bounds();
+    assert_eq!(
+        (top.max.x, top.max.z),
+        (256.0, 64.0),
+        "highest step at the end"
+    );
+    // Dragged the other way: highest step at the west end.
+    let up_west = added_brushes(drag(&mut tools, &camera, &doc, east, west));
+    let top = up_west.last().unwrap().bounds();
+    assert_eq!((top.min.x, top.max.z), (0.0, 64.0));
+}
+
+#[test]
+fn the_preview_shows_the_shape_being_drawn() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = ToolController::new(16.0);
+    tools.set_tool(Tool::Box);
+    tools.set_shape(halberd_geom::Shape::Cylinder);
+    tools.shape_settings_mut().sides = 12;
+    let from = screen(&camera, Vec3::new(0.0, 0.0, 0.0));
+    let to = screen(&camera, Vec3::new(256.0, 256.0, 0.0));
+    let press = ToolInput {
+        pressed: true,
+        held: true,
+        ..input(from)
+    };
+    tools.update(&press, &camera, &doc);
+    let moving = ToolInput {
+        held: true,
+        ..input(to)
+    };
+    tools.update(&moving, &camera, &doc);
+    let preview = tools.preview_brushes();
+    assert_eq!(preview.len(), 1);
+    assert_eq!(preview[0].faces().len(), 12 + 2);
+}
+
+#[test]
+fn a_shape_too_small_for_its_sides_is_refused_with_a_reason() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = ToolController::new(1.0);
+    tools.set_tool(Tool::Box);
+    tools.set_shape(halberd_geom::Shape::Stairs);
+    tools.set_box_height(128.0);
+    // Four units long cannot hold 16 steps.
+    let from = screen(&camera, Vec3::new(0.0, 0.0, 0.0));
+    let to = screen(&camera, Vec3::new(4.0, 2.0, 0.0));
+    match drag(&mut tools, &camera, &doc, from, to) {
+        Some(ToolAction::Refused(reason)) => {
+            assert!(reason.contains("too small"), "{reason}");
+            assert!(reason.contains("stairs"), "{reason}");
+        }
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+}
+
+/// Presses at `from`, drags to `to` with `held` modifiers, and releases.
+fn drag_with(
+    tools: &mut ToolController,
+    camera: &Camera,
+    doc: &Document,
+    (from, to): (Vec2, Vec2),
+    uniform: bool,
+    centered: bool,
+) -> Option<ToolAction> {
+    let keys = |i: ToolInput| ToolInput {
+        uniform,
+        centered,
+        ..i
+    };
+    tools.update(
+        &keys(ToolInput {
+            pressed: true,
+            held: true,
+            ..input(from)
+        }),
+        camera,
+        doc,
+    );
+    tools.update(
+        &keys(ToolInput {
+            held: true,
+            ..input(to)
+        }),
+        camera,
+        doc,
+    );
+    tools.update(
+        &keys(ToolInput {
+            released: true,
+            ..input(to)
+        }),
+        camera,
+        doc,
+    )
+}
+
+#[test]
+fn shift_draws_uniformly_from_the_starting_corner() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = ToolController::new(16.0);
+    tools.set_tool(Tool::Box);
+    let from = screen(&camera, Vec3::new(0.0, 0.0, 0.0));
+    let to = screen(&camera, Vec3::new(-160.0, 64.0, 0.0));
+    let brush = added_brush(drag_with(
+        &mut tools,
+        &camera,
+        &doc,
+        (from, to),
+        true,
+        false,
+    ));
+    let b = brush.bounds();
+    assert_eq!(b.min, Vec3::new(-160.0, 0.0, 0.0), "towards the drag");
+    assert_eq!(
+        b.max,
+        Vec3::new(0.0, 160.0, 160.0),
+        "a cube of the longest side"
+    );
+}
+
+#[test]
+fn alt_draws_uniformly_around_the_starting_point() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = ToolController::new(16.0);
+    tools.set_tool(Tool::Box);
+    let from = screen(&camera, Vec3::new(0.0, 0.0, 0.0));
+    let to = screen(&camera, Vec3::new(48.0, -96.0, 0.0));
+    let brushes = added_brushes(drag_with(
+        &mut tools,
+        &camera,
+        &doc,
+        (from, to),
+        false,
+        true,
+    ));
+    let b = brushes[0].bounds();
+    assert_eq!((b.min.x, b.max.x), (-96.0, 96.0));
+    assert_eq!((b.min.y, b.max.y), (-96.0, 96.0));
+    assert_eq!((b.min.z, b.max.z), (0.0, 192.0), "standing on the ground");
+}
+
+#[test]
+fn r_while_drawing_turns_the_shape_clockwise() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = ToolController::new(16.0);
+    tools.set_tool(Tool::Box);
+    tools.set_shape(halberd_geom::Shape::Stairs);
+    tools.set_box_height(64.0);
+    assert!(!tools.turn_drawing(), "nothing to turn yet");
+    let from = screen(&camera, Vec3::new(0.0, 0.0, 0.0));
+    let to = screen(&camera, Vec3::new(256.0, 256.0, 0.0));
+    tools.update(
+        &ToolInput {
+            pressed: true,
+            held: true,
+            ..input(from)
+        },
+        &camera,
+        &doc,
+    );
+    tools.update(
+        &ToolInput {
+            held: true,
+            ..input(to)
+        },
+        &camera,
+        &doc,
+    );
+    assert!(tools.is_drawing());
+    // Climbing +X at first; one turn clockwise (seen from above) is −Y.
+    assert!(tools.turn_drawing());
+    let preview = tools.preview_brushes();
+    let top = preview.last().unwrap().bounds();
+    assert_eq!(
+        (top.min.y, top.max.z),
+        (0.0, 64.0),
+        "top step at the −Y end"
+    );
+    let made = added_brushes(tools.update(
+        &ToolInput {
+            released: true,
+            ..input(to)
+        },
+        &camera,
+        &doc,
+    ));
+    assert_eq!(made.last().unwrap().bounds(), top);
 }

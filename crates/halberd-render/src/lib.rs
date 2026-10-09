@@ -27,7 +27,7 @@ pub use renderer::{
 pub use scene::{
     BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, FaceVertex, PLAYER_COLOR, PLAYER_OUTLINE_VERTICES,
     POINT_ENTITY_COLOR, PREVIEW_COLOR, PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR,
-    SceneGeometry, box_outline, player_outline,
+    SceneGeometry, box_outline, player_outline, shape_outline,
 };
 
 #[cfg(test)]

@@ -27,7 +27,7 @@ Draws the ground grid, world axes and the map's brushes into an offscreen image 
 - **Axes**: X red, Y green (positive halves bright, negative dimmed), Z blue rising from the origin.
 - **Brushes** (`SceneGeometry`): faces as triangles with simple fixed lighting (each side of a box has its own shade), dark outlines, and selected brushes in red with outlines drawn on top of everything. Rebuilt only when the document's revision or selection changes (`update_scene`). Faces are drawn first, so the transparent grid hides behind them.
 - **Entities**: brushes belonging to entities are teal-grey; point entities are purple 16-unit boxes. Selected ones are red like brushes; a selected entity shows all its brushes red, and a single brush inside an entity can be selected on its own.
-- **Box preview**: the outline of a box being drawn, in yellow, on top of everything (`FrameParams::preview`).
+- **Shape preview**: the outline of the shape being drawn, in yellow, on top of everything (`set_preview_shape`; without one, the box in `FrameParams::preview`).
 - **Player figure**: a light-blue player-sized outline with a ring at eye height, hidden behind brushes like a real object (`FrameParams::player`).
 - **`read_pixels`**: copies an image back to the CPU, for tests and screenshots.
 

@@ -80,6 +80,7 @@ impl ViewportRenderer for GpuViewport {
     fn render(&mut self, view: &ViewportView, doc: &Document) -> Result<egui::TextureId, String> {
         let texture = self.prepare_target(view.size_px);
         self.renderer.update_scene(&self.state.device, doc);
+        self.renderer.set_preview_shape(&view.preview_shape);
         let target = self
             .target
             .as_ref()

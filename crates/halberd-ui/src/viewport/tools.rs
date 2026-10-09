@@ -4,9 +4,8 @@
 use super::ViewportPanel;
 use egui::{Align, Color32, Key, Layout, Modifiers, PointerButton, Rect, Ui, UiBuilder, vec2};
 use glam::Vec2;
-use halberd_config::LengthUnit;
 use halberd_doc::Document;
-use halberd_tools::{BOX_HEIGHT_RANGE, GizmoMode, Tool, ToolAction, ToolInput};
+use halberd_tools::{GizmoMode, Tool, ToolAction, ToolInput};
 
 /// True if `key` went down this frame with modifiers `held` accepts, not
 /// counting the repeats a held key sends (holding W while flying must not
@@ -30,9 +29,6 @@ pub const INSIDE_ENTITIES_LABEL: &str = "Inside entities";
 const INSIDE_ENTITIES_SHORTCUT: egui::KeyboardShortcut =
     egui::KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 
-/// Screen-reader name of the Box tool's height field.
-pub(crate) const NEW_BOX_HEIGHT_NAME: &str = "New box height";
-
 impl ViewportPanel {
     /// Reads this frame's left-mouse and tool keys, runs the active tool and
     /// carries out what it asks. Returns messages for the Console.
@@ -47,30 +43,45 @@ impl ViewportPanel {
         // Escape that closes a menu or popup is for that menu only. The menu
         // may already have closed itself this frame, so also ask whether one
         // was open when the frame began.
-        let popup_open = egui::Popup::is_any_open(ui.ctx()) || self.popup_was_open;
-        let (left_down, additive, escape, box_key, inside_key) = ui.input(|i| {
+        let popup_open =
+            egui::Popup::is_any_open(ui.ctx()) || self.popup_was_open || self.shape_menu.is_some();
+        let (left_down, additive, escape, box_key, inside_key, select_key) = ui.input(|i| {
             (
                 i.pointer.button_down(PointerButton::Primary),
                 i.modifiers.command,
                 !typing && !popup_open && i.key_pressed(Key::Escape),
                 !typing && first_press(i, Key::B, |m| m.is_none()),
                 !typing && first_press(i, Key::W, |m| m.command_only()),
+                !typing && first_press(i, Key::Q, |m| m.is_none()),
             )
         });
+        let (uniform, centered) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
         if inside_key {
             let on = !self.tools.inside_entities();
             self.tools.set_inside_entities(on);
         }
         if !typing {
-            self.gizmo_keys(ui);
+            if self.tools.is_drawing() {
+                // While drawing, R turns the shape; the gizmo keys wait.
+                let turn = ui.input(|i| first_press(i, Key::R, |m| !m.command));
+                if turn {
+                    self.tools.turn_drawing();
+                }
+            } else {
+                self.gizmo_keys(ui);
+            }
         }
         if box_key {
-            let next = if self.tools.tool() == Tool::Box {
-                Tool::Select
+            // B picks Draw; B again opens the shape list.
+            if self.tools.tool() == Tool::Box {
+                self.toggle_shape_menu();
             } else {
-                Tool::Box
-            };
-            self.tools.set_tool(next);
+                self.tools.set_tool(Tool::Box);
+            }
+        }
+        if select_key {
+            self.shape_menu = None;
+            self.tools.set_tool(Tool::Select);
         }
         // A left press while the right or middle button is moving the camera
         // belongs to the camera, not the tool.
@@ -96,6 +107,8 @@ impl ViewportPanel {
             released,
             additive,
             cancel: escape,
+            uniform,
+            centered,
         };
         let camera = *self.controller.camera();
         let mut notes = Vec::new();
@@ -152,6 +165,9 @@ impl ViewportPanel {
 
     /// The tool buttons in the viewport's top-left corner.
     pub(super) fn tool_switcher(&mut self, ui: &mut Ui, rect: Rect) {
+        if self.tools.tool() != Tool::Box {
+            self.shape_menu = None;
+        }
         let area = Rect::from_min_size(
             rect.left_top() + vec2(8.0, 26.0),
             vec2((rect.width() - 16.0).max(0.0), 30.0),
@@ -207,39 +223,9 @@ impl ViewportPanel {
                 {
                     self.tools.set_inside_entities(inside);
                 }
-                if current == Tool::Box {
-                    ui.separator();
-                    ui.label("Height");
-                    let unit = self.length_unit;
-                    let mut value = unit.from_units(f64::from(self.tools.box_height()));
-                    let (low, high) = BOX_HEIGHT_RANGE;
-                    let field = egui::DragValue::new(&mut value)
-                        .speed(if unit == LengthUnit::Metres {
-                            0.01
-                        } else {
-                            1.0
-                        })
-                        .range(unit.from_units(f64::from(low))..=unit.from_units(f64::from(high)))
-                        .fixed_decimals(unit.decimals())
-                        .suffix(unit.suffix());
-                    let response = ui.add(field);
-                    response.widget_info(|| {
-                        egui::WidgetInfo::labeled(
-                            egui::WidgetType::DragValue,
-                            true,
-                            NEW_BOX_HEIGHT_NAME,
-                        )
-                    });
-                    if response
-                        .on_hover_text(
-                            "Height of new boxes. Drag sideways or click to type. \
-                             A player is 72 units (1.83 m) tall.",
-                        )
-                        .changed()
-                    {
-                        self.tools.set_box_height(unit.to_units(value) as f32);
-                    }
-                }
             });
+        if self.tools.tool() == Tool::Box {
+            self.draw_options(ui, rect);
+        }
     }
 }

@@ -27,7 +27,7 @@ pub(crate) fn scene_contents(ui: &mut Ui, doc: &mut Document) {
         placeholder(
             ui,
             "No brushes yet",
-            "Choose the Box tool (B) and drag in the viewport to draw one.",
+            "Choose the Draw tool (B) and drag in the viewport to draw a box or another shape.",
         );
         return;
     }
