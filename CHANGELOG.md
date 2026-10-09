@@ -6,6 +6,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **Shapes.** The Box tool is now **Draw** (still B), with a **Shape** picker in a second toolbar row: box, wedge, cylinder, cone, sphere, arch and stairs. Each fills the box you drag, as tall as the Height field. Wedges and stairs climb, and arches span, the way you drag. Cylinders, cones, spheres and arches have a **Sides** setting, arches a **Thickness**, and stairs a **Step** height (8 units by default). While you drag, the actual shape is outlined. Corners land on whole units, as in Hammer, so maps compile cleanly.
 - **Pick single brushes inside entities.** Brush entities such as `func_detail` can hold hundreds of brushes. Turn on **Inside entities** (Ctrl+W, or the button in the viewport's toolbar), and a click picks the single brush under the pointer instead of the whole entity, like Hammer's "Ignore groups". That brush can then be moved, rotated, resized (gizmo or Properties) and deleted like any other, and it stays part of its entity when saved. The **Scene** panel lists an entity's brushes under it (click the arrow), and Properties says which entity a brush is part of.
 - Deleting a brush entity deletes its brushes; deleting all of an entity's brushes deletes the entity too, as in Hammer.
 

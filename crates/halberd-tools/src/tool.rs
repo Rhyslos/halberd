@@ -1,4 +1,5 @@
-//! Left-mouse tools: selecting, and drawing box brushes.
+//! Left-mouse tools: selecting, and drawing shapes (boxes, wedges,
+//! cylinders, cones, spheres, arches, stairs).
 //!
 //! Tools never change the map themselves. They return a [`ToolAction`],
 //! and the interface carries it out (edits through the document's
@@ -10,7 +11,8 @@ use crate::gizmo::{Gizmo, GizmoMode, GizmoOutcome, GizmoShape};
 use crate::scene::DocumentScene;
 use glam::Vec2;
 use halberd_doc::{Command, Document, ObjectId};
-use halberd_geom::{Aabb, Brush, GeomError};
+use halberd_geom::{Aabb, Brush, GeomError, Heading, Shape, ShapeSettings, build_shape};
+use std::cell::RefCell;
 
 /// Height of a newly drawn box, in units: comfortably taller than a GMod
 /// player (72 units), like a standard wall.
@@ -27,7 +29,8 @@ pub enum Tool {
     /// Click to select; Ctrl+click to add or remove.
     #[default]
     Select,
-    /// Drag on the grid or on a brush to draw a box.
+    /// Drag on the grid or on a brush to draw the chosen shape (a box at
+    /// first).
     Box,
 }
 
@@ -39,7 +42,7 @@ impl Tool {
     pub fn label(self) -> &'static str {
         match self {
             Self::Select => "Select",
-            Self::Box => "Box",
+            Self::Box => "Draw",
         }
     }
 
@@ -48,7 +51,8 @@ impl Tool {
         match self {
             Self::Select => "Click to select; Ctrl+click to add or remove (Esc)",
             Self::Box => {
-                "Drag on the grid or on a brush to draw a box; drag along a line for a wall (B)"
+                "Drag on the grid or on a brush to draw the chosen shape; drag along a line \
+                 for a wall. Wedges and stairs climb, and arches span, the way you drag (B)"
             }
         }
     }
@@ -111,7 +115,18 @@ pub struct ToolController {
     /// Clicks pick single brushes inside brush entities (Hammer's
     /// "Ignore groups") instead of the whole entity.
     inside_entities: bool,
+    /// What the Draw tool makes, and its settings.
+    shape: Shape,
+    shape_settings: ShapeSettings,
+    /// The last shape built for the preview, kept while nothing that makes
+    /// it changes (the preview is asked for every frame).
+    built: RefCell<Option<(ShapeKey, Built)>>,
 }
+
+/// What a shape is built from.
+type ShapeKey = (Aabb, Heading, Shape, ShapeSettings);
+/// A built shape, or why not (`None`: the drag is too short to count).
+type Built = Result<Vec<Brush>, Option<GeomError>>;
 
 impl ToolController {
     /// A controller snapping to `grid_size` units.
@@ -124,6 +139,9 @@ impl ToolController {
             drag: None,
             gizmo: Gizmo::default(),
             inside_entities: false,
+            shape: Shape::Box,
+            shape_settings: ShapeSettings::default(),
+            built: RefCell::new(None),
         }
     }
 
@@ -144,7 +162,7 @@ impl ToolController {
     }
 
     /// Switches tool, cancelling anything in progress, except during a
-    /// gizmo drag, when it does nothing. The Box tool hides the gizmo.
+    /// gizmo drag, when it does nothing. The Draw tool hides the gizmo.
     pub fn set_tool(&mut self, tool: Tool) {
         // A gizmo drag must finish (or be cancelled with Escape) first.
         if self.gizmo.is_dragging() {
@@ -207,6 +225,44 @@ impl ToolController {
         let (low, high) = BOX_HEIGHT_RANGE;
         if height.is_finite() {
             self.box_height = height.round().clamp(low, high);
+        }
+    }
+
+    /// What the Draw tool makes.
+    pub fn shape(&self) -> Shape {
+        self.shape
+    }
+
+    /// Picks what the Draw tool makes.
+    pub fn set_shape(&mut self, shape: Shape) {
+        self.shape = shape;
+    }
+
+    /// The settings of the shapes that have them (sides, arch thickness,
+    /// step height).
+    pub fn shape_settings(&self) -> &ShapeSettings {
+        &self.shape_settings
+    }
+
+    /// Changes the shape settings. Values out of range are kept in range
+    /// when the shape is built.
+    pub fn shape_settings_mut(&mut self) -> &mut ShapeSettings {
+        &mut self.shape_settings
+    }
+
+    /// The brushes the drag in progress would make, for the preview.
+    pub fn preview_brushes(&self) -> Vec<Brush> {
+        self.drag
+            .and_then(|drag| self.build(drag).ok())
+            .unwrap_or_default()
+    }
+
+    /// Why the drag in progress would make nothing, in plain words, if it
+    /// would not (shown while dragging, so a refusal is no surprise).
+    pub fn preview_problem(&self) -> Option<String> {
+        match self.build(self.drag?) {
+            Err(Some(e)) => Some(self.explain(e)),
+            _ => None,
         }
     }
 
@@ -336,14 +392,50 @@ impl ToolController {
         None
     }
 
-    fn finish_box(&self, drag: BoxDrag) -> Option<ToolAction> {
-        let bounds = self.box_bounds(drag)?;
-        Some(match Brush::cuboid(bounds) {
-            Ok(brush) => ToolAction::Execute(Command::AddBrushes(vec![brush])),
-            Err(GeomError::TooLarge) => {
-                ToolAction::Refused("The box would reach beyond the edge of the world.".into())
+    /// The brushes a drag makes, or why it can't. `Ok` is never empty; a
+    /// drag too short to count is `Err(None)`.
+    fn build(&self, drag: BoxDrag) -> Built {
+        let bounds = self.box_bounds(drag).ok_or(None)?;
+        let key = (
+            bounds,
+            Heading::of_drag(drag.end - drag.start),
+            self.shape,
+            self.shape_settings,
+        );
+        if let Some((built_key, built)) = &*self.built.borrow()
+            && *built_key == key
+        {
+            return built.clone();
+        }
+        let built = build_shape(key.2, &key.3, key.0, key.1).map_err(Some);
+        *self.built.borrow_mut() = Some((key, built.clone()));
+        built
+    }
+
+    /// Why a shape could not be made, in plain words.
+    fn explain(&self, e: GeomError) -> String {
+        let name = self.shape.label().to_lowercase();
+        match e {
+            GeomError::TooLarge => format!("The {name} would reach beyond the edge of the world."),
+            GeomError::TooSmall | GeomError::NotClosed => {
+                let advice = if self.shape.has_sides() {
+                    " Draw it bigger, or use fewer sides."
+                } else if self.shape == Shape::Stairs {
+                    " Draw it longer, or use taller steps."
+                } else {
+                    " Draw it bigger."
+                };
+                format!("No {name} was made: it is too small for that shape.{advice}")
             }
-            Err(e) => ToolAction::Refused(format!("No box was made: {e}.")),
+            e => format!("No {name} was made: {e}."),
+        }
+    }
+
+    fn finish_box(&self, drag: BoxDrag) -> Option<ToolAction> {
+        Some(match self.build(drag) {
+            Ok(brushes) => ToolAction::Execute(Command::AddBrushes(brushes)),
+            Err(None) => return None,
+            Err(Some(e)) => ToolAction::Refused(self.explain(e)),
         })
     }
 

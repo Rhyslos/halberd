@@ -18,13 +18,14 @@ use halberd_tools::{
     ToolController, ViewportInput, player_bounds,
 };
 
+mod draw_options;
 mod gizmo;
 mod tools;
 
 pub use tools::INSIDE_ENTITIES_LABEL;
 
 /// What a renderer needs to draw one viewport frame.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ViewportView {
     /// Size of the image to draw, in physical pixels.
     pub size_px: [u32; 2],
@@ -34,8 +35,10 @@ pub struct ViewportView {
     pub camera_position: Vec3,
     /// The editor grid size, in units.
     pub grid_size: f32,
-    /// A box being drawn, to outline.
+    /// The box a shape is being drawn in.
     pub preview: Option<Aabb>,
+    /// The shape being drawn in it, to outline (empty: outline the box).
+    pub preview_shape: Vec<halberd_geom::Brush>,
     /// Where to draw the player figure for scale, if shown.
     pub player: Option<Aabb>,
 }
@@ -156,7 +159,7 @@ impl ViewportPanel {
         self.show_player = show_player;
     }
 
-    /// The tools, for reading the Box tool's height.
+    /// The tools, for reading the Draw tool's settings.
     pub fn tools(&self) -> &ToolController {
         &self.tools
     }
@@ -219,6 +222,7 @@ impl ViewportPanel {
             camera_position: camera.position,
             grid_size: self.grid_size,
             preview: self.tools.preview(),
+            preview_shape: self.tools.preview_brushes(),
             player: self
                 .show_player
                 .then(|| player_bounds(player_feet(self.tools.preview(), doc, camera.position))),

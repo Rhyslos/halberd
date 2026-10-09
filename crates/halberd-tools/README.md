@@ -43,7 +43,7 @@ The viewport camera and the first left-mouse tools are implemented.
 | Tool | Left mouse |
 | --- | --- |
 | Select | Click selects what is under the pointer (nothing: clears the selection). Ctrl+click adds or removes. Moving more than 4 points between press and release is not a click. A brush inside a brush entity selects the whole entity, unless `set_inside_entities(true)` (Hammer's "Ignore groups"); the gizmo appears only around brushes. |
-| Box (B) | Drag to draw a box, snapped to the grid, standing on the grid or on top of the brush under the pointer, as tall as `box_height` (128 units by default, settable, whole units). A drag along one grid line makes a wall one grid square thick; a click makes nothing. Escape cancels. `preview()` gives the box while dragging. |
+| Draw (B) | Drag to draw the chosen `Shape` (`set_shape`: box, wedge, cylinder, cone, sphere, arch, stairs; settings in `shape_settings_mut`) in a box snapped to the grid, standing on the grid or on top of the brush under the pointer, as tall as `box_height` (128 units by default, settable, whole units). A drag along one grid line makes a wall one grid square thick; a click makes nothing. Wedges and stairs climb, and arches span, along the drag's longer direction, towards where it ended. A shape too small to build is refused with a reason. Escape cancels. `preview()` gives the box and `preview_brushes()` the shape while dragging. |
 
 `DocumentScene` is what the camera and tools see of an open map: brush surfaces first, the grid plane elsewhere, and the selection's centre for Orbit mode.
 

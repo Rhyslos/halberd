@@ -10,8 +10,10 @@ use crate::lines::{LineVertex, axis_lines};
 use crate::pipelines::{PipelineKind, create_pipeline};
 use crate::scene::{
     PLAYER_OUTLINE_VERTICES, PREVIEW_COLOR, SceneGeometry, box_outline, player_outline,
+    shape_outline,
 };
 use halberd_doc::Document;
+use halberd_geom::Brush;
 use wgpu::util::DeviceExt;
 
 /// Colour format the viewport renders in: 8-bit RGBA, sRGB-encoded, so
@@ -98,8 +100,12 @@ pub struct ViewportRenderer {
     axis_buffer: wgpu::Buffer,
     axis_vertex_count: u32,
     scene: SceneBuffers,
-    /// Room for one box outline, rewritten whenever a box is being drawn.
+    /// Room for the outline of a shape being drawn, rewritten each frame
+    /// one is.
     preview_buffer: wgpu::Buffer,
+    /// The outline of the shape being drawn (see
+    /// [`ViewportRenderer::set_preview_shape`]).
+    preview_shape: Vec<LineVertex>,
     /// Room for the player figure, rewritten when it is shown.
     player_buffer: wgpu::Buffer,
 }
@@ -158,8 +164,9 @@ impl GpuList {
     }
 }
 
-/// Vertices in one box outline.
-const PREVIEW_VERTICES: usize = 24;
+/// Most vertices of a preview outline; a bigger shape's outline is cut
+/// short (it is only a preview).
+const PREVIEW_VERTICES: usize = 32_768;
 
 impl ViewportRenderer {
     /// Builds shaders, pipelines and fixed geometry. `sample_count` is 1 or
@@ -255,6 +262,7 @@ impl ViewportRenderer {
             axis_vertex_count: axes.len() as u32,
             scene: SceneBuffers::default(),
             preview_buffer,
+            preview_shape: Vec::new(),
             player_buffer,
         }
     }
@@ -285,6 +293,15 @@ impl ViewportRenderer {
                 2,
             ),
         };
+    }
+
+    /// The shape being drawn, outlined (instead of
+    /// [`FrameParams::preview`]'s box) while there is a preview. Empty
+    /// shows the box.
+    pub fn set_preview_shape(&mut self, brushes: &[Brush]) {
+        let mut lines = shape_outline(brushes, PREVIEW_COLOR);
+        lines.truncate(PREVIEW_VERTICES);
+        self.preview_shape = lines;
     }
 
     /// The multisample count in use.
@@ -370,9 +387,13 @@ impl ViewportRenderer {
             0,
             bytemuck::bytes_of(&FrameUniforms::new(params)),
         );
-        let preview = params
-            .preview
-            .map(|bounds| box_outline(bounds, PREVIEW_COLOR));
+        let preview = params.preview.map(|bounds| {
+            if self.preview_shape.is_empty() {
+                box_outline(bounds, PREVIEW_COLOR)
+            } else {
+                self.preview_shape.clone()
+            }
+        });
         if let Some(lines) = &preview {
             queue.write_buffer(&self.preview_buffer, 0, bytemuck::cast_slice(lines));
         }

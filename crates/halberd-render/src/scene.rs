@@ -154,6 +154,25 @@ impl SceneGeometry {
     }
 }
 
+/// The edges of every face of `brushes`, as a line list (for the outline
+/// of a shape being drawn).
+pub fn shape_outline(brushes: &[Brush], color: [f32; 4]) -> Vec<LineVertex> {
+    let mut lines = Vec::new();
+    for face in brushes.iter().flat_map(Brush::faces) {
+        let corners = face.vertices();
+        for (i, corner) in corners.iter().enumerate() {
+            let next = corners[(i + 1) % corners.len()];
+            for p in [*corner, next] {
+                lines.push(LineVertex {
+                    position: p.to_array(),
+                    color,
+                });
+            }
+        }
+    }
+    lines
+}
+
 /// The twelve edges of a box as a line list, in one colour.
 pub fn box_outline(bounds: Aabb, color: [f32; 4]) -> Vec<LineVertex> {
     bounds
@@ -303,5 +322,15 @@ mod tests {
         let scene = SceneGeometry::from_document(&doc);
         assert_eq!(count(&scene, SELECTED_COLOR), 36);
         assert_eq!(count(&scene, ENTITY_BRUSH_COLOR), 36);
+    }
+
+    #[test]
+    fn a_shape_outline_traces_every_face_edge() {
+        let cube = Brush::cuboid(Aabb::from_corners(Vec3::ZERO, Vec3::splat(64.0))).unwrap();
+        let lines = shape_outline(&[cube.clone(), cube], PREVIEW_COLOR);
+        // 2 boxes × 6 faces × 4 edges × 2 ends.
+        assert_eq!(lines.len(), 96);
+        assert!(lines.iter().all(|v| v.color == PREVIEW_COLOR));
+        assert!(shape_outline(&[], PREVIEW_COLOR).is_empty());
     }
 }

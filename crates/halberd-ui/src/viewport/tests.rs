@@ -11,7 +11,7 @@ struct Recording {
 
 impl ViewportRenderer for Recording {
     fn render(&mut self, view: &ViewportView, _doc: &Document) -> Result<egui::TextureId, String> {
-        self.views.push(*view);
+        self.views.push(view.clone());
         Err("recording only".into())
     }
 }
@@ -71,7 +71,7 @@ fn press(h: &Harness<'_, State>, button: PointerButton, at: egui::Pos2, pressed:
 fn renders_at_the_panel_size_in_pixels() {
     let mut h = harness(ViewportOptions::default());
     h.run();
-    let view = *h.state().renderer.views.last().unwrap();
+    let view = h.state().renderer.views.last().unwrap().clone();
     assert!(
         view.size_px[0] >= 780 && view.size_px[1] >= 580,
         "{:?}",
@@ -317,7 +317,7 @@ fn b_switches_between_select_and_box() {
 fn tool_switcher_changes_tool_without_drawing() {
     let mut h = harness(ViewportOptions::default());
     h.run();
-    h.get_by_label("Box").click();
+    h.get_by_label("Draw").click();
     h.run();
     assert_eq!(h.state().panel.tool(), Tool::Box);
     assert!(
@@ -361,7 +361,7 @@ fn the_box_tool_shows_a_height_field_in_the_chosen_unit() {
     h.run();
     assert!(
         h.query_by_label("Height").is_none(),
-        "only for the Box tool"
+        "only for the Draw tool"
     );
     h.state_mut().panel.set_tool(Tool::Box);
     h.state_mut()
@@ -369,7 +369,7 @@ fn the_box_tool_shows_a_height_field_in_the_chosen_unit() {
         .set_display(halberd_config::LengthUnit::Metres, true);
     h.run();
     assert!(h.query_by_label("Height").is_some());
-    let field = h.get_by_label(tools::NEW_BOX_HEIGHT_NAME);
+    let field = h.get_by_label(draw_options::NEW_BOX_HEIGHT_NAME);
     let value = field.value();
     assert!(
         value.as_deref().is_some_and(|v| v.contains("3.25")),
@@ -411,7 +411,7 @@ fn the_player_figure_stands_beside_the_selection_or_the_box_being_drawn() {
     assert!(h.state().renderer.views.last().unwrap().player.is_none());
 }
 
-/// Draws a box with the Box tool, then switches to Select with the gizmo
+/// Draws a box with the Draw tool, then switches to Select with the gizmo
 /// in `mode`. The new box is selected.
 fn box_with_gizmo(mode: halberd_tools::GizmoMode) -> Harness<'static, State> {
     let mut h = harness(ViewportOptions::default());
@@ -603,4 +603,127 @@ fn a_held_gizmo_key_does_not_flicker() {
         h.state().panel.tools().gizmo_mode(),
         Some(halberd_tools::GizmoMode::Move)
     );
+}
+
+#[test]
+fn the_shape_picker_and_its_settings() {
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.run();
+    assert!(
+        h.query_by_label(draw_options::SIDES_NAME).is_none(),
+        "a box has none"
+    );
+    h.get_by_label(draw_options::SHAPE_PICKER_NAME).click();
+    h.run();
+    h.get_by_label("Cylinder").click();
+    h.run();
+    assert_eq!(
+        h.state().panel.tools().shape(),
+        halberd_geom::Shape::Cylinder
+    );
+    assert!(h.query_by_label(draw_options::SIDES_NAME).is_some());
+    h.state_mut()
+        .panel
+        .tools_mut()
+        .set_shape(halberd_geom::Shape::Arch);
+    h.run();
+    assert!(
+        h.query_by_label(draw_options::ARCH_THICKNESS_NAME)
+            .is_some()
+    );
+    h.state_mut()
+        .panel
+        .tools_mut()
+        .set_shape(halberd_geom::Shape::Stairs);
+    h.run();
+    assert!(h.query_by_label(draw_options::STEP_HEIGHT_NAME).is_some());
+    assert!(h.query_by_label(draw_options::SIDES_NAME).is_none());
+}
+
+#[test]
+fn drawing_a_cylinder_previews_and_makes_a_cylinder() {
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.state_mut()
+        .panel
+        .tools_mut()
+        .set_shape(halberd_geom::Shape::Cylinder);
+    h.run();
+    let (from, to) = (egui::pos2(300.0, 420.0), egui::pos2(480.0, 470.0));
+    h.hover_at(from);
+    press(&h, PointerButton::Primary, from, true);
+    h.run();
+    h.hover_at(to);
+    h.run();
+    let view = h.state().renderer.views.last().unwrap().clone();
+    assert_eq!(view.preview_shape.len(), 1, "the cylinder is outlined");
+    assert_eq!(view.preview_shape[0].faces().len(), 8 + 2);
+    press(&h, PointerButton::Primary, to, false);
+    h.run();
+    let doc = &h.state().doc;
+    assert_eq!(doc.len(), 1);
+    let brush = doc.objects().next().unwrap().1.as_brush().unwrap();
+    assert_eq!(brush.brush().faces().len(), 8 + 2);
+    assert!(
+        h.state()
+            .renderer
+            .views
+            .last()
+            .unwrap()
+            .preview_shape
+            .is_empty(),
+        "no outline after the drag"
+    );
+}
+
+#[test]
+fn typing_a_length_in_metres_is_not_rewritten_while_typing() {
+    // Regression: each keystroke was stored rounded to whole units, and
+    // the field then rewrote the text being typed ("1.5" became "0.5.99").
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.state_mut()
+        .panel
+        .tools_mut()
+        .set_shape(halberd_geom::Shape::Arch);
+    h.state_mut()
+        .panel
+        .set_display(halberd_config::LengthUnit::Metres, true);
+    h.run();
+    h.get_by_label(draw_options::ARCH_THICKNESS_NAME).click();
+    h.run();
+    h.get_by_label(draw_options::ARCH_THICKNESS_NAME)
+        .type_text("1.5");
+    h.run();
+    h.key_press(Key::Enter);
+    h.run();
+    // 1.5 m is 59.06 units, stored as 59.
+    assert_eq!(
+        h.state().panel.tools().shape_settings().arch_thickness,
+        59.0
+    );
+}
+
+#[test]
+fn a_shape_that_cannot_be_made_says_why_while_dragging() {
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.state_mut()
+        .panel
+        .tools_mut()
+        .set_shape(halberd_geom::Shape::Stairs);
+    h.state_mut().panel.tools_mut().set_box_height(4096.0);
+    h.run();
+    let (from, to) = (egui::pos2(300.0, 420.0), egui::pos2(480.0, 470.0));
+    h.hover_at(from);
+    press(&h, PointerButton::Primary, from, true);
+    h.run();
+    h.hover_at(to);
+    h.run();
+    assert!(h.query_by_label_contains("more than 256 pieces").is_some());
+    press(&h, PointerButton::Primary, to, false);
+    h.run();
+    assert!(h.state().doc.is_empty());
+    assert!(h.query_by_label_contains("more than 256 pieces").is_none());
 }

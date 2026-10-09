@@ -4,7 +4,7 @@
 
 Halberd is a free, open-source level editor in the spirit of Unity and Godot: place and shape geometry in a 3D viewport, populate it with props, and compile it straight into a playable GMod map with Valve's own tools. Maps open in Hammer and Hammer++ too, through Export to Hammer.
 
-> **Status: pre-alpha.** You can open and save Hammer maps (VMF), draw box brushes, and select, move, rotate, resize and delete them, with undo and redo. Textures are kept but not shown yet. Follow the progress tracker below.
+> **Status: pre-alpha.** You can open and save Hammer maps (VMF), draw boxes, wedges, cylinders, cones, spheres, arches and stairs, and select, move, rotate, resize and delete them, with undo and redo. Textures are kept but not shown yet. Follow the progress tracker below.
 
 Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
@@ -32,15 +32,15 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 1 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 2 of 19
 
-`█░░░░░░░░░░░░` 5%
+`█░░░░░░░░░░░░` 11%
 
 <details>
 <summary>Milestones</summary>
 
 - [x] Select single brushes inside brush entities such as `func_detail` (like Hammer's "Ignore groups")
-- [ ] Primitives: wedge, cylinder, cone, sphere, arch, stairs
+- [x] Primitives: wedge, cylinder, cone, sphere, arch, stairs
 - [ ] Face, edge and vertex selection modes
 - [ ] Shape operations: extrude, bevel, join, split, bridge, clip, mirror
 - [ ] Boolean operations: union, subtract, intersect
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-09 | Shapes: draw wedges, cylinders, cones, spheres, arches and stairs |
 | 2026-10-09 | Brushes inside entities: pick, move, resize and delete single brushes of a `func_detail` (Ctrl+W) |
 | 2026-10-08 | Console: messages with levels, filters, search and copy, and a log file that survives crashes. Phase 0 milestones complete |
 | 2026-10-08 | Hammer maps: open and save VMF files with nothing lost |
@@ -131,6 +132,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-09: the first shapes.** A wedge, a 12-sided cylinder, a cone, a sphere, an arch and a flight of stairs (and a box, just out of view), all drawn with the Draw tool.
+
+![Halberd's shapes: wedge, cylinder, cone, sphere, arch and stairs](docs/screenshots/2026-10-09-primitives.png)
 
 **2026-10-09: a brush inside an entity.** With *Inside entities* on, the `func_detail`'s brush is picked on its own: the Move gizmo is on it, Scene shows it under its entity, and Properties says what it is part of.
 

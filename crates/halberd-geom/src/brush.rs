@@ -20,7 +20,7 @@ const HUGE: f64 = 1_048_576.0;
 /// Points closer than this to a cutting plane count as on it.
 const EPSILON: f64 = 1e-3;
 /// Corners within this of a whole unit are moved onto it.
-const SNAP: f64 = 1e-3;
+const SNAP: f64 = 1e-2;
 
 /// One flat side of a brush.
 #[derive(Debug, Clone, PartialEq)]

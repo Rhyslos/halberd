@@ -130,8 +130,8 @@ fn no_gizmo_without_a_mode_a_selection_or_the_select_tool() {
     t.set_gizmo_mode(Some(GizmoMode::Move));
     assert!(!t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
     t.set_tool(Tool::Box);
-    assert!(t.gizmo_shapes(&camera, SIZE, &doc).is_empty(), "Box tool");
-    assert_eq!(t.gizmo_mode(), None, "the Box tool turns the gizmo off");
+    assert!(t.gizmo_shapes(&camera, SIZE, &doc).is_empty(), "Draw tool");
+    assert_eq!(t.gizmo_mode(), None, "the Draw tool turns the gizmo off");
     t.set_gizmo_mode(Some(GizmoMode::Move));
     assert_eq!(t.tool(), Tool::Select, "picking a mode picks Select");
     doc.clear_selection();
