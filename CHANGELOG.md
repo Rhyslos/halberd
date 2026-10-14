@@ -6,6 +6,16 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **Shape operations**, in a new **Shape** menu and on keys. Each is one undo step and always leaves valid convex brushes:
+  - **Extrude faces (E):** a new brush on each picked face, one grid step deep, with its far face picked and the Move gizmo on, so you can pull it further (E again stacks another).
+  - **Bevel edges (Ctrl+B):** cuts picked edges off with a slanted face, one grid step back.
+  - **Bridge (F):** fills the space spanned by the picked corners, edges or faces with a new brush.
+  - **Split (K) / Clip (X):** cut the selected brushes along a picked face, through three picked corners, or along a picked edge or two corners as seen on screen. Split keeps both parts; Clip keeps the bigger.
+  - **Join brushes (Ctrl+J):** the selected brushes become one (the Console says if gaps between them were filled).
+  - **Merge corners (M)**, and **Delete** of picked corners or faces in Vertex and Face modes.
+  - **Mirror** left to right on screen (Ctrl+M), or along X, Y or up and down.
+- **Box picking:** in Vertex, Edge and Face modes, drag a box to pick every corner, edge or face inside it (Ctrl adds).
+- Greyed-out Shape menu entries say what to pick first; new faces copy the look of the face they came from, and new brushes stay in their `func_detail`.
 - **Face, edge and vertex modes.** Press **2**, **3** or **4** (or use the **Pick** buttons in the Select tool's second toolbar row) to pick the corners, edges or faces of the selected brushes instead of whole objects; **1** goes back to Object mode. Corners and edges show over the brush; a click picks one, Ctrl+click adds or removes. The gizmo (W, R, S, T) then moves, rotates or scales what is picked, reshaping the brush: pull a corner up for a sloped top, push an edge down for a ramp, lift a face to make a brush taller. The result is always a valid brush (a face that bends folds in two), faces keep their materials, and each drag is one undo step ("Move vertex", "Rotate face"). Escape lets go of the picked parts first, then deselects. Delete waits in these modes while brushes are selected, with a note. A drag that ends where it began leaves nothing to undo. The brushes of a selected `func_detail` can be reshaped too.
 - **Keybinds viewer.** **Keybinds** in the menu bar (between View and Help) opens a drawn keyboard. Keys that do something are lit; hover a key to see what it does in every situation, or click it to keep the list open. Search for an action ("save", "fly"), a situation ("while drawing") or keys ("ctrl+s") to light up the keys involved. What the mouse does is listed underneath.
 - **Shapes.** The Box tool is now **Draw** (still B), with a **Shape** picker in a second toolbar row: box, wedge, cylinder, cone, sphere, arch and stairs. Each fills the box you drag, as tall as the Height field. Wedges and stairs climb, and arches span, the way you drag. Cylinders, cones, spheres and arches have a **Sides** setting, arches a **Thickness**, and stairs a **Step** height (8 units by default). While you drag, the actual shape is outlined. Corners land on whole units, as in Hammer, so maps compile cleanly.

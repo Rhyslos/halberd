@@ -5,7 +5,7 @@ use super::ViewportPanel;
 use super::tools::first_press;
 use egui::{Key, KeyboardShortcut, Modifiers, Ui};
 use halberd_doc::Document;
-use halberd_tools::{Axis, ShapeOp};
+use halberd_tools::ShapeOp;
 
 /// The key for each shape operation that has one.
 pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 8] = [
@@ -100,7 +100,7 @@ pub(crate) fn shape_menu(
 ) -> Vec<String> {
     let mut notes = Vec::new();
     for op in ShapeOp::MENU {
-        if matches!(op, ShapeOp::MirrorAcrossView | ShapeOp::Mirror(Axis::X)) {
+        if op == ShapeOp::MirrorAcrossView {
             ui.separator();
         }
         let mut button = egui::Button::new(op.label());
