@@ -198,3 +198,43 @@ pub(crate) fn candidates(
     }
     out
 }
+
+/// Every part of kind `kind` of the editable brushes lying wholly inside
+/// the screen box with opposite corners `a` and `b` (corners, both ends of
+/// an edge, or every corner of a face), as seen through the brushes.
+pub(crate) fn pick_in_box(
+    doc: &Document,
+    kind: ElementKind,
+    camera: &Camera,
+    size: Vec2,
+    a: Vec2,
+    b: Vec2,
+) -> Vec<PickedElement> {
+    let (low, high) = (a.min(b), a.max(b));
+    let inside = |p: Vec3| {
+        camera
+            .project(p, size)
+            .is_some_and(|s| s.is_finite() && s.cmpge(low).all() && s.cmple(high).all())
+    };
+    let mut out = Vec::new();
+    for (id, brush) in editable_brushes(doc) {
+        let (points, _, edges) = brush.topology();
+        let mut offer = |shape: ElementShape| {
+            if shape.corners().iter().all(|p| inside(*p)) {
+                out.push(PickedElement { brush: id, shape });
+            }
+        };
+        match kind {
+            ElementKind::Vertex => points.iter().for_each(|p| offer(ElementShape::Vertex(*p))),
+            ElementKind::Edge => edges
+                .iter()
+                .for_each(|&(i, j)| offer(ElementShape::Edge([points[i], points[j]]))),
+            ElementKind::Face => {
+                for face in brush.faces() {
+                    offer(ElementShape::Face(face.vertices().to_vec()));
+                }
+            }
+        }
+    }
+    out
+}

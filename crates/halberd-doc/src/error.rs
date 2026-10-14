@@ -16,6 +16,8 @@ pub enum DocError {
     /// The command changes a brush's shape, but the object is not a world
     /// brush.
     NotABrush(ObjectId),
+    /// The object is not an entity, so nothing can join it.
+    NotAnEntity(ObjectId),
 }
 
 impl fmt::Display for DocError {
@@ -25,6 +27,7 @@ impl fmt::Display for DocError {
             Self::UnknownObject(id) => write!(f, "object {id} is not in the map"),
             Self::TooManyObjects => f.write_str("the map has reached its object limit"),
             Self::NotABrush(id) => write!(f, "object {id} is not a brush"),
+            Self::NotAnEntity(id) => write!(f, "object {id} is not an entity"),
         }
     }
 }

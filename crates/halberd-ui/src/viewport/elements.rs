@@ -50,6 +50,19 @@ pub(super) fn draw(painter: &Painter, rect: Rect, overlay: &ElementOverlay) {
     }
 }
 
+/// The box being dragged to pick parts, between screen points `a` and `b`
+/// (in points from `rect`'s top-left).
+pub(super) fn draw_box(painter: &Painter, rect: Rect, a: glam::Vec2, b: glam::Vec2) {
+    let area = Rect::from_two_pos(rect.min + vec2(a.x, a.y), rect.min + vec2(b.x, b.y));
+    painter.rect_filled(area, 0.0, HOVERED.gamma_multiply(0.08));
+    painter.rect_stroke(
+        area,
+        0.0,
+        Stroke::new(1.0, HOVERED),
+        egui::StrokeKind::Inside,
+    );
+}
+
 /// A line under the toolbar saying what to do first in a part-picking
 /// mode with nothing selected.
 pub(super) fn hint(painter: &Painter, rect: Rect, mode: SelectMode) {

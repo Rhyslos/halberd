@@ -13,7 +13,7 @@ use glam::Vec3;
 use halberd_doc::{Document, ElementKind, Object, ObjectId};
 use halberd_geom::{Aabb, Brush};
 pub use pick::{ElementOverlay, ScreenElement};
-pub(crate) use pick::{candidates, on_screen, pick};
+pub(crate) use pick::{candidates, on_screen, pick, pick_in_box};
 
 /// How close the pointer must be to a corner or edge to pick it, in points.
 pub const ELEMENT_GRAB_POINTS: f32 = 8.0;
@@ -160,6 +160,19 @@ impl PickedElement {
                     .map(|_| wanted)
             }
         }
+    }
+
+    /// For a picked face, its place among the brush's faces.
+    pub(crate) fn face_index(&self, brush: &Brush) -> Option<usize> {
+        if !matches!(self.shape, ElementShape::Face(_)) {
+            return None;
+        }
+        let wanted = self.resolve(brush)?;
+        brush.face_points().into_iter().position(|face| {
+            let mut face = face;
+            face.sort_unstable();
+            face == wanted
+        })
     }
 
     /// The same part, with its remembered corners moved onto the brush's

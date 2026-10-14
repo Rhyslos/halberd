@@ -37,4 +37,4 @@ Option 2 with (b).
 - Rounded shapes' corners are not exactly flat (they are rounded to whole units), so the hull treats points within 0.02 units of a side as on it, turns thin leaning slivers until every point is behind them, and drops slivers that add nothing when a shape would otherwise go over the 128-face limit. Tests check that no result bulges past its corners.
 - A drag that would flatten the brush (all corners in one plane) stops at the last shape that worked.
 - Moving one corner of a box straight up folds only its top; moving it sideways folds the two sides as well. This is what Hammer does too.
-- Box-selecting many corners by dragging a rectangle, deleting parts, and merging corners on purpose come with the shape operations milestone.
+- Box-selecting many corners by dragging a rectangle, deleting parts, and merging corners on purpose come with the shape operations milestone. *Update: done in [decision 0017](0017-shape-operations.md); Delete now deletes picked corners or faces.*
