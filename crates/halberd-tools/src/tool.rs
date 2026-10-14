@@ -144,6 +144,9 @@ pub struct ToolController {
     elements: Elements,
     /// The part under the pointer, for highlighting.
     hovered_element: Option<PickedElement>,
+    /// A box being dragged to pick every part inside it: where the drag
+    /// began and where the pointer is.
+    marquee: Option<(Vec2, Vec2)>,
 }
 
 /// What a shape is built from.
@@ -168,7 +171,14 @@ impl ToolController {
             select_mode: SelectMode::Object,
             elements: Elements::default(),
             hovered_element: None,
+            marquee: None,
         }
+    }
+
+    /// The box being dragged to pick parts, as two opposite corners in
+    /// points from the viewport's top-left, if one is.
+    pub fn marquee(&self) -> Option<(Vec2, Vec2)> {
+        self.marquee
     }
 
     /// What clicks pick in the Select tool.
@@ -186,6 +196,7 @@ impl ToolController {
         self.elements = Elements::default();
         self.hovered_element = None;
         self.select_mode = mode;
+        self.marquee = None;
     }
 
     /// The picked corners, edges or faces.
@@ -268,6 +279,7 @@ impl ToolController {
         }
         self.tool = tool;
         self.press_at = None;
+        self.marquee = None;
         self.drag = None;
         if tool == Tool::Box {
             // Picked parts are hidden while drawing; let go of them, so
@@ -470,6 +482,7 @@ impl ToolController {
         }
         if input.cancel && (self.drag.is_some() || self.press_at.is_some()) {
             self.press_at = None;
+            self.marquee = None;
             self.drag = None;
             return None;
         }
@@ -481,7 +494,7 @@ impl ToolController {
                     self.hovered_element =
                         cursor.and_then(|c| elements::pick(doc, kind, camera, size, c));
                 }
-                self.update_select(input, cursor, ray.as_ref(), doc)
+                self.update_select(input, cursor, ray.as_ref(), camera, doc)
             }
             Tool::Box => self.update_box(input, ray.as_ref(), doc),
         }
@@ -492,10 +505,35 @@ impl ToolController {
         input: &ToolInput,
         cursor: Option<Vec2>,
         ray: Option<&Ray>,
+        camera: &Camera,
         doc: &Document,
     ) -> Option<ToolAction> {
         if input.pressed {
             self.press_at = cursor;
+            self.marquee = None;
+        }
+        // In a part-picking mode, dragging draws a box that picks every
+        // part inside it.
+        if let (Some(kind), Some(from), Some(to)) =
+            (self.select_mode.element(), self.press_at, cursor)
+            && (self.marquee.is_some() || to.distance(from) > CLICK_SLOP)
+        {
+            self.marquee = Some((from, to));
+            if input.released || !input.held {
+                self.press_at = None;
+                self.marquee = None;
+                let size = input.size.max(Vec2::ONE);
+                let inside = elements::pick_in_box(doc, kind, camera, size, from, to);
+                if !input.additive {
+                    self.elements.items.clear();
+                }
+                for item in inside {
+                    if !self.elements.contains(&item) {
+                        self.elements.items.push(item);
+                    }
+                }
+            }
+            return None;
         }
         if !input.released {
             return None;
@@ -657,6 +695,10 @@ fn sane_grid(grid: f32) -> f32 {
         16.0
     }
 }
+
+mod operations;
+
+pub use operations::{SelectAfter, ShapeOp, ShapeOpOutcome};
 
 #[cfg(test)]
 mod tests;

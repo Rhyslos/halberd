@@ -21,8 +21,11 @@ use halberd_tools::{
 mod draw_options;
 mod elements;
 mod gizmo;
+mod shape_ops;
 mod tools;
 
+pub use shape_ops::SHAPE_OP_KEYS;
+pub(crate) use shape_ops::shape_menu;
 pub use tools::INSIDE_ENTITIES_LABEL;
 
 /// What a renderer needs to draw one viewport frame.
@@ -288,6 +291,9 @@ impl ViewportPanel {
 
         if let Some(overlay) = self.tools.element_overlay(&camera, size, doc) {
             elements::draw(&painter, rect, &overlay);
+            if let Some((a, b)) = self.tools.marquee() {
+                elements::draw_box(&painter, rect, a, b);
+            }
             if doc.selection().is_empty() {
                 elements::hint(&painter, rect, self.tools.select_mode());
             }

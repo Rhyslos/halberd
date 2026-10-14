@@ -20,6 +20,9 @@ fn the_menu_shortcuts_the_code_uses_are_listed() {
     ] {
         assert!(listed.contains(&shortcut), "{shortcut:?} is in the list");
     }
+    for (op, shortcut) in crate::viewport::SHAPE_OP_KEYS {
+        assert!(listed.contains(&shortcut), "{op:?}'s key is in the list");
+    }
 }
 
 #[test]
@@ -43,10 +46,7 @@ fn searching_finds_actions_contexts_and_keys() {
     assert_eq!(found("ctrl+s"), ["Save"], "exact combination");
     assert_eq!(found("cmd + shift + s"), ["Save as…"], "Cmd means Ctrl");
     assert!(found("while draw").contains(&"Cancel the shape"));
-    assert_eq!(
-        found("vertex"),
-        ["Vertex mode: pick corners of the selected brushes"]
-    );
+    assert!(found("vertex").contains(&"Vertex mode: pick corners of the selected brushes"));
     assert!(found("").is_empty() && found("   ").is_empty());
     assert!(found("teleport").is_empty());
 }

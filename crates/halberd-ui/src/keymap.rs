@@ -281,6 +281,52 @@ pub const KEYBINDS: &[Keybind] = &[
         "Let go of picked corners, edges or faces; again: deselect. Also cancels a drag",
         KeyContext::Viewport,
     ),
+    // Shape operations.
+    bind(
+        &[k(Key::E)],
+        "Extrude: a new brush on each picked face",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[Ctrl, k(Key::B)],
+        "Bevel the picked edges",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::F)],
+        "Bridge: fill the space spanned by the picked parts",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::K)],
+        "Split the selected brushes along the picked parts",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::X)],
+        "Clip: cut along the picked parts, keep the bigger part",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[Ctrl, k(Key::J)],
+        "Join the selected brushes into one",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::M)],
+        "Merge the picked corners into one",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[Ctrl, k(Key::M)],
+        "Mirror the selected brushes left to right",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[k(Key::Delete)],
+        "In Vertex or Face mode: delete the picked corners or faces",
+        KeyContext::Viewport,
+    ),
     // While drawing.
     bind(
         &[k(Key::R)],
@@ -351,7 +397,9 @@ pub fn mouse_binds() -> [(&'static str, String); 6] {
         ),
         (
             "Left drag",
-            "Draw a shape (Draw tool), or drag a gizmo handle".into(),
+            "Draw a shape (Draw tool), drag a gizmo handle, or in modes 2 to 4 draw a box \
+             that picks every part inside it"
+                .into(),
         ),
         (
             "Right drag",

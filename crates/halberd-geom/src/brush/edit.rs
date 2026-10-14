@@ -14,7 +14,7 @@ use glam::{DVec3, Vec3};
 use hull::{FLAT, HullPlane, hull_planes};
 
 /// Corners closer than this count as the same corner, in units.
-const WELD: f32 = 1e-2;
+pub(super) const WELD: f32 = 1e-2;
 
 /// A brush's corners (as [`Brush::points`]), the corners of each face (as
 /// [`Brush::face_points`]) and its edges (as [`Brush::edges`]).
@@ -145,6 +145,50 @@ impl Brush {
         let (faces, fates) = faces.into_iter().unzip();
         brush.faces = faces;
         Ok((brush, fates))
+    }
+
+    /// The brush without some corners (places in [`Brush::points`]): the
+    /// convex hull of the corners left. Faces that lose a corner shrink or
+    /// fold; faces are matched and reported as by
+    /// [`Brush::with_moved_points`]. Fails if fewer than four corners off
+    /// one plane are left.
+    pub fn without_points(&self, remove: &[usize]) -> Result<(Brush, Vec<FaceFate>), GeomError> {
+        let points = self.points();
+        let left: Vec<Vec3> = (0..points.len())
+            .filter(|i| !remove.contains(i))
+            .map(|i| points[i])
+            .collect();
+        if left.len() < 4 {
+            return Err(GeomError::NotClosed);
+        }
+        // A removed corner moved to the middle of the rest is inside their
+        // hull, so it simply drops out.
+        let middle = left.iter().copied().sum::<Vec3>() / left.len() as f32;
+        let moves: Vec<(usize, Vec3)> = remove
+            .iter()
+            .filter(|&&i| i < points.len())
+            .map(|&i| (i, middle))
+            .collect();
+        self.with_moved_points(&moves)
+    }
+
+    /// The smallest convex brush around `points` (their convex hull), or why
+    /// not (all in one plane, too thin, too many faces). Faces come in no
+    /// particular order; their sources are meaningless.
+    pub fn hull(points: &[Vec3]) -> Result<Brush, GeomError> {
+        if points.iter().any(|p| !p.is_finite()) {
+            return Err(GeomError::NotFinite);
+        }
+        let wide: Vec<DVec3> = points.iter().map(|p| p.as_dvec3()).collect();
+        let mut groups = hull_planes(&wide, &[], &[])?;
+        let mut planes: Vec<Plane> = groups.iter().map(|g| g.plane(&[])).collect();
+        if planes.len() > MAX_FACES {
+            prune(&mut planes, &mut groups);
+        }
+        if planes.len() > MAX_FACES {
+            return Err(GeomError::TooManyFaces);
+        }
+        Brush::from_planes(&planes)
     }
 
     /// For each old face whose corners all moved the same way (or not at
