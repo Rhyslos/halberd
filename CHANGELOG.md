@@ -10,8 +10,8 @@ All notable changes to Halberd are listed here, newest first. The format follows
   - **Extrude faces (E):** a new brush on each picked face, one grid step deep, with its far face picked and the Move gizmo on, so you can pull it further (E again stacks another).
   - **Bevel edges (Ctrl+B):** cuts picked edges off with a slanted face, one grid step back.
   - **Bridge (F):** fills the space spanned by the picked corners, edges or faces with a new brush.
-  - **Split (K) / Clip (X):** cut the selected brushes along a picked face, through three picked corners, or along a picked edge or two corners as seen on screen. Split keeps both parts; Clip keeps the bigger.
-  - **Join brushes (Ctrl+J):** the selected brushes become one (the Console says if gaps between them were filled).
+  - **Split (K) / Clip (X):** cut the selected brushes along a picked face, through three picked corners, or through a picked edge or two corners in the direction you're looking. Split keeps both parts; Clip keeps the bigger.
+  - **Join brushes (Ctrl+J):** the selected brushes become one (the Console says if gaps between them were filled; with a world brush among them, the result stays world).
   - **Merge corners (M)**, and **Delete** of picked corners or faces in Vertex and Face modes.
   - **Mirror** left to right on screen (Ctrl+M), or along X, Y or up and down.
 - **Box picking:** in Vertex, Edge and Face modes, drag a box to pick every corner, edge or face inside it (Ctrl adds).

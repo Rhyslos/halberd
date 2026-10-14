@@ -327,6 +327,11 @@ pub const KEYBINDS: &[Keybind] = &[
         "In Vertex or Face mode: delete the picked corners or faces",
         KeyContext::Viewport,
     ),
+    bind(
+        &[k(Key::Backspace)],
+        "In Vertex or Face mode: delete the picked corners or faces",
+        KeyContext::Viewport,
+    ),
     // While drawing.
     bind(
         &[k(Key::R)],

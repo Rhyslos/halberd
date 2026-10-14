@@ -19,19 +19,21 @@ Option 2. The parts picked in Vertex, Edge and Face modes say where an operation
 - **A Shape menu** (between Edit and View) lists every operation with its key. An operation that can't run yet is greyed out, and hovering it says what to pick first. Pressing its key then puts the same reason in the Console.
 - **The operations:**
   - **Extrude faces (E):** stands a new brush on each picked face, one grid step deep, with the face's look. The new brush's far face is picked and the Move gizmo turns on, so dragging the arrow pulls it further, and E again stacks another.
-  - **Bevel edges (Ctrl+B):** cuts each picked edge off with a slanted face starting one grid step back along both faces. It is refused, with the reason, if it would reach another corner.
+  - **Bevel edges (Ctrl+B):** cuts each picked edge off with a slanted face starting one grid step back along both faces. It is refused, with the reason, if it would reach another corner or run into another bevel.
   - **Bridge (F):** a new brush filling the space spanned by every picked corner, edge or face (their convex hull). For example, pick two facing faces to join two blocks with a beam.
   - **Split (K) and Clip (X):** cut every selected brush the cut passes through. Where the cut goes depends on what is picked:
     - a picked face: along its plane, so you can trim a post at the floor's top;
     - three or more corners: through the first three;
-    - two corners or one edge: along that line as seen on screen, like drawing a clip line in Hammer's 2D view. From above, that is a straight-down cut.
+    - two corners or one edge: through that line, in the direction the camera is looking, much like drawing a clip line in Hammer's 2D view. From above, that is a straight-down cut. (Lines near the edge of the screen are cut along the camera's direction, not exactly along your line of sight to them.)
 
-    Split keeps both parts and selects them. Clip keeps the bigger part of each brush; to keep the smaller one, Split and delete the other.
-  - **Join brushes (Ctrl+J):** the selected brushes become one brush, the convex hull of all their corners. If they did not fit together exactly, the Console says that the gaps were filled, because a brush can't have dents.
+    Split keeps both parts; the new parts join the selection. Clip keeps the bigger part of each brush; to keep the smaller one, Split and delete the other. A cut that would give a part more than 128 faces is refused, with that reason.
+  - **Join brushes (Ctrl+J):** the selected brushes become one brush, the convex hull of all their corners. If they did not fit together exactly (apart, or forming an L), the Console says that the gaps were filled, because a brush can't have dents. If any of them is a world brush, the result is a world brush (turning a wall into a `func_detail` could open a leak); otherwise it stays in the first brush's entity.
   - **Merge corners (M):** moves the picked corners together onto their middle, rounded to whole units.
   - **Delete (in Vertex or Face mode):** deletes the picked corners, or the picked faces. When a face goes, the faces around it grow to close the gap; this is refused when they can't (a box's side would leave it open). Edges can't be deleted on their own.
   - **Mirror:** mirrors the selected brushes about their middle. **Ctrl+M** flips them left to right as you see them; the menu also has X, Y and up-and-down.
 - **Box picking:** in Vertex, Edge and Face modes, dragging draws a box that picks every corner, edge or face inside it (Ctrl adds to the pick), seen through the brushes as clicks are.
+- **Never during a drag:** while a gizmo drag or a pick box is in progress, the keys and menu wait (the drag replays the brushes as they were when it began, so an operation in the middle would be undone by it).
+- **Bridge and Join take at most 1,024 corners;** many more could not fit in a brush's 128 faces anyway, and working that out would freeze the editor.
 - **One undo step each,** named after what was done ("Extrude face", "Split 2 brushes", "Join 3 brushes"). Under the hood there is one edit, `ShapeEdit`, that changes, adds and removes brushes together.
 - **Faces keep their look:** new faces copy the material and texture alignment of the face they came from, or of the old face lying most nearly the same way. Copies never take a saved face id or displacement, so ids are never repeated in the saved map. A face that did not change keeps everything.
 - **Entities:** new brushes join the entity of the brush they came from. Split parts and extrusions of a `func_detail` brush stay in the `func_detail`.
@@ -40,4 +42,4 @@ Option 2. The parts picked in Vertex, Edge and Face modes say where an operation
 
 - Sizes come from the grid (16 units unless changed in the settings file), so bevels and extrusions line up with everything else. A size field per operation can come later if needed.
 - Every result is a convex brush. Join and Bridge fill in gaps rather than making shapes Source can't compile; the boolean operations milestone (union, subtract) is where non-convex results and automatic splitting into convex pieces come in.
-- Mirrored brushes keep their textures but not mirrored texture alignment; that comes with per-face materials.
+- Mirrored brushes keep their textures but not mirrored texture alignment, and a mirrored displacement is not mirrored with them (as with rotating); that comes with per-face materials and displacements.

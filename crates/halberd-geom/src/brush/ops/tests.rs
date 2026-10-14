@@ -199,3 +199,42 @@ fn removing_corners_and_hulls() {
     assert!(Brush::hull(&[Vec3::ZERO, Vec3::X, Vec3::Y]).is_err());
     assert!(Brush::hull(&[Vec3::NAN, Vec3::X, Vec3::Y, Vec3::Z]).is_err());
 }
+
+#[test]
+fn bevels_that_run_into_each_other_are_refused() {
+    // Regression: four 40-unit bevels round a 64 cube's top each passed on
+    // their own but together swallowed the top face.
+    let b = cube();
+    let top: Vec<usize> = (0..8).filter(|&i| b.points()[i].z == 64.0).collect();
+    let edges: Vec<(usize, usize)> = b
+        .edges()
+        .into_iter()
+        .filter(|(i, j)| top.contains(i) && top.contains(j))
+        .collect();
+    assert_eq!(edges.len(), 4);
+    assert_eq!(
+        b.bevelled(&edges, 40.0).unwrap_err(),
+        GeomError::BevelTooWide
+    );
+    let (four, _) = b.bevelled(&edges, 8.0).unwrap();
+    assert_eq!(four.faces().len(), 10);
+}
+
+#[test]
+fn a_hull_of_too_many_points_is_refused_quickly() {
+    let started = std::time::Instant::now();
+    let many: Vec<Vec3> = (0..2000)
+        .map(|i| {
+            let (a, b) = (i as f32 * 0.37, i as f32 * 0.11);
+            Vec3::new(a.cos() * b.sin(), a.sin() * b.sin(), b.cos()) * 500.0
+        })
+        .collect();
+    assert_eq!(Brush::hull(&many).unwrap_err(), GeomError::TooManyFaces);
+    let some: Vec<Vec3> = many[..300].to_vec();
+    assert!(Brush::hull(&some).is_err());
+    assert!(
+        started.elapsed().as_secs_f32() < 20.0,
+        "{:?}",
+        started.elapsed()
+    );
+}

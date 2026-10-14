@@ -425,3 +425,111 @@ fn dragging_a_box_picks_every_corner_inside_it() {
     assert!(picked.contains(&&ElementShape::Vertex(Vec3::new(128.0, 64.0, 128.0))));
     assert!(picked.len() <= 3, "{picked:?}");
 }
+
+#[test]
+fn no_operation_runs_during_a_drag() {
+    // Regression: K pressed mid-drag split the brush, then the drag's next
+    // frame put the whole moved brush back over one part.
+    let camera = angled();
+    let mut doc = one_box();
+    let mut t = tools(SelectMode::Face);
+    t.set_gizmo_mode(Some(GizmoMode::Move));
+    pick(&mut t, &doc, vec![top_face(&doc)]);
+    let shapes = t.gizmo_shapes(&camera, SIZE, &doc);
+    let arrow = shapes
+        .iter()
+        .find(|s| s.handle == crate::Handle::MoveAxis(Axis::Z) && !s.filled)
+        .unwrap();
+    let from = (arrow.points[0] + arrow.points[1]) * 0.5;
+    let press = ToolInput {
+        size: SIZE,
+        cursor: Some(from),
+        pressed: true,
+        held: true,
+        ..ToolInput::default()
+    };
+    t.update(&press, &camera, &doc);
+    assert!(t.is_busy());
+    let refused = run(&mut t, &mut doc, &camera, ShapeOp::Split).unwrap_err();
+    assert!(refused.contains("Finish the drag"), "{refused}");
+    assert_eq!(doc.len(), 1);
+}
+
+#[test]
+fn operations_needing_picks_point_to_the_select_tool_while_drawing() {
+    let doc = one_box();
+    let mut t = tools(SelectMode::Face);
+    t.set_tool(crate::Tool::Box);
+    let why = t.shape_op_ready(ShapeOp::Extrude, &doc).unwrap_err();
+    assert!(why.contains("Press Q"), "{why}");
+    assert!(t.shape_op_ready(ShapeOp::MirrorAcrossView, &doc).is_ok());
+}
+
+#[test]
+fn joining_overlapping_brushes_mentions_the_filled_corner_and_keeps_world_brushes() {
+    let camera = angled();
+    // An L: the joined brush fills its inner corner, though the overlap
+    // makes the two together bigger than the result.
+    let mut doc = map(vec![
+        block(Vec3::ZERO, Vec3::splat(64.0)),
+        block(Vec3::new(32.0, 32.0, 0.0), Vec3::new(96.0, 96.0, 64.0)),
+    ]);
+    let mut t = tools(SelectMode::Object);
+    let note = run(&mut t, &mut doc, &camera, ShapeOp::Join).unwrap();
+    assert!(note.is_some_and(|n| n.contains("space between")));
+    // A func_detail brush joined with a world brush becomes world.
+    let detail = MapObject::Entity(
+        EntityObject {
+            classname: "func_detail".into(),
+            origin: None,
+            file_data: Vec::new(),
+        },
+        vec![BrushObject::new(block(Vec3::ZERO, Vec3::splat(64.0)))],
+    );
+    let wall = MapObject::Brush(BrushObject::new(block(
+        Vec3::new(64.0, 0.0, 0.0),
+        Vec3::new(128.0, 64.0, 64.0),
+    )));
+    let mut mixed = Document::from_map(vec![detail, wall], Default::default()).unwrap();
+    let ids: Vec<ObjectId> = mixed.objects().map(|(id, _)| id).collect();
+    mixed.set_selection([ids[1], ids[2]]);
+    run(&mut t, &mut mixed, &camera, ShapeOp::Join).unwrap();
+    let left: Vec<&BrushObject> = brushes(&mixed);
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].entity(), None, "the world brush wins");
+}
+
+#[test]
+fn a_box_let_go_outside_the_viewport_is_dropped() {
+    let camera = angled();
+    let doc = one_box();
+    let mut t = tools(SelectMode::Vertex);
+    let at = |p: Option<Vec2>| ToolInput {
+        size: SIZE,
+        cursor: p,
+        ..ToolInput::default()
+    };
+    let press = ToolInput {
+        pressed: true,
+        held: true,
+        ..at(Some(Vec2::new(100.0, 100.0)))
+    };
+    t.update(&press, &camera, &doc);
+    let drag = ToolInput {
+        held: true,
+        ..at(Some(Vec2::new(300.0, 300.0)))
+    };
+    t.update(&drag, &camera, &doc);
+    assert!(t.marquee().is_some() && t.is_busy());
+    t.update(
+        &ToolInput {
+            released: true,
+            ..at(None)
+        },
+        &camera,
+        &doc,
+    );
+    assert!(t.marquee().is_none());
+    t.update(&at(Some(Vec2::new(5.0, 5.0))), &camera, &doc);
+    assert!(t.marquee().is_none());
+}

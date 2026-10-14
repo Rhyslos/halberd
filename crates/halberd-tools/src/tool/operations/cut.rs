@@ -20,8 +20,16 @@ impl ToolController {
         let plane = self.cut_plane(doc, camera)?;
         let mut changed = Vec::new();
         let mut added = Vec::new();
+        let mut too_many = false;
         for (id, brush) in editable_brushes(doc) {
             let (Some(behind), Some(front)) = brush.cut(plane) else {
+                // It crosses, but a part would be over the face limit.
+                let corners = brush.points();
+                let reach = corners.iter().map(|p| plane.signed_distance(*p));
+                let (low, high) =
+                    reach.fold((f32::MAX, f32::MIN), |(l, h), d| (l.min(d), h.max(d)));
+                too_many |=
+                    low < -1.0 && high > 1.0 && brush.faces().len() >= halberd_geom::MAX_FACES;
                 continue;
             };
             let object = brush_object(doc, id).ok_or("A selected brush is gone.")?;
@@ -36,21 +44,23 @@ impl ToolController {
                 changed.push((id, piece(object, front, flipped, true)));
             }
         }
+        if changed.is_empty() && too_many {
+            return Err(
+                "Nothing was cut: a part would have more than 128 faces, Hammer's limit.".into(),
+            );
+        }
         if changed.is_empty() {
             return Err("Nothing was cut: the cut doesn't pass through any selected brush.".into());
         }
         let verb = if keep_both { "Split" } else { "Clip" };
         let label = format!("{verb} {}", counted(changed.len(), "brush", "brushes"));
-        let mut outcome = ShapeOpOutcome::new(Command::ShapeEdit {
+        // Split's new parts join the selection beside the old ones.
+        Ok(ShapeOpOutcome::new(Command::ShapeEdit {
             label,
             changed,
             added,
             removed: Vec::new(),
-        });
-        if keep_both {
-            outcome.select = super::SelectAfter::AddedAndChanged;
-        }
-        Ok(outcome)
+        }))
     }
 
     /// The plane to cut along, from the picked parts:
@@ -59,8 +69,7 @@ impl ToolController {
     /// - three or more corners (corners, or the ends of edges) not in a
     ///   line: the plane through the first three;
     /// - two corners, or one edge: the plane through that line along the
-    ///   view, like drawing a cut on the screen (from above, a straight
-    ///   down cut).
+    ///   direction the camera looks (from above, a straight down cut).
     fn cut_plane(&self, doc: &Document, camera: &Camera) -> Result<Plane, String> {
         let items = &self.elements.items;
         if let Some(item) = items

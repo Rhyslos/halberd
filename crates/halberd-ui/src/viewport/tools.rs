@@ -75,7 +75,9 @@ impl ViewportPanel {
             } else {
                 self.gizmo_keys(ui);
                 self.select_mode_keys(ui);
-                notes.extend(self.shape_op_keys(ui, doc));
+                if !popup_open && !self.tools.is_busy() {
+                    notes.extend(self.shape_op_keys(ui, doc));
+                }
             }
         }
         if box_key {

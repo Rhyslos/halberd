@@ -122,6 +122,9 @@ impl Brush {
         let wide: Vec<DVec3> = points.iter().map(|p| p.as_dvec3()).collect();
         let mut groups = hull_planes(&wide, &old_faces, &kept)?;
         let mut planes: Vec<Plane> = groups.iter().map(|g| g.plane(&kept)).collect();
+        if planes.len() > MAX_PRUNABLE {
+            return Err(GeomError::TooManyFaces);
+        }
         if planes.len() > MAX_FACES {
             prune(&mut planes, &mut groups);
         }
@@ -179,9 +182,17 @@ impl Brush {
         if points.iter().any(|p| !p.is_finite()) {
             return Err(GeomError::NotFinite);
         }
+        // Many points spread round a surface can't make a brush within the
+        // face limit, and working that out would take long.
+        if points.len() > MAX_HULL_POINTS {
+            return Err(GeomError::TooManyFaces);
+        }
         let wide: Vec<DVec3> = points.iter().map(|p| p.as_dvec3()).collect();
         let mut groups = hull_planes(&wide, &[], &[])?;
         let mut planes: Vec<Plane> = groups.iter().map(|g| g.plane(&[])).collect();
+        if planes.len() > MAX_PRUNABLE {
+            return Err(GeomError::TooManyFaces);
+        }
         if planes.len() > MAX_FACES {
             prune(&mut planes, &mut groups);
         }
@@ -273,6 +284,12 @@ fn fates(
         })
         .collect()
 }
+
+/// Most points [`Brush::hull`] takes.
+const MAX_HULL_POINTS: usize = 1024;
+/// More hull sides than this are too many to whittle down to
+/// [`MAX_FACES`]; trying would take long and almost always fail.
+const MAX_PRUNABLE: usize = MAX_FACES * 2;
 
 /// Drops sides of the hull that cut away almost nothing, until at most
 /// [`MAX_FACES`] are left. Rounded corners (a many-sided sphere's, say) are

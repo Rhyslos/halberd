@@ -39,7 +39,8 @@ pub enum ShapeOp {
     DeleteParts,
     /// Mirror the selected brushes along a world axis.
     Mirror(Axis),
-    /// Mirror the selected brushes left to right as seen on screen (Ctrl+M).
+    /// Mirror the selected brushes left to right as seen from the camera
+    /// (Ctrl+M).
     MirrorAcrossView,
 }
 
@@ -88,7 +89,7 @@ impl ShapeOp {
             Self::Bridge => "Fill the space spanned by the picked corners, edges or faces",
             Self::Split => {
                 "Cut the selected brushes in two: along a picked face, through three picked \
-                 corners, or along a picked edge or two corners as you see them"
+                 corners, or through a picked edge or two corners in the direction you're looking"
             }
             Self::Clip => "Cut like Split, but keep only the bigger part of each brush",
             Self::Join => {
@@ -115,8 +116,6 @@ pub enum SelectAfter {
     Unchanged,
     /// Only the brushes the operation added.
     Added,
-    /// The brushes the operation added and the ones it changed.
-    AddedAndChanged,
 }
 
 /// What a shape operation asks the interface to do.
@@ -166,8 +165,18 @@ fn brush_object(doc: &Document, id: ObjectId) -> Option<&BrushObject> {
 impl ToolController {
     /// Whether `op` can run now, or what to do first, in plain words.
     pub fn shape_op_ready(&self, op: ShapeOp, doc: &Document) -> Result<(), String> {
+        if self.is_busy() {
+            return Err("Finish the drag in progress first (or press Escape).".into());
+        }
         let picks = &self.elements.items;
         let mode = self.select_mode;
+        let needs_picks = !matches!(
+            op,
+            ShapeOp::Join | ShapeOp::Mirror(_) | ShapeOp::MirrorAcrossView
+        );
+        if needs_picks && self.tool != super::Tool::Select {
+            return Err("Press Q for the Select tool, then pick parts with 2, 3 or 4.".into());
+        }
         let need = |ok: bool, why: &str| if ok { Ok(()) } else { Err(why.to_string()) };
         match op {
             ShapeOp::Extrude => need(
@@ -271,16 +280,8 @@ impl ToolController {
         doc: &mut Document,
         added: &[ObjectId],
     ) {
-        let changed: Vec<ObjectId> = match &outcome.command {
-            Command::ShapeEdit { changed, .. } => changed.iter().map(|(id, _)| *id).collect(),
-            _ => Vec::new(),
-        };
-        match outcome.select {
-            SelectAfter::Unchanged => {}
-            SelectAfter::Added => doc.set_selection(added.iter().copied()),
-            SelectAfter::AddedAndChanged => {
-                doc.set_selection(added.iter().chain(&changed).copied());
-            }
+        if outcome.select == SelectAfter::Added {
+            doc.set_selection(added.iter().copied());
         }
         let brushes = editable_brushes(doc);
         self.elements.items = outcome
@@ -517,17 +518,33 @@ fn join(doc: &Document) -> Result<ShapeOpOutcome, String> {
     let points: Vec<Vec3> = objects.iter().flat_map(|b| b.brush().points()).collect();
     let hull =
         Brush::hull(&points).map_err(|e| format!("The brushes could not be joined: {e}."))?;
+    // Gaps were filled if the hull is bigger than the brushes together, or
+    // has a side none of them has (overlapping brushes hide the first).
     let separate: f32 = objects.iter().map(|b| b.brush().volume()).sum();
-    let gaps = hull.volume() > separate * 1.001 + 1.0;
+    let on_a_face = |plane: halberd_geom::Plane| {
+        objects.iter().flat_map(|b| b.brush().faces()).any(|f| {
+            f.plane().normal.dot(plane.normal) > 0.9999
+                && (f.plane().distance - plane.distance).abs() < 0.05
+        })
+    };
+    let gaps = hull.volume() > separate * 1.001 + 1.0
+        || hull.faces().iter().any(|f| !on_a_face(f.plane()));
     let infos = matching_faces(&hull, &objects);
-    let (keep, rest) = ids.split_first().ok_or("Nothing to join.")?;
-    let kept = objects.first().ok_or("Nothing to join.")?;
+    // A world brush in the mix keeps the result in the world: turning a
+    // wall into a func_detail could open a leak.
+    let keep_at = objects
+        .iter()
+        .position(|b| b.entity().is_none())
+        .unwrap_or(0);
+    let keep = ids.get(keep_at).ok_or("Nothing to join.")?;
+    let kept = objects.get(keep_at).ok_or("Nothing to join.")?;
+    let rest: Vec<ObjectId> = ids.iter().copied().filter(|id| id != keep).collect();
     let joined = BrushObject::with_faces(hull, infos, kept.file_data.clone());
     let mut outcome = ShapeOpOutcome::new(Command::ShapeEdit {
         label: format!("Join {} brushes", ids.len()),
         changed: vec![(*keep, joined)],
         added: Vec::new(),
-        removed: rest.to_vec(),
+        removed: rest,
     });
     if gaps {
         outcome.note = Some(

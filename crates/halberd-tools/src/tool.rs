@@ -402,7 +402,7 @@ impl ToolController {
 
     /// True while something is in progress that Escape would cancel.
     pub fn is_busy(&self) -> bool {
-        self.drag.is_some() || self.gizmo.is_dragging()
+        self.drag.is_some() || self.gizmo.is_dragging() || self.marquee.is_some()
     }
 
     /// The box being drawn, for the preview outline.
@@ -514,6 +514,12 @@ impl ToolController {
         }
         // In a part-picking mode, dragging draws a box that picks every
         // part inside it.
+        // Let go away from the viewport: the box is dropped.
+        if self.marquee.is_some() && cursor.is_none() && (input.released || !input.held) {
+            self.marquee = None;
+            self.press_at = None;
+            return None;
+        }
         if let (Some(kind), Some(from), Some(to)) =
             (self.select_mode.element(), self.press_at, cursor)
             && (self.marquee.is_some() || to.distance(from) > CLICK_SLOP)

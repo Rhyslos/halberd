@@ -111,6 +111,12 @@ impl Brush {
         }
         let old = self.faces().len();
         let mut brush = Brush::from_planes(&planes)?;
+        // Bevels running into each other would swallow a face or each
+        // other; that is wider than asked for too.
+        let kept = |source: usize| brush.faces().iter().any(|f| f.source == source);
+        if !(0..planes.len()).all(kept) {
+            return Err(GeomError::BevelTooWide);
+        }
         let fates = self.fates_of(&brush, old);
         for f in &mut brush.faces {
             if f.source >= old {
