@@ -14,6 +14,7 @@ mod drag;
 
 use crate::ToolAction;
 use crate::camera::Camera;
+use crate::elements::Elements;
 use drag::Drag;
 use glam::{Vec2, Vec3};
 use halberd_doc::Document;
@@ -401,8 +402,16 @@ impl Gizmo {
 
     /// The gizmo's shapes for drawing, with the hovered or dragged handle
     /// highlighted. Empty when there is no gizmo to show.
-    pub(crate) fn shapes(&self, camera: &Camera, size: Vec2, doc: &Document) -> Vec<GizmoShape> {
-        let Some((mode, frame)) = self.frame(camera, size, doc) else {
+    /// In a part-picking mode, `parts` holds the picked parts (the gizmo
+    /// shows only when some are picked); `None` in Object mode.
+    pub(crate) fn shapes(
+        &self,
+        camera: &Camera,
+        size: Vec2,
+        doc: &Document,
+        parts: Option<&Elements>,
+    ) -> Vec<GizmoShape> {
+        let Some((mode, frame)) = self.frame(camera, size, doc, parts) else {
             return Vec::new();
         };
         let active = self.drag.as_ref().map(Drag::handle).or(self.hovered);
@@ -413,26 +422,36 @@ impl Gizmo {
         list
     }
 
-    fn frame(&self, camera: &Camera, size: Vec2, doc: &Document) -> Option<(GizmoMode, Frame)> {
+    fn frame(
+        &self,
+        camera: &Camera,
+        size: Vec2,
+        doc: &Document,
+        parts: Option<&Elements>,
+    ) -> Option<(GizmoMode, Frame)> {
         let mode = self.mode?;
         // While dragging, the gizmo stays where the drag began.
-        let bounds = match &self.drag {
-            Some(drag) => drag.start_bounds(),
-            None => selected_brush_bounds(doc)?,
+        let bounds = match (&self.drag, parts) {
+            (Some(drag), _) => drag.start_bounds(),
+            (None, Some(parts)) => parts.bounds()?,
+            (None, None) => selected_brush_bounds(doc)?,
         };
         Some((mode, Frame::new(bounds, camera, size)?))
     }
 
-    /// Handles one frame of left-mouse input.
+    /// Handles one frame of left-mouse input. In a part-picking mode,
+    /// `parts` holds the picked parts, which a drag moves along with the
+    /// brushes it changes; `None` in Object mode.
     pub(crate) fn update(
         &mut self,
         input: &crate::ToolInput,
         cursor: Option<Vec2>,
         camera: &Camera,
         doc: &Document,
+        parts: Option<&mut Elements>,
         grid: f32,
     ) -> GizmoOutcome {
-        let Some((mode, frame)) = self.frame(camera, input.size, doc) else {
+        let Some((mode, frame)) = self.frame(camera, input.size, doc, parts.as_deref()) else {
             self.hovered = None;
             // Mid-drag, the gizmo can briefly have no frame (the camera
             // passing the selection); the drag simply waits. Escape or
@@ -440,6 +459,9 @@ impl Gizmo {
             return match &self.drag {
                 Some(drag) if input.cancel => {
                     let key = drag.key();
+                    if let (Some(parts), Some(picked)) = (parts, drag.picked_at_start()) {
+                        parts.items = picked.to_vec();
+                    }
                     self.drag = None;
                     GizmoOutcome::Used(Some(ToolAction::CancelMerging(key)))
                 }
@@ -453,7 +475,11 @@ impl Gizmo {
         };
         if let Some(drag) = &mut self.drag {
             if input.cancel {
+                // The picked parts go back to where they were, with the map.
                 let key = drag.key();
+                if let (Some(parts), Some(picked)) = (parts, drag.picked_at_start()) {
+                    parts.items = picked.to_vec();
+                }
                 self.drag = None;
                 return GizmoOutcome::Used(Some(ToolAction::CancelMerging(key)));
             }
@@ -461,15 +487,20 @@ impl Gizmo {
                 self.drag = None;
                 return GizmoOutcome::Used(None);
             }
-            let action = cursor.and_then(|c| drag.update(c, &frame, grid));
-            return GizmoOutcome::Used(action);
+            let Some((action, moved)) = cursor.and_then(|c| drag.update(c, &frame, grid)) else {
+                return GizmoOutcome::Used(None);
+            };
+            if let (Some(parts), Some(moved)) = (parts, moved) {
+                parts.items = moved;
+            }
+            return GizmoOutcome::Used(Some(action));
         }
         self.hovered = cursor.and_then(|c| handle_at(&shapes(mode, &frame), c));
         match (input.pressed, self.hovered, cursor) {
             (true, Some(handle), Some(c)) => {
                 self.drags_started += 1;
                 let key = (1 << 63) | self.drags_started;
-                self.drag = Drag::start(handle, c, &frame, doc, key);
+                self.drag = Drag::start(handle, c, &frame, doc, parts.as_deref(), key);
                 // A handle that cannot be grabbed from this angle leaves the
                 // click to the select tool.
                 if self.drag.is_some() {

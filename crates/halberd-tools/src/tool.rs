@@ -7,6 +7,7 @@
 
 use crate::SceneQuery;
 use crate::camera::{Camera, Ray};
+use crate::elements::{self, ElementOverlay, Elements, PickedElement, SelectMode};
 use crate::gizmo::{Gizmo, GizmoMode, GizmoOutcome, GizmoShape};
 use crate::scene::DocumentScene;
 use glam::Vec2;
@@ -49,7 +50,10 @@ impl Tool {
     /// One-line explanation, for tooltips.
     pub fn description(self) -> &'static str {
         match self {
-            Self::Select => "Click to select; Ctrl+click to add or remove; Esc deselects (Q)",
+            Self::Select => {
+                "Click to select; Ctrl+click to add or remove; Esc deselects. 1 to 4 choose \
+                 what clicks pick: objects, corners, edges or faces (Q)"
+            }
             Self::Box => {
                 "Drag on the grid or on a brush to draw the chosen shape; drag along a line \
                  for a wall. Wedges and stairs climb, and arches span, the way you drag; R \
@@ -134,6 +138,12 @@ pub struct ToolController {
     /// The last shape built for the preview, kept while nothing that makes
     /// it changes (the preview is asked for every frame).
     built: RefCell<Option<(ShapeKey, Built)>>,
+    /// What clicks pick in the Select tool: objects, or parts of brushes.
+    select_mode: SelectMode,
+    /// The picked corners, edges or faces.
+    elements: Elements,
+    /// The part under the pointer, for highlighting.
+    hovered_element: Option<PickedElement>,
 }
 
 /// What a shape is built from.
@@ -155,7 +165,82 @@ impl ToolController {
             shape: Shape::Box,
             shape_settings: ShapeSettings::default(),
             built: RefCell::new(None),
+            select_mode: SelectMode::Object,
+            elements: Elements::default(),
+            hovered_element: None,
         }
+    }
+
+    /// What clicks pick in the Select tool.
+    pub fn select_mode(&self) -> SelectMode {
+        self.select_mode
+    }
+
+    /// Picks what clicks pick (switching to the Select tool), forgetting
+    /// any picked parts. Has no effect during a gizmo drag.
+    pub fn set_select_mode(&mut self, mode: SelectMode) {
+        if self.gizmo.is_dragging() {
+            return;
+        }
+        self.set_tool(Tool::Select);
+        self.elements = Elements::default();
+        self.hovered_element = None;
+        self.select_mode = mode;
+    }
+
+    /// The picked corners, edges or faces.
+    pub fn picked_elements(&self) -> &[PickedElement] {
+        &self.elements.items
+    }
+
+    /// The box around the picked parts' corners, if any are picked.
+    pub fn picked_bounds(&self) -> Option<Aabb> {
+        self.elements.bounds()
+    }
+
+    /// Forgets the picked parts. Returns false if none were picked (or a
+    /// gizmo drag is holding them).
+    pub fn clear_elements(&mut self) -> bool {
+        if self.elements.items.is_empty() || self.gizmo.is_dragging() {
+            return false;
+        }
+        self.elements = Elements::default();
+        true
+    }
+
+    /// What to draw over the viewport in a part-picking mode: the parts
+    /// that can be picked, the picked ones and the one under the pointer.
+    /// `None` in Object mode or with the Draw tool.
+    pub fn element_overlay(
+        &self,
+        camera: &Camera,
+        size: Vec2,
+        doc: &Document,
+    ) -> Option<ElementOverlay> {
+        let kind = self.select_mode.element()?;
+        if self.tool != Tool::Select {
+            return None;
+        }
+        let size = size.max(Vec2::ONE);
+        Some(ElementOverlay {
+            candidates: elements::candidates(doc, kind, camera, size),
+            picked: self
+                .elements
+                .items
+                .iter()
+                .filter_map(|i| elements::on_screen(&i.shape, camera, size))
+                .collect(),
+            hovered: self
+                .hovered_element
+                .as_ref()
+                .filter(|_| !self.gizmo.is_dragging())
+                .and_then(|i| elements::on_screen(&i.shape, camera, size)),
+        })
+    }
+
+    /// The picked parts for the gizmo: `Some` in a part-picking mode.
+    fn parts(&self) -> Option<&Elements> {
+        self.select_mode.element().map(|_| &self.elements)
     }
 
     /// True if clicks pick single brushes inside brush entities (such as
@@ -185,7 +270,11 @@ impl ToolController {
         self.press_at = None;
         self.drag = None;
         if tool == Tool::Box {
+            // Picked parts are hidden while drawing; let go of them, so
+            // Escape there deselects as it looks like it should.
             self.gizmo.set_mode(None);
+            self.elements = Elements::default();
+            self.hovered_element = None;
         }
     }
 
@@ -219,7 +308,8 @@ impl ToolController {
         if self.tool != Tool::Select {
             return Vec::new();
         }
-        self.gizmo.shapes(camera, size.max(Vec2::ONE), doc)
+        self.gizmo
+            .shapes(camera, size.max(Vec2::ONE), doc, self.parts())
     }
 
     /// The grid size boxes snap to.
@@ -359,10 +449,18 @@ impl ToolController {
         doc: &Document,
     ) -> Option<ToolAction> {
         let cursor = input.cursor.filter(|c| c.is_finite());
+        let kind = self.select_mode.element();
+        if !self.gizmo.is_dragging() {
+            self.elements.refresh(doc, kind);
+        }
         if self.tool == Tool::Select {
             let size = input.size.max(Vec2::ONE);
             let input = ToolInput { size, ..*input };
-            match self.gizmo.update(&input, cursor, camera, doc, self.grid) {
+            let parts = kind.map(|_| &mut self.elements);
+            match self
+                .gizmo
+                .update(&input, cursor, camera, doc, parts, self.grid)
+            {
                 GizmoOutcome::Used(action) => {
                     self.press_at = None;
                     return action;
@@ -377,7 +475,14 @@ impl ToolController {
         }
         let ray = cursor.map(|c| camera.ray_through(c, input.size.max(Vec2::ONE)));
         match self.tool {
-            Tool::Select => self.update_select(input, cursor, ray.as_ref(), doc),
+            Tool::Select => {
+                if let Some(kind) = kind {
+                    let size = input.size.max(Vec2::ONE);
+                    self.hovered_element =
+                        cursor.and_then(|c| elements::pick(doc, kind, camera, size, c));
+                }
+                self.update_select(input, cursor, ray.as_ref(), doc)
+            }
             Tool::Box => self.update_box(input, ray.as_ref(), doc),
         }
     }
@@ -400,6 +505,9 @@ impl ToolController {
         if cursor.distance(pressed_at) > CLICK_SLOP {
             return None;
         }
+        if self.select_mode.element().is_some() {
+            return self.click_element(input, ray, doc);
+        }
         let hit = ray
             .and_then(|r| DocumentScene::new(doc).pick_object(r))
             .map(|(id, point)| (doc.selectable(id, self.inside_entities), point));
@@ -407,6 +515,42 @@ impl ToolController {
             (Some((id, _)), true) => Some(ToolAction::ToggleSelected(id)),
             (None, true) => None,
             (hit, false) => Some(ToolAction::Select(hit.map(|(id, _)| id))),
+        }
+    }
+
+    /// A click in a part-picking mode: picks the part under the pointer
+    /// (Ctrl+click adds or removes it). Off the selected brushes, a click
+    /// on another object selects that object instead, and a click on
+    /// nothing lets go of the picked parts but keeps the brushes selected.
+    fn click_element(
+        &mut self,
+        input: &ToolInput,
+        ray: Option<&Ray>,
+        doc: &Document,
+    ) -> Option<ToolAction> {
+        if let Some(item) = self.hovered_element.clone() {
+            if input.additive {
+                self.elements.toggle(item);
+            } else if !(self.elements.items.len() == 1 && self.elements.contains(&item)) {
+                self.elements.set(Some(item));
+            }
+            return None;
+        }
+        let hit = ray
+            .and_then(|r| DocumentScene::new(doc).pick_object(r))
+            .map(|(id, _)| doc.selectable(id, self.inside_entities))
+            .filter(|id| !doc.is_shown_selected(*id));
+        match (hit, input.additive) {
+            (Some(id), true) => Some(ToolAction::ToggleSelected(id)),
+            (Some(id), false) => {
+                self.elements.set(None);
+                Some(ToolAction::Select(Some(id)))
+            }
+            (None, true) => None,
+            (None, false) => {
+                self.elements.set(None);
+                None
+            }
         }
     }
 

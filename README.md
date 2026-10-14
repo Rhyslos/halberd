@@ -4,7 +4,7 @@
 
 Halberd is a free, open-source level editor in the spirit of Unity and Godot: place and shape geometry in a 3D viewport, populate it with props, and compile it straight into a playable GMod map with Valve's own tools. Maps open in Hammer and Hammer++ too, through Export to Hammer.
 
-> **Status: pre-alpha.** You can open and save Hammer maps (VMF), draw boxes, wedges, cylinders, cones, spheres, arches and stairs, and select, move, rotate, resize and delete them, with undo and redo. Textures are kept but not shown yet. Follow the progress tracker below.
+> **Status: pre-alpha.** You can open and save Hammer maps (VMF), draw boxes, wedges, cylinders, cones, spheres, arches and stairs, select, move, rotate, resize and delete them, and reshape them by their corners, edges and faces, with undo and redo. Textures are kept but not shown yet. Follow the progress tracker below.
 
 Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
@@ -32,16 +32,16 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 3 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 4 of 19
 
-`██░░░░░░░░░░░` 16%
+`███░░░░░░░░░░` 21%
 
 <details>
 <summary>Milestones</summary>
 
 - [x] Select single brushes inside brush entities such as `func_detail` (like Hammer's "Ignore groups")
 - [x] Primitives: wedge, cylinder, cone, sphere, arch, stairs
-- [ ] Face, edge and vertex selection modes
+- [x] Face, edge and vertex selection modes
 - [ ] Shape operations: extrude, bevel, join, split, bridge, clip, mirror
 - [ ] Boolean operations: union, subtract, intersect
 - [ ] Automatic convex splitting on save and export
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-09 | Face, edge and vertex modes: pick corners, edges or faces (keys 2, 3, 4) and reshape brushes with the gizmo |
 | 2026-10-09 | Keybinds viewer: a drawn keyboard with every key, hover to see what it does, search to light up keys |
 | 2026-10-09 | Shapes: draw wedges, cylinders, cones, spheres, arches and stairs |
 | 2026-10-09 | Brushes inside entities: pick, move, resize and delete single brushes of a `func_detail` (Ctrl+W) |
@@ -133,6 +134,10 @@ Newest first. One line per finished milestone or passed gate.
 ### Snapshots
 
 Pictures of Halberd at memorable moments, newest first. Kept in [docs/screenshots](docs/screenshots).
+
+**2026-10-09: reshaping by a corner.** In Vertex mode (2) the selected box's corners show as small squares; one was picked (orange) and dragged up with the Move gizmo, folding the top in two.
+
+![A box with one corner pulled up in Vertex mode, the Move gizmo on the picked corner](docs/screenshots/2026-10-09-element-modes.png)
 
 **2026-10-09: the Keybinds viewer.** Searching "draw" lights up every key involved in drawing: B, R, Q, Shift, Alt and Esc, with what each does listed below.
 

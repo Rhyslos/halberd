@@ -433,6 +433,24 @@ impl Document {
                 }
                 Ok(Change::Modified(objects))
             }
+            Command::EditBrushes { brushes, .. } => {
+                // As above: every brush is kept so a drag merges into one step.
+                let mut seen = BTreeSet::new();
+                let mut objects = Vec::with_capacity(brushes.len());
+                for (id, brush, fates) in brushes {
+                    if !seen.insert(id) {
+                        continue;
+                    }
+                    let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
+                    let shaped = before.as_brush().ok_or(DocError::NotABrush(id))?;
+                    let after = Object::Brush(shaped.with_shape_mapped(brush, &fates));
+                    objects.push((id, before.clone(), after));
+                }
+                if objects.iter().all(|(_, before, after)| before == after) {
+                    return Err(DocError::NothingToDo);
+                }
+                Ok(Change::Modified(objects))
+            }
         }
     }
 

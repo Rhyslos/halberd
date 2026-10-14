@@ -1,7 +1,7 @@
 //! Edits to the map.
 
 use crate::{Object, ObjectId};
-use halberd_geom::Brush;
+use halberd_geom::{Brush, FaceFate};
 
 /// An edit to the map. Every change goes through one, so it can be undone.
 #[derive(Debug, Clone, PartialEq)]
@@ -26,6 +26,44 @@ pub enum Command {
         /// Each brush with its new shape.
         brushes: Vec<(ObjectId, Brush)>,
     },
+    /// Gives brushes new shapes after moving, rotating or scaling some of
+    /// their corners, edges or faces. Each new shape comes with what became
+    /// of each face ([`Brush::with_moved_points`]): a face that was split or
+    /// merged loses its saved face id and displacement, which only fit the
+    /// old face. The selection does not change.
+    EditBrushes {
+        /// What was done, for the Edit menu.
+        kind: TransformKind,
+        /// Which parts were edited, and how many.
+        parts: (ElementKind, usize),
+        /// Each brush with its new shape and what became of each face.
+        brushes: Vec<(ObjectId, Brush, Vec<FaceFate>)>,
+    },
+}
+
+/// A part of a brush that can be picked and edited on its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ElementKind {
+    /// A corner.
+    Vertex,
+    /// An edge between two corners.
+    Edge,
+    /// A flat side.
+    Face,
+}
+
+impl ElementKind {
+    /// The part's name, for one or several ("vertex", "vertices").
+    pub fn name(self, count: usize) -> &'static str {
+        match (self, count == 1) {
+            (Self::Vertex, true) => "vertex",
+            (Self::Vertex, false) => "vertices",
+            (Self::Edge, true) => "edge",
+            (Self::Edge, false) => "edges",
+            (Self::Face, true) => "face",
+            (Self::Face, false) => "faces",
+        }
+    }
 }
 
 /// What a [`Command::TransformBrushes`] did, for its name in the Edit menu.
@@ -39,6 +77,17 @@ pub enum TransformKind {
     Scale,
 }
 
+impl TransformKind {
+    /// The verb for the Edit menu ("Move").
+    pub fn verb(self) -> &'static str {
+        match self {
+            Self::Move => "Move",
+            Self::Rotate => "Rotate",
+            Self::Scale => "Scale",
+        }
+    }
+}
+
 impl Command {
     /// A short description for the Edit menu and the Console, such as
     /// "Create box" or "Delete 3 objects".
@@ -47,12 +96,19 @@ impl Command {
             Self::AddBrushes(brushes) if brushes.len() == 1 => "Create brush".into(),
             Self::AddBrushes(brushes) => format!("Create {} brushes", brushes.len()),
             Self::ReplaceBrush { .. } => "Change brush".into(),
+            Self::EditBrushes {
+                kind,
+                parts: (part, count),
+                ..
+            } => {
+                if *count == 1 {
+                    format!("{} {}", kind.verb(), part.name(1))
+                } else {
+                    format!("{} {count} {}", kind.verb(), part.name(*count))
+                }
+            }
             Self::TransformBrushes { kind, brushes } => {
-                let verb = match kind {
-                    TransformKind::Move => "Move",
-                    TransformKind::Rotate => "Rotate",
-                    TransformKind::Scale => "Scale",
-                };
+                let verb = kind.verb();
                 if brushes.len() == 1 {
                     format!("{verb} brush")
                 } else {

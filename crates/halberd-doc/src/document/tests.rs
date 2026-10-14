@@ -480,3 +480,49 @@ fn a_drag_that_comes_back_to_the_start_leaves_no_undo_step() {
     doc.undo();
     assert_eq!(bounds_of(&doc, id).min.x, 0.0);
 }
+
+#[test]
+fn editing_corners_reshapes_brushes_and_undoes_in_one_step() {
+    use crate::{ElementKind, TransformKind};
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![cube_at(0.0)]))
+        .unwrap();
+    let id = only_id(&doc);
+    let brush = doc.get(id).unwrap().as_brush().unwrap().brush().clone();
+    let corner = brush
+        .points()
+        .iter()
+        .position(|p| *p == Vec3::splat(64.0))
+        .unwrap();
+    let (bent, fates) = brush
+        .with_moved_points(&[(corner, Vec3::new(64.0, 64.0, 96.0))])
+        .unwrap();
+    let command = Command::EditBrushes {
+        kind: TransformKind::Move,
+        parts: (ElementKind::Vertex, 1),
+        brushes: vec![(id, bent, fates.clone()), (id, brush.clone(), fates)],
+    };
+    assert_eq!(command.describe(), "Move vertex");
+    doc.execute(command).unwrap();
+    assert_eq!(
+        bounds_of(&doc, id).max.z,
+        96.0,
+        "the first of a repeat wins"
+    );
+    let object = doc.get(id).unwrap().as_brush().unwrap();
+    assert_eq!(object.faces().len(), object.brush().faces().len());
+    assert_eq!(doc.undo().as_deref(), Some("Move vertex"));
+    assert_eq!(bounds_of(&doc, id).max.z, 64.0);
+    // Unchanged shapes are nothing to do; several parts read naturally.
+    let same = Command::EditBrushes {
+        kind: TransformKind::Scale,
+        parts: (ElementKind::Face, 3),
+        brushes: vec![{
+            let (same, fates) = brush.with_moved_points(&[]).unwrap();
+            (id, same, fates)
+        }],
+    };
+    assert_eq!(same.describe(), "Scale 3 faces");
+    assert_eq!(doc.execute(same), Err(DocError::NothingToDo));
+    assert_eq!(ElementKind::Edge.name(2), "edges");
+}

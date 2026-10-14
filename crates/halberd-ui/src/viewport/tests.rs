@@ -802,3 +802,148 @@ fn a_shape_that_cannot_be_made_says_why_while_dragging() {
     assert!(h.state().doc.is_empty());
     assert!(h.query_by_label_contains("more than 256 pieces").is_none());
 }
+
+/// Where a world point is on screen, in harness coordinates.
+fn world_on_screen(h: &Harness<'_, State>, p: Vec3) -> egui::Pos2 {
+    let rect = h.get_by_label(VIEWPORT_LABEL).rect();
+    let camera = *h.state().panel.controller().camera();
+    let at = camera
+        .project(p, Vec2::new(rect.width(), rect.height()))
+        .expect("in front of the camera");
+    rect.min + egui::vec2(at.x, at.y)
+}
+
+/// The top corner of the selected box nearest the camera.
+fn near_top_corner(h: &Harness<'_, State>) -> Vec3 {
+    let state = h.state();
+    let b = state.doc.selection_bounds().unwrap();
+    let eye = state.panel.controller().camera().position;
+    [
+        Vec3::new(b.min.x, b.min.y, b.max.z),
+        Vec3::new(b.max.x, b.min.y, b.max.z),
+        Vec3::new(b.min.x, b.max.y, b.max.z),
+        Vec3::new(b.max.x, b.max.y, b.max.z),
+    ]
+    .into_iter()
+    .min_by(|p, q| p.distance(eye).total_cmp(&q.distance(eye)))
+    .unwrap()
+}
+
+#[test]
+fn keys_1_to_4_and_the_toolbar_pick_what_clicks_pick() {
+    use halberd_tools::SelectMode;
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    for (key, mode) in [
+        (Key::Num2, SelectMode::Vertex),
+        (Key::Num3, SelectMode::Edge),
+        (Key::Num4, SelectMode::Face),
+        (Key::Num1, SelectMode::Object),
+    ] {
+        h.key_press(key);
+        h.run();
+        assert_eq!(h.state().panel.tools().select_mode(), mode);
+    }
+    h.get_by_label("Vertex 2").click();
+    h.run();
+    assert_eq!(h.state().panel.tools().select_mode(), SelectMode::Vertex);
+    // Ctrl+2 is not a mode key.
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Num4);
+    h.run();
+    assert_eq!(h.state().panel.tools().select_mode(), SelectMode::Vertex);
+}
+
+#[test]
+fn escape_lets_go_of_picked_corners_first_then_deselects() {
+    use halberd_tools::SelectMode;
+    let mut h = box_with_gizmo(halberd_tools::GizmoMode::Move);
+    h.key_press(Key::Num2);
+    h.run();
+    let corner = near_top_corner(&h);
+    let at = world_on_screen(&h, corner);
+    left_click(&mut h, at);
+    assert_eq!(h.state().panel.tools().picked_elements().len(), 1);
+    assert_eq!(h.state().panel.tools().select_mode(), SelectMode::Vertex);
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(h.state().panel.tools().picked_elements().is_empty());
+    assert_eq!(h.state().doc.selection().len(), 1, "the box stays selected");
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(h.state().doc.selection().is_empty());
+}
+
+#[test]
+fn dragging_a_picked_corner_reshapes_the_box_in_one_undo_step() {
+    use halberd_tools::{Axis, GizmoMode, Handle};
+    let mut h = box_with_gizmo(GizmoMode::Move);
+    h.key_press(Key::Num2);
+    h.run();
+    let corner = near_top_corner(&h);
+    let at = world_on_screen(&h, corner);
+    left_click(&mut h, at);
+    let grab = handle_on_screen(&h, Handle::MoveAxis(Axis::Z));
+    h.hover_at(grab);
+    press(&h, PointerButton::Primary, grab, true);
+    h.run();
+    for step in 1..=5 {
+        h.hover_at(grab + egui::vec2(0.0, -step as f32 * 12.0));
+        h.run();
+    }
+    press(
+        &h,
+        PointerButton::Primary,
+        grab + egui::vec2(0.0, -60.0),
+        false,
+    );
+    h.run();
+    let state = h.state();
+    let id = *state.doc.selection().iter().next().unwrap();
+    let brush = state
+        .doc
+        .get(id)
+        .unwrap()
+        .as_brush()
+        .unwrap()
+        .brush()
+        .clone();
+    assert_eq!(
+        brush.faces().len(),
+        7,
+        "the top folds where the corner rose"
+    );
+    assert!(brush.bounds().max.z > corner.z);
+    assert_eq!(
+        state.panel.tools().picked_elements().len(),
+        1,
+        "still picked"
+    );
+    assert_eq!(h.state_mut().doc.undo().as_deref(), Some("Move vertex"));
+    let state = h.state();
+    let brush = state
+        .doc
+        .get(id)
+        .unwrap()
+        .as_brush()
+        .unwrap()
+        .brush()
+        .clone();
+    assert_eq!(brush.faces().len(), 6, "one step");
+}
+
+#[test]
+fn both_toolbar_rows_fit_an_800_point_viewport() {
+    // Regression: with the Pick buttons in the first row, "Inside entities"
+    // was cut off at common window sizes.
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    let viewport = h.get_by_label(VIEWPORT_LABEL).rect();
+    for label in ["Face 4", "Object 1"] {
+        assert!(
+            viewport.contains_rect(h.get_by_label(label).rect()),
+            "{label}"
+        );
+    }
+    let inside = h.get_by_label_contains(INSIDE_ENTITIES_LABEL).rect();
+    assert!(viewport.contains_rect(inside), "{inside:?} in {viewport:?}");
+}

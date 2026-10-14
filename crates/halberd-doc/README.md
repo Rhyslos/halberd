@@ -25,6 +25,7 @@ The document, commands and undo are implemented (see [decision 0009](../../docs/
 - **`Document`**: the objects (each with an `ObjectId` that never changes and is never reused), the selection, the undo history, and revision counters that tell views when to redraw.
 - **`Command`**: every edit. So far: `AddBrushes`, `Remove` and `ReplaceBrush` (new size or position). `execute` checks it first; on error nothing changes.
 - **`TransformBrushes`**: new shapes for several brushes at once, named after what was done ("Move 2 brushes", "Rotate brush", "Scale brush").
+- **`EditBrushes`**: new shapes from moving some corners, edges or faces (`ElementKind`), each with what became of every face, named "Move vertex", "Rotate face", "Scale 3 edges". `BrushObject::with_shape_mapped` keeps each face's material and file data; a face that folded or merged loses its saved id (a new one is given on saving) and its displacement.
 - **Cancelling a drag**: `discard_step` reverses and forgets an unfinished merged step, so a drag cancelled with Escape leaves nothing in the undo list.
 - **One drag, one undo step**: `execute_merging` with the same key merges consecutive edits (for example, dragging a size field) until `end_step`, which the interface calls whenever no drag is in progress.
 - **Undo and redo**: each applied command keeps the change it made (up to 1000 steps); undo reverses it, redo repeats it, with the same ids.
