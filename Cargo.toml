@@ -37,7 +37,7 @@ toml = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 steamlocate = "2.1"
 eframe = { version = "0.36", features = ["persistence"] }
-egui = "0.36"
+egui = "0.37"
 egui_dock = { version = "0.21", features = ["serde"] }
 # Must match the wgpu version eframe uses (one GPU device is shared).
 wgpu = "30.0"
