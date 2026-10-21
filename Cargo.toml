@@ -52,7 +52,7 @@ log = "0.4"
 bytemuck = { version = "1.25", features = ["derive"] }
 # Development only: temporary folders for tests.
 tempfile = "3"
-egui_kittest = "0.36"
+egui_kittest = "0.37"
 ron = "0.12"
 pollster = "1.0"
 
