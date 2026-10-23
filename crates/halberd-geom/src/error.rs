@@ -21,6 +21,8 @@ pub enum GeomError {
     BevelTooWide,
     /// Taking the face away would leave the shape open.
     WouldOpen,
+    /// An outline crosses or touches itself.
+    CrossesItself,
 }
 
 impl fmt::Display for GeomError {
@@ -33,6 +35,7 @@ impl fmt::Display for GeomError {
             Self::NotClosed => "the faces do not enclose a solid shape",
             Self::BevelTooWide => "the bevel is wider than the faces beside the edge",
             Self::WouldOpen => "without that face the shape would be open",
+            Self::CrossesItself => "the outline crosses itself",
             Self::TooManyPieces => {
                 "it would need more than 256 pieces (for stairs: use taller steps or a lower height)"
             }

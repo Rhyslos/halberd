@@ -147,6 +147,8 @@ pub struct ToolController {
     /// A box being dragged to pick every part inside it: where the drag
     /// began and where the pointer is.
     marquee: Option<(Vec2, Vec2)>,
+    /// A floor plan being drawn, corner by corner.
+    plan: Option<plan::PlanDraft>,
 }
 
 /// What a shape is built from.
@@ -172,6 +174,7 @@ impl ToolController {
             elements: Elements::default(),
             hovered_element: None,
             marquee: None,
+            plan: None,
         }
     }
 
@@ -279,6 +282,7 @@ impl ToolController {
         }
         self.tool = tool;
         self.press_at = None;
+        self.plan = None;
         self.marquee = None;
         self.drag = None;
         if tool == Tool::Box {
@@ -350,6 +354,9 @@ impl ToolController {
 
     /// Picks what the Draw tool makes.
     pub fn set_shape(&mut self, shape: Shape) {
+        if shape != self.shape {
+            self.plan = None;
+        }
         self.shape = shape;
     }
 
@@ -397,12 +404,15 @@ impl ToolController {
 
     /// True while a shape is being drawn.
     pub fn is_drawing(&self) -> bool {
-        self.drag.is_some()
+        self.drag.is_some() || self.plan.is_some()
     }
 
     /// True while something is in progress that Escape would cancel.
     pub fn is_busy(&self) -> bool {
-        self.drag.is_some() || self.gizmo.is_dragging() || self.marquee.is_some()
+        self.drag.is_some()
+            || self.gizmo.is_dragging()
+            || self.marquee.is_some()
+            || self.plan.is_some()
     }
 
     /// The box being drawn, for the preview outline.
@@ -495,6 +505,9 @@ impl ToolController {
                         cursor.and_then(|c| elements::pick(doc, kind, camera, size, c));
                 }
                 self.update_select(input, cursor, ray.as_ref(), camera, doc)
+            }
+            Tool::Box if self.shape == Shape::FloorPlan => {
+                self.update_plan(input, ray.as_ref(), doc)
             }
             Tool::Box => self.update_box(input, ray.as_ref(), doc),
         }
@@ -703,8 +716,10 @@ fn sane_grid(grid: f32) -> f32 {
 }
 
 mod operations;
+mod plan;
 
 pub use operations::{SelectAfter, ShapeOp, ShapeOpOutcome};
+pub use plan::PlanPreview;
 
 #[cfg(test)]
 mod tests;

@@ -2,7 +2,7 @@
 
 use crate::import::SOLID_SLOT;
 use crate::planes::{plane_from_points, points_of_face, same_plane};
-use halberd_doc::{BrushObject, Document, Object};
+use halberd_doc::{BrushObject, Document, Object, ShapeObject};
 use halberd_geom::Face;
 use halberd_vmf::{Block, Entry, Vmf, format_plane, id_of, parse_plane};
 
@@ -33,6 +33,14 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
             && brush.entity().is_none()
         {
             world.push_block(solid_block(brush, &mut ids));
+        }
+    }
+    // Floor-plan shapes are split into convex brushes here, as Source
+    // needs, each marked so Halberd can put the shape back together.
+    let shapes = doc.objects().filter_map(|(_, o)| o.as_shape());
+    for (number, shape) in shapes.enumerate() {
+        for solid in shape_solids(shape, number + 1) {
+            world.push_block(solid_block(&solid, &mut ids));
         }
     }
     world.entries.extend(data.world_trailer.iter().cloned());
@@ -74,6 +82,40 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
         entries,
         line_ending: data.line_ending,
     }
+}
+
+/// Key in a solid's `editor` block naming the floor-plan shape it is a
+/// piece of (a number, the same for every piece of one shape).
+pub(crate) const SHAPE_KEY: &str = "halberd_shape";
+/// Key holding the shape's outline, as `x y` pairs, then its bottom and
+/// top heights after a `|`.
+pub(crate) const OUTLINE_KEY: &str = "halberd_outline";
+
+/// The convex brushes a floor-plan shape is saved as, each marked with
+/// the shape's number and outline.
+fn shape_solids(shape: &ShapeObject, number: usize) -> Vec<BrushObject> {
+    let outline: Vec<String> = shape
+        .outline()
+        .iter()
+        .map(|p| format!("{} {}", p.x, p.y))
+        .collect();
+    let mut editor = Block::new("editor");
+    editor.push_pair("color", "220 140 60");
+    editor.push_pair("visgroupshown", "1");
+    editor.push_pair("visgroupautoshown", "1");
+    editor.push_pair(SHAPE_KEY, number.to_string());
+    editor.push_pair(
+        OUTLINE_KEY,
+        format!("{} | {} {}", outline.join(" "), shape.bottom(), shape.top()),
+    );
+    shape
+        .pieces()
+        .iter()
+        .map(|piece| {
+            let faces = vec![shape.look.copied(); piece.faces().len()];
+            BrushObject::with_faces(piece.clone(), faces, vec![Entry::Block(editor.clone())])
+        })
+        .collect()
 }
 
 /// A brush as a `solid` block: its kept entries, with its sides placed
@@ -206,6 +248,7 @@ impl IdSource {
             match object {
                 Object::Brush(b) => see_brush(b, &mut see),
                 Object::Entity(e) => see(&e.file_data),
+                Object::Shape(s) => see(&s.look.file_data),
             }
         }
         let data = doc.file_data();

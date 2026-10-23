@@ -15,7 +15,7 @@ use crate::elements::{ElementShape, PickedElement, SelectMode, editable_brushes}
 use crate::gizmo::{Axis, GizmoMode};
 use glam::Vec3;
 use halberd_doc::{
-    BrushObject, Command, Document, ElementKind, FaceInfo, Object, ObjectId, TransformKind,
+    BrushObject, Command, Document, ElementKind, FaceInfo, ObjectId, TransformKind,
 };
 use halberd_geom::{Brush, GeomError};
 
@@ -184,10 +184,7 @@ fn counted(count: usize, one: &str, many: &str) -> String {
 
 /// A selected brush object.
 fn brush_object(doc: &Document, id: ObjectId) -> Option<&BrushObject> {
-    match doc.get(id)? {
-        Object::Brush(b) => Some(b),
-        Object::Entity(_) => None,
-    }
+    doc.get(id)?.as_brush()
 }
 
 impl ToolController {
@@ -632,6 +629,7 @@ fn mirror(doc: &Document, axis: usize) -> Result<ShapeOpOutcome, String> {
     Ok(ShapeOpOutcome::new(Command::TransformBrushes {
         kind: TransformKind::Mirror,
         brushes: mirrored,
+        shapes: Vec::new(),
     }))
 }
 

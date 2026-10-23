@@ -10,7 +10,7 @@ use super::{Frame, Handle, ROTATE_SNAP_DEGREES};
 use crate::ToolAction;
 use crate::elements::{PickedElement, Targets};
 use glam::{DMat4, DVec3, Vec2, Vec3};
-use halberd_doc::{Command, Document, ElementKind, ObjectId, TransformKind};
+use halberd_doc::{Command, Document, ElementKind, ObjectId, ShapeObject, TransformKind};
 use halberd_geom::{Aabb, Brush, GeomError};
 
 /// Pixels of pointer movement that double (or halve) the size when
@@ -40,6 +40,17 @@ impl Motion {
             Self::Move(_) => TransformKind::Move,
             Self::Rotate { .. } => TransformKind::Rotate,
             Self::Scale { .. } => TransformKind::Scale,
+        }
+    }
+
+    /// True if the motion keeps up up (it turns only about a vertical
+    /// line, if at all).
+    fn keeps_upright(self) -> bool {
+        match self {
+            Self::Rotate { axis, angle, .. } => {
+                angle.abs() < 1e-6 || axis.normalize_or_zero().z.abs() > 0.999
+            }
+            Self::Move(_) | Self::Scale { .. } => true,
         }
     }
 
@@ -85,7 +96,7 @@ impl Motion {
 #[derive(Debug, Clone)]
 enum Held {
     /// Whole brushes, as they were.
-    Brushes(Vec<(ObjectId, Brush)>),
+    Brushes(Vec<(ObjectId, Brush)>, Vec<(ObjectId, ShapeObject)>),
     /// Picked parts of brushes: the brushes as they were with the corners
     /// to move, and the picked parts as they were.
     Parts {
@@ -158,10 +169,18 @@ impl Drag {
                     .iter()
                     .filter_map(|id| Some((*id, doc.get(*id)?.as_brush()?.brush().clone())))
                     .collect();
-                if originals.is_empty() {
+                let shapes: Vec<(ObjectId, ShapeObject)> = doc
+                    .selection()
+                    .iter()
+                    .filter_map(|id| Some((*id, doc.get(*id)?.as_shape()?.clone())))
+                    .collect();
+                if originals.is_empty() && shapes.is_empty() {
                     return None;
                 }
-                (Held::Brushes(originals), super::selected_brush_bounds(doc)?)
+                (
+                    Held::Brushes(originals, shapes),
+                    super::selected_brush_bounds(doc)?,
+                )
             }
         };
         let start = match handle {
@@ -196,7 +215,7 @@ impl Drag {
     pub(crate) fn picked_at_start(&self) -> Option<&[PickedElement]> {
         match &self.held {
             Held::Parts { picked, .. } => Some(picked),
-            Held::Brushes(_) => None,
+            Held::Brushes(..) => None,
         }
     }
 
@@ -222,14 +241,27 @@ impl Drag {
         let motion = self.motion(cursor, frame, grid)?;
         let kind = motion.kind();
         match &self.held {
-            Held::Brushes(originals) => {
+            Held::Brushes(originals, held_shapes) => {
                 let brushes = originals
                     .iter()
                     .map(|(id, brush)| Some((*id, motion.brush(brush).ok()?)))
                     .collect::<Option<Vec<_>>>()?;
+                // Floor-plan shapes stay upright: they turn only about a
+                // vertical line.
+                if !held_shapes.is_empty() && !motion.keeps_upright() {
+                    return None;
+                }
+                let shapes = held_shapes
+                    .iter()
+                    .map(|(id, shape)| Some((*id, shape.mapped(|p| motion.point(p)).ok()?)))
+                    .collect::<Option<Vec<_>>>()?;
                 Some((
                     ToolAction::ExecuteMerging(
-                        Command::TransformBrushes { kind, brushes },
+                        Command::TransformBrushes {
+                            kind,
+                            brushes,
+                            shapes,
+                        },
                         self.key,
                     ),
                     None,

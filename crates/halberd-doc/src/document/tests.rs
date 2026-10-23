@@ -374,6 +374,7 @@ fn transforming_several_brushes_is_one_named_step() {
     let command = Command::TransformBrushes {
         kind: crate::TransformKind::Move,
         brushes: vec![moved(a, 16.0), moved(b, 16.0)],
+        shapes: Vec::new(),
     };
     assert_eq!(command.describe(), "Move 2 brushes");
     doc.execute(command).unwrap();
@@ -394,6 +395,7 @@ fn a_transform_that_changes_nothing_is_refused() {
     let command = Command::TransformBrushes {
         kind: crate::TransformKind::Rotate,
         brushes: vec![(id, same)],
+        shapes: Vec::new(),
     };
     assert_eq!(command.describe(), "Rotate brush");
     assert_eq!(doc.execute(command), Err(DocError::NothingToDo));
@@ -411,6 +413,7 @@ fn a_cancelled_drag_is_reversed_and_forgotten() {
             Command::TransformBrushes {
                 kind: crate::TransformKind::Move,
                 brushes: vec![(id, cube_at(x))],
+                shapes: Vec::new(),
             },
             42,
         )
@@ -438,6 +441,7 @@ fn a_finished_step_is_never_discarded() {
         Command::TransformBrushes {
             kind: crate::TransformKind::Move,
             brushes: vec![(id, cube_at(8.0))],
+            shapes: Vec::new(),
         },
         5,
     )
@@ -462,6 +466,7 @@ fn a_drag_that_comes_back_to_the_start_leaves_no_undo_step() {
             Command::TransformBrushes {
                 kind: crate::TransformKind::Move,
                 brushes: vec![(id, cube_at(x))],
+                shapes: Vec::new(),
             },
             9,
         )
@@ -473,6 +478,7 @@ fn a_drag_that_comes_back_to_the_start_leaves_no_undo_step() {
         Command::TransformBrushes {
             kind: crate::TransformKind::Move,
             brushes: vec![(id, cube_at(48.0))],
+            shapes: Vec::new(),
         },
         9,
     )

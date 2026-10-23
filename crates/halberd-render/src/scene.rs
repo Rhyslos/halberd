@@ -110,9 +110,43 @@ impl SceneGeometry {
                         scene.add_brush(&marker, POINT_ENTITY_COLOR, selected);
                     }
                 }
+                Object::Shape(shape) => scene.add_shape(shape, selected),
             }
         }
         scene
+    }
+
+    /// A floor-plan shape: its pieces' sides, with edges only along its
+    /// outline (where pieces meet inside it, nothing is drawn).
+    fn add_shape(&mut self, shape: &halberd_doc::ShapeObject, selected: bool) {
+        let edge_start = if selected {
+            self.selected_edges.len()
+        } else {
+            self.edges.len()
+        };
+        for piece in shape.pieces() {
+            self.add_brush(piece, BRUSH_COLOR, selected);
+        }
+        let (edges, color) = if selected {
+            (&mut self.selected_edges, SELECTED_EDGE_COLOR)
+        } else {
+            (&mut self.edges, EDGE_COLOR)
+        };
+        edges.truncate(edge_start);
+        let outline = shape.outline();
+        let line = |a: glam::Vec3, b: glam::Vec3| {
+            [a, b].map(|p| LineVertex {
+                position: p.to_array(),
+                color,
+            })
+        };
+        for (i, a) in outline.iter().enumerate() {
+            let b = outline[(i + 1) % outline.len()];
+            for z in [shape.bottom(), shape.top()] {
+                edges.extend(line(a.extend(z), b.extend(z)));
+            }
+            edges.extend(line(a.extend(shape.bottom()), a.extend(shape.top())));
+        }
     }
 
     fn add_brush(&mut self, brush: &Brush, base: [f32; 4], selected: bool) {
