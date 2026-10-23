@@ -84,7 +84,9 @@ fn each_operation_says_what_it_needs_first() {
     for op in ShapeOp::MENU {
         let ready = t.shape_op_ready(op, &doc);
         match op {
-            ShapeOp::Mirror(_) | ShapeOp::MirrorAcrossView => assert!(ready.is_ok()),
+            ShapeOp::Mirror(_) | ShapeOp::MirrorAcrossView | ShapeOp::Subtract => {
+                assert!(ready.is_ok())
+            }
             _ => assert!(ready.unwrap_err().ends_with('.'), "{op:?}"),
         }
         assert!(!op.label().is_empty() && !op.description().is_empty());

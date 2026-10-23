@@ -590,3 +590,34 @@ fn the_shape_menu_joins_selected_boxes_and_ctrl_j_does_too() {
     harness.run();
     assert_eq!(harness.state().document().len(), 1, "Ctrl+J");
 }
+
+#[test]
+fn ctrl_shift_c_carves_and_the_shape_menu_lists_the_booleans() {
+    let mut wb = Workbench::new(info(), None);
+    let cube = |min: f32, max: f32| {
+        halberd_geom::Brush::cuboid(halberd_geom::Aabb::from_corners(
+            glam::Vec3::splat(min),
+            glam::Vec3::splat(max),
+        ))
+        .unwrap()
+    };
+    wb.document_mut()
+        .execute(halberd_doc::Command::AddBrushes(vec![cube(0.0, 64.0)]))
+        .unwrap();
+    wb.document_mut()
+        .execute(halberd_doc::Command::AddBrushes(vec![cube(32.0, 96.0)]))
+        .unwrap();
+    let mut harness = harness_for(wb);
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::C);
+    harness.run();
+    assert_eq!(
+        harness.state().document().undo_label(),
+        Some("Subtract from brush")
+    );
+    harness.get_by_label("Shape").click();
+    harness.run();
+    for label in ["Union", "Subtract (carve)", "Intersect"] {
+        harness.get_by_label_contains(label);
+    }
+}
