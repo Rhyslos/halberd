@@ -613,11 +613,39 @@ fn ctrl_shift_c_carves_and_the_shape_menu_lists_the_booleans() {
     harness.run();
     assert_eq!(
         harness.state().document().undo_label(),
-        Some("Subtract from brush")
+        Some("Subtract from one brush")
     );
     harness.get_by_label("Shape").click();
     harness.run();
     for label in ["Union", "Subtract (carve)", "Intersect"] {
         harness.get_by_label_contains(label);
     }
+}
+
+#[test]
+fn ctrl_shift_c_arriving_as_copy_still_carves() {
+    // Regression: the window system sends Ctrl+Shift+C as a Copy event, not
+    // a key, so the carve key did nothing in the real window.
+    let mut wb = Workbench::new(info(), None);
+    let cube = |min: f32, max: f32| {
+        halberd_geom::Brush::cuboid(halberd_geom::Aabb::from_corners(
+            glam::Vec3::splat(min),
+            glam::Vec3::splat(max),
+        ))
+        .unwrap()
+    };
+    wb.document_mut()
+        .execute(halberd_doc::Command::AddBrushes(vec![cube(0.0, 64.0)]))
+        .unwrap();
+    wb.document_mut()
+        .execute(halberd_doc::Command::AddBrushes(vec![cube(32.0, 96.0)]))
+        .unwrap();
+    let mut harness = harness_for(wb);
+    harness.run();
+    harness.event_modifiers(egui::Event::Copy, Modifiers::COMMAND | Modifiers::SHIFT);
+    harness.run();
+    assert_eq!(
+        harness.state().document().undo_label(),
+        Some("Subtract from one brush")
+    );
 }

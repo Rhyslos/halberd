@@ -82,13 +82,20 @@ impl ViewportPanel {
     /// The shape operation keys pressed this frame, carried out.
     pub(super) fn shape_op_keys(&mut self, ui: &Ui, doc: &mut Document) -> Vec<String> {
         let pressed: Vec<ShapeOp> = ui.input(|i| {
-            SHAPE_OP_KEYS
+            let mut ops: Vec<ShapeOp> = SHAPE_OP_KEYS
                 .iter()
                 .filter(|(_, key)| {
                     first_press(i, key.logical_key, |m| m.matches_exact(key.modifiers))
                 })
                 .map(|(op, _)| *op)
-                .collect()
+                .collect();
+            // The window system turns Ctrl+C, with Shift too, into Copy
+            // and sends no key: Ctrl+Shift+C arrives as a Copy.
+            let copy = i.events.iter().any(|e| matches!(e, egui::Event::Copy));
+            if copy && i.modifiers.matches_exact(CTRL_SHIFT) && !ops.contains(&ShapeOp::Subtract) {
+                ops.push(ShapeOp::Subtract);
+            }
+            ops
         });
         pressed
             .into_iter()

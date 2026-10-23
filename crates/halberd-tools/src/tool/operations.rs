@@ -401,6 +401,7 @@ impl ToolController {
             changed: Vec::new(),
             added,
             removed: Vec::new(),
+            select_added: true,
         });
         outcome.pick_after = far_faces;
         outcome.select = SelectAfter::Added;
@@ -445,6 +446,7 @@ impl ToolController {
             changed,
             added: Vec::new(),
             removed: Vec::new(),
+            select_added: true,
         }))
     }
 
@@ -469,6 +471,7 @@ impl ToolController {
             changed: Vec::new(),
             added: vec![(brush, entity)],
             removed: Vec::new(),
+            select_added: true,
         });
         outcome.select = SelectAfter::Added;
         Ok(outcome)
@@ -601,6 +604,7 @@ pub(super) fn join(doc: &Document) -> Result<ShapeOpOutcome, String> {
         changed: vec![(*keep, joined)],
         added: Vec::new(),
         removed: rest,
+        select_added: true,
     });
     if gaps {
         outcome.note = Some(

@@ -19,12 +19,14 @@ Option 2, as three more shape operations in the Shape menu, each one undo step.
 - **Subtract (Ctrl+Shift+C, "carve"):** the selected brushes cut their space out of every other brush they overlap.
   - The cut brushes are left in convex pieces, each staying in its brush's entity.
   - The cutting brushes stay, still selected, so they can be moved and used again, or deleted. The Console says so.
-- **Union (Ctrl+Shift+U):** the selected brushes fill the space they cover together without overlapping: each is cut by the ones before it. If that space has no dents (two boxes in a row, say), it becomes one brush, as Join would make it.
+- **Union (Ctrl+Shift+U):** the selected brushes fill the space they cover together without overlapping: each is cut by the ones before it. Only if one brush would fill exactly that space (two boxes in a row, say: no gap, no new slanted side) does it become one brush, as Join would make it.
 - **Intersect (Ctrl+Shift+I):** only the space all the selected brushes share is kept, as one brush. As with Join, it is a world brush if any of them is one.
 - **Faces keep their look:**
   - A face that came from a cut brush keeps that brush's face data. Only the brush's first piece keeps saved face ids, and only for faces that didn't change, so ids are never repeated.
   - A face made by a cutter copies the look of that cutter face, as in Hammer.
-- **Slivers:** pieces thinner than a unit are dropped, as Hammer does.
+- **Slivers:** pieces thinner than a unit can't be brushes and are dropped, as Hammer does; the Console says how much space was left out, and suggests snapping the cutter to the grid.
+- **Selection:** after Subtract only the cutters are selected, also after undo and redo, so Delete removes only them. Union's and Split's new pieces join the selection.
+- **Ctrl+Shift+C** reaches Halberd as Copy on every system (the window system treats Ctrl+C with any Shift as Copy); Halberd reads it as Subtract when Ctrl and Shift are held.
 
 ## Consequences
 

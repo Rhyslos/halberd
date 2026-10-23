@@ -65,7 +65,7 @@ fn subtract_carves_a_doorway_and_keeps_the_cutter() {
         assert_eq!(b.faces().len(), b.brush().faces().len());
     }
     assert_eq!(doc.selection().len(), 1, "the door stays selected");
-    assert_eq!(doc.undo().as_deref(), Some("Subtract from brush"));
+    assert_eq!(doc.undo().as_deref(), Some("Subtract from one brush"));
     assert_eq!(brushes(&doc).len(), 2);
 }
 
@@ -187,4 +187,58 @@ fn every_boolean_waits_for_a_selection() {
     for op in [ShapeOp::Union, ShapeOp::Subtract, ShapeOp::Intersect] {
         assert!(t.shape_op_ready(op, &doc).is_err(), "{op:?}");
     }
+}
+
+#[test]
+fn redo_of_subtract_keeps_only_the_cutter_selected() {
+    // Regression: redo selected the wall pieces too, so Delete (as the note
+    // suggests) took them with the cutter.
+    let wall = block(Vec3::ZERO, Vec3::new(256.0, 16.0, 128.0));
+    let door = block(Vec3::new(96.0, -8.0, 0.0), Vec3::new(160.0, 24.0, 96.0));
+    let mut doc = map(vec![wall], vec![door]);
+    tools()
+        .apply_shape_op(ShapeOp::Subtract, &mut doc, &camera())
+        .unwrap();
+    doc.undo();
+    doc.redo();
+    assert_eq!(doc.selection().len(), 1);
+    let picked = doc.get(*doc.selection().iter().next().unwrap()).unwrap();
+    assert_eq!(picked.bounds().unwrap().min.y, -8.0, "the door");
+}
+
+#[test]
+fn union_of_brushes_with_a_gap_between_stays_in_pieces() {
+    // Regression: a near-L of two big slabs merged into one brush with a
+    // slanted, off-grid face, quietly filling a gap.
+    let a = block(Vec3::ZERO, Vec3::new(1024.0, 1024.0, 64.0));
+    let b = block(Vec3::new(1000.0, 0.0, 0.0), Vec3::new(2048.0, 1023.0, 64.0));
+    let mut doc = map(Vec::new(), vec![a.clone(), b.clone()]);
+    tools()
+        .apply_shape_op(ShapeOp::Union, &mut doc, &camera())
+        .unwrap();
+    assert!(brushes(&doc).len() >= 2);
+    let overlap = a.intersection(&b).unwrap().volume();
+    assert!((volume(&doc) - (a.volume() + b.volume() - overlap)).abs() < 1.0);
+}
+
+#[test]
+fn slivers_left_out_are_mentioned() {
+    // A niche 15.5 deep in a 16 thick wall leaves a half-unit back: too
+    // thin for a brush.
+    let wall = block(Vec3::ZERO, Vec3::new(256.0, 16.0, 128.0));
+    let niche = Brush::from_planes(&[
+        halberd_geom::Plane::new(Vec3::X, Vec3::new(160.0, 0.0, 0.0)).unwrap(),
+        halberd_geom::Plane::new(Vec3::NEG_X, Vec3::new(96.0, 0.0, 0.0)).unwrap(),
+        halberd_geom::Plane::new(Vec3::Y, Vec3::new(0.0, 15.5, 0.0)).unwrap(),
+        halberd_geom::Plane::new(Vec3::NEG_Y, Vec3::new(0.0, -8.0, 0.0)).unwrap(),
+        halberd_geom::Plane::new(Vec3::Z, Vec3::new(0.0, 0.0, 96.0)).unwrap(),
+        halberd_geom::Plane::new(Vec3::NEG_Z, Vec3::ZERO).unwrap(),
+    ])
+    .unwrap();
+    let mut doc = map(vec![wall], vec![niche]);
+    let note = tools()
+        .apply_shape_op(ShapeOp::Subtract, &mut doc, &camera())
+        .unwrap()
+        .unwrap();
+    assert!(note.contains("left out"), "{note}");
 }

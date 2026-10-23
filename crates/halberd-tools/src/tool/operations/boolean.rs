@@ -53,12 +53,20 @@ impl Piece {
         }
     }
 
-    /// This piece minus `cutter`: `None` if untouched, else the pieces left.
-    fn minus(&self, cutter: &BrushObject) -> Option<Vec<Piece>> {
+    /// This piece minus `cutter`: `None` if untouched, else the pieces
+    /// left. Adds to `lost` the space dropped as slivers too thin to be
+    /// brushes (what is neither left nor inside the cutter).
+    fn minus(&self, cutter: &BrushObject, lost: &mut f32) -> Option<Vec<Piece>> {
         match self.brush.subtract(cutter.brush()) {
             Subtracted::Untouched => None,
             Subtracted::Gone => Some(Vec::new()),
             Subtracted::Pieces(parts) => {
+                let inside = self
+                    .brush
+                    .intersection(cutter.brush())
+                    .map_or(0.0, |b| b.volume());
+                let left: f32 = parts.iter().map(Brush::volume).sum();
+                *lost += (self.brush.volume() - left - inside).max(0.0);
                 Some(parts.into_iter().map(|b| self.derive(b, cutter)).collect())
             }
         }
@@ -99,13 +107,22 @@ impl Piece {
 }
 
 /// Cuts `object` by each of `cutters` in turn. `None` if none touches it.
-fn carve(object: &BrushObject, cutters: &[&BrushObject]) -> Option<Vec<Piece>> {
+/// Space dropped as slivers is added to `lost`.
+fn carve(object: &BrushObject, cutters: &[&BrushObject], lost: &mut f32) -> Option<Vec<Piece>> {
+    let bounds = object.brush().bounds();
+    let near = |c: &&&BrushObject| {
+        let b = c.brush().bounds();
+        (0..3).all(|i| bounds.min[i] < b.max[i] && b.min[i] < bounds.max[i])
+    };
+    if !cutters.iter().any(|c| near(&c)) {
+        return None;
+    }
     let mut pieces = vec![Piece::whole(object)];
     let mut touched = false;
     for cutter in cutters {
         let mut next = Vec::new();
         for piece in pieces {
-            match piece.minus(cutter) {
+            match piece.minus(cutter, lost) {
                 None => next.push(piece),
                 Some(parts) => {
                     touched = true;
@@ -126,6 +143,8 @@ struct Parts {
     changed: Vec<(ObjectId, BrushObject)>,
     added: Vec<AddedBrush>,
     removed: Vec<ObjectId>,
+    /// Space dropped as slivers too thin to be brushes.
+    lost: f32,
 }
 
 impl Parts {
@@ -147,12 +166,24 @@ impl Parts {
         self.changed.is_empty() && self.removed.is_empty()
     }
 
-    fn into_command(self, label: String) -> Command {
+    /// A note for the Console if slivers were dropped.
+    fn sliver_note(&self) -> Option<String> {
+        (self.lost >= 1.0).then(|| {
+            format!(
+                "About {:.0} cubic units were left out: slivers thinner than a unit can't be \
+                 brushes. If that leaves a gap, snap the cutting brush to the grid and try again.",
+                self.lost
+            )
+        })
+    }
+
+    fn into_command(self, label: String, select_added: bool) -> Command {
         Command::ShapeEdit {
             label,
             changed: self.changed,
             added: self.added,
             removed: self.removed,
+            select_added,
         }
     }
 }
@@ -179,7 +210,7 @@ pub(super) fn subtract(doc: &Document) -> Result<ShapeOpOutcome, String> {
         if cutters.iter().any(|(c, _)| *c == id) {
             continue;
         }
-        if let Some(pieces) = carve(object, &cutting) {
+        if let Some(pieces) = carve(object, &cutting, &mut parts.lost) {
             cut += 1;
             parts.take(id, object, pieces);
         }
@@ -187,10 +218,13 @@ pub(super) fn subtract(doc: &Document) -> Result<ShapeOpOutcome, String> {
     if parts.is_empty() {
         return Err("Nothing was cut: the selected brushes don't overlap any other brush.".into());
     }
-    let label = format!("Subtract from {}", counted(cut, "brush", "brushes"));
-    let mut outcome = ShapeOpOutcome::new(parts.into_command(label));
+    let label = format!("Subtract from {}", counted(cut, "one brush", "brushes"));
+    let slivers = parts.sliver_note();
+    // The cut pieces don't join the selection (not even on redo), so
+    // Delete removes only the cutters.
+    let mut outcome = ShapeOpOutcome::new(parts.into_command(label, false));
     outcome.select = super::SelectAfter::Same;
-    outcome.note = Some(format!(
+    let cutters_note = format!(
         "Cut out of {}. The cutting {} stayed: press Delete to remove {}.",
         counted(cut, "one brush", "brushes"),
         if cutters.len() == 1 {
@@ -199,7 +233,11 @@ pub(super) fn subtract(doc: &Document) -> Result<ShapeOpOutcome, String> {
             "brushes"
         },
         if cutters.len() == 1 { "it" } else { "them" },
-    ));
+    );
+    outcome.note = Some(match slivers {
+        Some(s) => format!("{cutters_note} {s}"),
+        None => cutters_note,
+    });
     Ok(outcome)
 }
 
@@ -212,7 +250,7 @@ pub(super) fn union(doc: &Document) -> Result<ShapeOpOutcome, String> {
     let mut kept_volume = 0.0;
     for (i, (id, object)) in brushes.iter().enumerate() {
         let earlier: Vec<&BrushObject> = brushes[..i].iter().map(|(_, b)| *b).collect();
-        match carve(object, &earlier) {
+        match carve(object, &earlier, &mut parts.lost) {
             None => kept_volume += object.brush().volume(),
             Some(pieces) => {
                 kept_volume += pieces.iter().map(|p| p.brush.volume()).sum::<f32>();
@@ -225,21 +263,26 @@ pub(super) fn union(doc: &Document) -> Result<ShapeOpOutcome, String> {
         .iter()
         .flat_map(|(_, b)| b.brush().points())
         .collect();
+    // Join would fill no gaps: its hull is no bigger than the space the
+    // brushes cover, and has no side they don't have.
     if let Ok(hull) = Brush::hull(&points)
-        && hull.volume() <= kept_volume * 1.001 + 1.0
+        && hull.volume() <= kept_volume + 1.0
+        && let Ok(mut outcome) = super::join(doc)
+        && outcome.note.is_none()
     {
-        let mut outcome = super::join(doc)?;
         if let Command::ShapeEdit { label, .. } = &mut outcome.command {
             *label = format!("Union of {} brushes", brushes.len());
         }
-        outcome.note = None;
         return Ok(outcome);
     }
     if parts.is_empty() {
         return Err("Nothing changed: the selected brushes don't overlap.".into());
     }
     let label = format!("Union of {} brushes", brushes.len());
-    Ok(ShapeOpOutcome::new(parts.into_command(label)))
+    let note = parts.sliver_note();
+    let mut outcome = ShapeOpOutcome::new(parts.into_command(label, true));
+    outcome.note = note;
+    Ok(outcome)
 }
 
 /// Intersect: only the space all the selected brushes share is kept, as
@@ -272,6 +315,7 @@ pub(super) fn intersect(doc: &Document) -> Result<ShapeOpOutcome, String> {
         changed: vec![(keep, common.into_object(kept, false))],
         added: Vec::new(),
         removed,
+        select_added: true,
     };
     Ok(ShapeOpOutcome::new(command))
 }
