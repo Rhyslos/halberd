@@ -291,6 +291,32 @@ mod tests {
     }
 
     #[test]
+    fn a_shape_is_outlined_only_along_its_outline() {
+        let outline = [
+            glam::Vec2::new(0.0, 0.0),
+            glam::Vec2::new(256.0, 0.0),
+            glam::Vec2::new(256.0, 128.0),
+            glam::Vec2::new(128.0, 128.0),
+            glam::Vec2::new(128.0, 256.0),
+            glam::Vec2::new(0.0, 256.0),
+        ];
+        let shape = halberd_doc::ShapeObject::new(&outline, 0.0, 64.0, Default::default()).unwrap();
+        let mut doc = Document::new();
+        doc.execute(Command::AddShape(shape)).unwrap();
+        doc.clear_selection();
+        let scene = SceneGeometry::from_document(&doc);
+        assert!(!scene.faces.is_empty());
+        // Six sides: a bottom, a top and an upright line for each corner,
+        // with no line where the pieces meet inside.
+        assert_eq!(scene.edges.len(), 6 * 3 * 2);
+        let ids: Vec<_> = doc.objects().map(|(id, _)| id).collect();
+        doc.set_selection(ids);
+        let scene = SceneGeometry::from_document(&doc);
+        assert_eq!(scene.selected_edges.len(), 6 * 3 * 2);
+        assert!(scene.edges.is_empty());
+    }
+
+    #[test]
     fn triangles_face_outwards() {
         let scene = SceneGeometry::from_document(&doc_with_two_boxes());
         for tri in scene.faces.chunks(3) {

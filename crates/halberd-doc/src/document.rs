@@ -451,7 +451,10 @@ impl Document {
                 if self.objects.len() >= MAX_OBJECTS {
                     return Err(DocError::TooManyObjects);
                 }
-                Ok(Change::Inserted(vec![(self.new_id(), Object::Shape(shape))]))
+                Ok(Change::Inserted(vec![(
+                    self.new_id(),
+                    Object::Shape(shape),
+                )]))
             }
             Command::ShapeEdit {
                 changed,
@@ -664,5 +667,7 @@ impl Document {
 
 #[cfg(test)]
 mod map_tests;
+#[cfg(test)]
+mod shape_tests;
 #[cfg(test)]
 mod tests;

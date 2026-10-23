@@ -6,6 +6,8 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **Floor plans.** A new **Floor plan** shape in the Draw tool's shape list (B, then B again). Click corner after corner on the grid, or on top of a brush; click the first corner again, or press **Enter**, to finish (**Backspace** takes back a corner, **Escape** cancels). The outline may have dents, like an L-shaped room; it stands as tall as the Height field. It stays one shape you can select, move, scale and turn, and is saved as the fewest convex brushes Source needs, which open again as the same shape (if another editor changed a piece, they stay ordinary brushes). **Make brushes from shape** (Ctrl+Shift+B, in the Shape menu) turns a shape into ordinary brushes to edit them one by one.
+
 - **Boolean operations** in the Shape menu: **Subtract** (Ctrl+Shift+C) cuts the selected brushes' space out of every brush they overlap, like Hammer's Carve (cut a doorway with a box); **Union** (Ctrl+Shift+U) makes overlapping brushes fill their space without overlap, as one brush when it has no dents; **Intersect** (Ctrl+Shift+I) keeps only the space they share. Results are convex brushes, pieces stay in their `func_detail`, and cut faces copy the cutter's look.
 - **Shape operations**, in a new **Shape** menu and on keys. Each is one undo step and always leaves valid convex brushes:
   - **Extrude faces (E):** a new brush on each picked face, one grid step deep, with its far face picked and the Move gizmo on, so you can pull it further (E again stacks another).
@@ -75,5 +77,6 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Fixed
 
+- A very quick click in the viewport (down and up before the next frame, common with touchpads or on slow machines) was missed by the tools; it now counts.
 - Pressing Escape to leave a text box (the Console's or Keybinds' search, a Properties field) no longer also deselects everything in the map.
 - Ctrl+W released quickly no longer also counts as W, and other shortcut keys check the modifier keys held when the key went down.

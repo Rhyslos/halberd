@@ -131,3 +131,5 @@ impl ToolController {
     }
 }
 
+#[cfg(test)]
+mod tests;

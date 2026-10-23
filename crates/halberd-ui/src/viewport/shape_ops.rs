@@ -8,7 +8,7 @@ use halberd_doc::Document;
 use halberd_tools::ShapeOp;
 
 /// The key for each shape operation that has one.
-pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 11] = [
+pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 12] = [
     (
         ShapeOp::Extrude,
         KeyboardShortcut::new(Modifiers::NONE, Key::E),
@@ -46,6 +46,10 @@ pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 11] = [
     (
         ShapeOp::Intersect,
         KeyboardShortcut::new(CTRL_SHIFT, Key::I),
+    ),
+    (
+        ShapeOp::MakeBrushes,
+        KeyboardShortcut::new(CTRL_SHIFT, Key::B),
     ),
 ];
 
@@ -113,7 +117,10 @@ pub(crate) fn shape_menu(
 ) -> Vec<String> {
     let mut notes = Vec::new();
     for op in ShapeOp::MENU {
-        if matches!(op, ShapeOp::MirrorAcrossView | ShapeOp::Union) {
+        if matches!(
+            op,
+            ShapeOp::MirrorAcrossView | ShapeOp::Union | ShapeOp::MakeBrushes
+        ) {
             ui.separator();
         }
         let mut button = egui::Button::new(op.label());

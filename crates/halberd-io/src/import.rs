@@ -6,9 +6,9 @@ use crate::planes::plane_from_points;
 /// shown brushes was, so saving writes each brush back in its place. Not a
 /// name a map file can contain (it has spaces and is never written).
 pub(crate) const SOLID_SLOT: &str = "halberd: solid here";
-use glam::Vec3;
 use crate::export::{OUTLINE_KEY, SHAPE_KEY};
 use glam::Vec2;
+use glam::Vec3;
 use halberd_doc::{
     BrushObject, Document, EntityObject, FaceInfo, MapFileData, MapObject, ShapeObject,
 };
@@ -111,7 +111,17 @@ fn regroup_shapes(objects: Vec<MapObject>) -> Vec<MapObject> {
             continue;
         };
         rebuilt.entry(number.clone()).or_insert_with(|| {
-            let look = brush.faces().first().map(FaceInfo::copied).unwrap_or_default();
+            // Only the material: each piece's texture alignment suits its
+            // own face, and the pieces get world-aligned faces again when
+            // saved.
+            let look = FaceInfo {
+                material: brush
+                    .faces()
+                    .first()
+                    .map(|f| f.material.clone())
+                    .unwrap_or_default(),
+                ..FaceInfo::default()
+            };
             shape_from_outline(outline, look)
         });
     }
@@ -166,7 +176,7 @@ fn shape_from_outline(text: &str, look: FaceInfo) -> Option<ShapeObject> {
         .split_whitespace()
         .map(|n| n.parse().ok())
         .collect::<Option<_>>()?;
-    if numbers.len() % 2 != 0 {
+    if !numbers.len().is_multiple_of(2) {
         return None;
     }
     let outline: Vec<Vec2> = numbers.chunks(2).map(|c| Vec2::new(c[0], c[1])).collect();

@@ -123,11 +123,12 @@ mod tests {
         let moved = l.mapped(|p| p + Vec3::new(16.0, 0.0, 32.0)).unwrap();
         assert_eq!(moved.bottom(), 32.0);
         assert_eq!(moved.bounds().min.x, 16.0);
-        let turned = l
-            .mapped(|p| Vec3::new(-p.y, p.x, p.z))
-            .unwrap();
+        let turned = l.mapped(|p| Vec3::new(-p.y, p.x, p.z)).unwrap();
         assert_eq!(turned.pieces().len(), 2);
         assert_eq!(turned.bounds().min.x, -128.0);
-        assert!(l.mapped(|p| p * Vec3::new(1.0, 1.0, 0.0)).is_err(), "flattened");
+        assert!(
+            l.mapped(|p| p * Vec3::new(1.0, 1.0, 0.0)).is_err(),
+            "flattened"
+        );
     }
 }

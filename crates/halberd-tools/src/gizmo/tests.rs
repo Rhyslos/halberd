@@ -672,3 +672,5 @@ fn a_brush_picked_inside_an_entity_gets_the_gizmo_but_the_entity_does_not() {
     doc.set_selection([brush]);
     assert!(!t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
 }
+
+mod shapes;
