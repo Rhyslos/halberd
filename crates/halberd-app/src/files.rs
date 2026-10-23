@@ -105,9 +105,18 @@ pub(crate) fn open_path(workbench: &mut Workbench, path: &Path) {
                 .objects()
                 .filter(|(_, o)| matches!(o, Object::Entity(_)))
                 .count();
+            let shapes = doc
+                .objects()
+                .filter(|(_, o)| o.as_shape().is_some())
+                .count();
             workbench.set_document(opened.document, Some(path.to_path_buf()));
+            let shapes = match shapes {
+                0 => String::new(),
+                1 => ", 1 floor plan shape".to_string(),
+                n => format!(", {n} floor plan shapes"),
+            };
             workbench.push_console(format!(
-                "Opened {}: {brushes} brush{}, {entities} entit{}.",
+                "Opened {}: {brushes} brush{}{shapes}, {entities} entit{}.",
                 path.display(),
                 if brushes == 1 { "" } else { "es" },
                 if entities == 1 { "y" } else { "ies" },

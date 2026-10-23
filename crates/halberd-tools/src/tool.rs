@@ -701,7 +701,7 @@ impl ToolController {
         (v / self.grid).round() * self.grid
     }
 
-    fn snap_one(&self, x: f32) -> f32 {
+    pub(super) fn snap_one(&self, x: f32) -> f32 {
         (x / self.grid).round() * self.grid
     }
 }

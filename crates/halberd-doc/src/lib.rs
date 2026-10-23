@@ -33,4 +33,4 @@ pub use object::{
     BrushObject, DEFAULT_MATERIAL, EntityObject, FaceInfo, MapObject, Object, ObjectId,
     POINT_ENTITY_HALF_SIZE,
 };
-pub use shape::ShapeObject;
+pub use shape::{PieceIds, ShapeObject};

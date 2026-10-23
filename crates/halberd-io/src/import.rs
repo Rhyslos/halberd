@@ -6,12 +6,8 @@ use crate::planes::plane_from_points;
 /// shown brushes was, so saving writes each brush back in its place. Not a
 /// name a map file can contain (it has spaces and is never written).
 pub(crate) const SOLID_SLOT: &str = "halberd: solid here";
-use crate::export::{OUTLINE_KEY, SHAPE_KEY};
-use glam::Vec2;
 use glam::Vec3;
-use halberd_doc::{
-    BrushObject, Document, EntityObject, FaceInfo, MapFileData, MapObject, ShapeObject,
-};
+use halberd_doc::{BrushObject, Document, EntityObject, FaceInfo, MapFileData, MapObject};
 use halberd_geom::Brush;
 use halberd_vmf::{Block, Entry, Vmf, parse_plane, parse_vec3};
 
@@ -70,9 +66,21 @@ pub fn document_from_vmf(vmf: &Vmf) -> Result<Imported, halberd_doc::DocError> {
             other => data.header.push(other.clone()),
         }
     }
-    let objects = regroup_shapes(objects);
+    let (objects, changed_shapes) = crate::shapes::regroup(objects);
     let document = Document::from_map(objects, data)?;
     let mut notes = Vec::new();
+    if changed_shapes > 0 {
+        notes.push(format!(
+            "{changed_shapes} floor plan shape{} had been changed outside Halberd (or copied, or \
+             retextured), so {} as ordinary brushes, with those changes kept.",
+            if changed_shapes == 1 { "" } else { "s" },
+            if changed_shapes == 1 {
+                "it opens"
+            } else {
+                "they open"
+            },
+        ));
+    }
     if hidden_brushes > 0 {
         notes.push(format!(
             "{hidden_brushes} brush{} had a shape Halberd could not work out (broken, or with extra sides). \
@@ -86,108 +94,6 @@ pub fn document_from_vmf(vmf: &Vmf) -> Result<Imported, halberd_doc::DocError> {
         ));
     }
     Ok(Imported { document, notes })
-}
-
-/// World brushes Halberd saved as the pieces of a floor-plan shape, put
-/// back together as that shape, where they still are exactly its pieces
-/// (if a piece was changed or deleted elsewhere, they stay brushes).
-fn regroup_shapes(objects: Vec<MapObject>) -> Vec<MapObject> {
-    let mark = |object: &MapObject| -> Option<(String, String)> {
-        let MapObject::Brush(brush) = object else {
-            return None;
-        };
-        brush.file_data.iter().find_map(|entry| match entry {
-            Entry::Block(editor) if editor.name.eq_ignore_ascii_case("editor") => Some((
-                editor.get(SHAPE_KEY)?.to_string(),
-                editor.get(OUTLINE_KEY)?.to_string(),
-            )),
-            _ => None,
-        })
-    };
-    let marks: Vec<Option<(String, String)>> = objects.iter().map(mark).collect();
-    let mut rebuilt: std::collections::BTreeMap<String, Option<ShapeObject>> = Default::default();
-    for (object, mark) in objects.iter().zip(&marks) {
-        let (Some((number, outline)), MapObject::Brush(brush)) = (mark, object) else {
-            continue;
-        };
-        rebuilt.entry(number.clone()).or_insert_with(|| {
-            // Only the material: each piece's texture alignment suits its
-            // own face, and the pieces get world-aligned faces again when
-            // saved.
-            let look = FaceInfo {
-                material: brush
-                    .faces()
-                    .first()
-                    .map(|f| f.material.clone())
-                    .unwrap_or_default(),
-                ..FaceInfo::default()
-            };
-            shape_from_outline(outline, look)
-        });
-    }
-    // A shape is kept only if its pieces are all there, unchanged.
-    for (number, shape) in &mut rebuilt {
-        let Some(found) = shape else { continue };
-        let pieces: Vec<&Brush> = objects
-            .iter()
-            .zip(&marks)
-            .filter(|(_, m)| m.as_ref().is_some_and(|(n, _)| n == number))
-            .filter_map(|(o, _)| match o {
-                MapObject::Brush(b) => Some(b.brush()),
-                _ => None,
-            })
-            .collect();
-        let same = pieces.len() == found.pieces().len()
-            && pieces.iter().all(|p| {
-                found
-                    .pieces()
-                    .iter()
-                    .any(|q| q.bounds() == p.bounds() && q.faces().len() == p.faces().len())
-            });
-        if !same {
-            *shape = None;
-        }
-    }
-    let valid: std::collections::BTreeSet<String> = rebuilt
-        .iter()
-        .filter(|(_, s)| s.is_some())
-        .map(|(n, _)| n.clone())
-        .collect();
-    let mut out = Vec::with_capacity(objects.len());
-    for (object, mark) in objects.into_iter().zip(marks) {
-        match mark {
-            // The first piece stands for the shape; the rest go.
-            Some((number, _)) if valid.contains(&number) => {
-                if let Some(shape) = rebuilt.get_mut(&number).and_then(Option::take) {
-                    out.push(MapObject::Shape(shape));
-                }
-            }
-            _ => out.push(object),
-        }
-    }
-    out
-}
-
-/// A floor-plan shape from its saved outline (`x y` pairs, `|`, bottom and
-/// top), or `None` if the text is damaged.
-fn shape_from_outline(text: &str, look: FaceInfo) -> Option<ShapeObject> {
-    let (corners, heights) = text.split_once('|')?;
-    let numbers: Vec<f32> = corners
-        .split_whitespace()
-        .map(|n| n.parse().ok())
-        .collect::<Option<_>>()?;
-    if !numbers.len().is_multiple_of(2) {
-        return None;
-    }
-    let outline: Vec<Vec2> = numbers.chunks(2).map(|c| Vec2::new(c[0], c[1])).collect();
-    let heights: Vec<f32> = heights
-        .split_whitespace()
-        .map(|n| n.parse().ok())
-        .collect::<Option<_>>()?;
-    let [bottom, top] = heights[..] else {
-        return None;
-    };
-    ShapeObject::new(&outline, bottom, top, look).ok()
 }
 
 /// A brush from a `solid` block, or `None` if its planes do not make a

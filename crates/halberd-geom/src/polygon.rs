@@ -13,11 +13,21 @@ use glam::{DVec2, Vec2, Vec3};
 /// Most corners an outline may have.
 pub const MAX_OUTLINE_POINTS: usize = 256;
 
-/// Tolerance for corners counting as on a line, in square units of area.
+/// Tolerance for parts' corners counting as on a line, in square units of
+/// area.
 const STRAIGHT: f64 = 1e-6;
 
+/// A drawn corner closer than this to the line between its neighbours (in
+/// units) is taken as straight and dropped: a brush corner that close to
+/// straight can't be placed accurately.
+const NEARLY_STRAIGHT: f64 = 0.25;
+
+/// Furthest a brush's corner may land from where the outline puts it.
+const CORNER_TOLERANCE: f32 = 0.05;
+
 /// The outline cleaned up and wound counter-clockwise (seen from above):
-/// repeated corners and corners on a straight line removed. Fails if what
+/// repeated corners and corners on (or within a quarter unit of) a straight
+/// line removed. Fails if what
 /// is left encloses no area or crosses itself.
 pub fn clean_outline(outline: &[Vec2]) -> Result<Vec<Vec2>, GeomError> {
     if outline.iter().any(|p| !p.is_finite()) {
@@ -44,7 +54,14 @@ pub fn clean_outline(outline: &[Vec2]) -> Result<Vec<Vec2>, GeomError> {
         }
         let straight = (0..n).find(|&i| {
             let (a, b, c) = (points[(i + n - 1) % n], points[i], points[(i + 1) % n]);
-            cross(b - a, c - b).abs() <= STRAIGHT * (b - a).length().max(1.0)
+            let span = (c - a).length();
+            // How far b is from the line a–c (or from a, if a and c meet).
+            let off = if span < 1e-9 {
+                (b - a).length()
+            } else {
+                cross(c - a, b - a).abs() / span
+            };
+            off <= NEARLY_STRAIGHT
         });
         match straight {
             Some(i) => {
@@ -108,6 +125,10 @@ pub fn prism_brushes(outline: &[Vec2], bottom: f32, top: f32) -> Result<Vec<Brus
     convex_parts(outline)?
         .iter()
         .map(|part| {
+            // Merged parts can keep corners on a straight line; a brush
+            // has no corner there.
+            let part = without_straight_corners(part);
+            let part = &part;
             let mut planes = vec![
                 Plane {
                     normal: Vec3::NEG_Z,
@@ -125,8 +146,37 @@ pub fn prism_brushes(outline: &[Vec2], bottom: f32, top: f32) -> Result<Vec<Brus
                 let out = Vec3::new(along.y, -along.x, 0.0);
                 planes.push(Plane::new(out, a.extend(bottom)).ok_or(GeomError::NotFinite)?);
             }
-            Brush::from_planes(&planes)
+            let brush = Brush::from_planes(&planes)?;
+            // Very sharp corners make side planes so nearly parallel that
+            // their meeting point drifts; such a brush would leave gaps.
+            let corners = brush.points();
+            let expected: Vec<Vec3> = [bottom, top]
+                .iter()
+                .flat_map(|z| part.iter().map(move |p| p.extend(*z)))
+                .collect();
+            let fits = corners.len() == expected.len()
+                && corners
+                    .iter()
+                    .all(|c| expected.iter().any(|e| c.distance(*e) <= CORNER_TOLERANCE));
+            if fits {
+                Ok(brush)
+            } else {
+                Err(GeomError::TooSharp)
+            }
         })
+        .collect()
+}
+
+/// A convex part without corners that lie on a straight line.
+fn without_straight_corners(part: &[Vec2]) -> Vec<Vec2> {
+    let points: Vec<DVec2> = part.iter().map(|p| p.as_dvec2()).collect();
+    let n = points.len();
+    (0..n)
+        .filter(|&i| {
+            let (a, b, c) = (points[(i + n - 1) % n], points[i], points[(i + 1) % n]);
+            cross(b - a, c - b).abs() > STRAIGHT * (b - a).length().max(1.0)
+        })
+        .map(|i| part[i])
         .collect()
 }
 
@@ -180,12 +230,15 @@ fn segments_meet(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
 }
 
 /// Triangles covering a simple counter-clockwise polygon, by clipping ears.
+/// Of the ears that could be clipped, the one with the widest smallest
+/// angle goes first, so thin slivers (which make poor brushes) are avoided
+/// where the outline allows.
 fn triangulate(points: &[DVec2]) -> Result<Vec<[usize; 3]>, GeomError> {
     let mut left: Vec<usize> = (0..points.len()).collect();
     let mut triangles = Vec::with_capacity(points.len());
     while left.len() > 3 {
         let n = left.len();
-        let ear = (0..n).find(|&i| {
+        let is_ear = |i: usize| {
             let (a, b, c) = (left[(i + n - 1) % n], left[i], left[(i + 1) % n]);
             let (pa, pb, pc) = (points[a], points[b], points[c]);
             if cross(pb - pa, pc - pb) <= 0.0 {
@@ -195,13 +248,30 @@ fn triangulate(points: &[DVec2]) -> Result<Vec<[usize; 3]>, GeomError> {
                 .iter()
                 .filter(|&&k| k != a && k != b && k != c)
                 .any(|&k| inside_triangle(points[k], pa, pb, pc))
-        });
+        };
+        let quality = |i: usize| {
+            let (a, b, c) = (
+                points[left[(i + n - 1) % n]],
+                points[left[i]],
+                points[left[(i + 1) % n]],
+            );
+            smallest_angle(a, b, c)
+        };
+        let ear = (0..n)
+            .filter(|&i| is_ear(i))
+            .max_by(|&i, &j| quality(i).total_cmp(&quality(j)));
         let i = ear.ok_or(GeomError::NotClosed)?;
         triangles.push([left[(i + n - 1) % n], left[i], left[(i + 1) % n]]);
         left.remove(i);
     }
     triangles.push([left[0], left[1], left[2]]);
     Ok(triangles)
+}
+
+/// The smallest angle of a triangle, in radians.
+fn smallest_angle(a: DVec2, b: DVec2, c: DVec2) -> f64 {
+    let angle = |p: DVec2, q: DVec2, r: DVec2| (q - p).angle_to(r - p).abs();
+    angle(a, b, c).min(angle(b, c, a)).min(angle(c, a, b))
 }
 
 fn inside_triangle(p: DVec2, a: DVec2, b: DVec2, c: DVec2) -> bool {

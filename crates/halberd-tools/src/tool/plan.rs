@@ -9,6 +9,7 @@ use crate::camera::Ray;
 use crate::scene::DocumentScene;
 use glam::{Vec2, Vec3};
 use halberd_doc::{Command, Document, FaceInfo, ShapeObject};
+use halberd_geom::MAX_OUTLINE_POINTS;
 
 /// A floor plan being drawn.
 #[derive(Debug, Clone, PartialEq)]
@@ -62,10 +63,15 @@ impl ToolController {
     }
 
     /// Finishes the floor plan being drawn (Enter): the shape to add, or
-    /// why it can't be made. `None` if no plan is being drawn.
+    /// why it can't be made. `None` if no plan is being drawn. A plan that
+    /// can't be made stays, so it can be fixed with Backspace.
     pub fn finish_plan(&mut self) -> Option<ToolAction> {
         let plan = self.plan.take()?;
-        Some(self.make_plan(&plan))
+        let action = self.make_plan(&plan);
+        if matches!(action, ToolAction::Refused(_)) {
+            self.plan = Some(plan);
+        }
+        Some(action)
     }
 
     /// One frame of left-mouse input while the Draw tool draws floor plans.
@@ -94,7 +100,8 @@ impl ToolController {
             let point = ray.and_then(|r| DocumentScene::new(doc).pick(r))?;
             let corner = (point.truncate() / self.grid).round() * self.grid;
             self.plan = Some(PlanDraft {
-                base: (point.z / self.grid).round() * self.grid,
+                // Snapped to the grid, as the Draw tool's boxes are.
+                base: self.snap_one(point.z),
                 corners: vec![corner],
                 next: Some(corner),
             });
@@ -102,12 +109,18 @@ impl ToolController {
         };
         let corner = plan.next?;
         if plan.corners.len() >= 3 && corner == plan.corners[0] {
-            let plan = self.plan.take()?;
-            return Some(self.make_plan(&plan));
+            return self.finish_plan();
         }
-        if plan.corners.last() != Some(&corner) {
-            plan.corners.push(corner);
+        if plan.corners.last() == Some(&corner) {
+            return None;
         }
+        if plan.corners.len() >= MAX_OUTLINE_POINTS {
+            return Some(ToolAction::Refused(format!(
+                "A floor plan can have at most {MAX_OUTLINE_POINTS} corners: click the first \
+                 corner or press Enter to finish."
+            )));
+        }
+        plan.corners.push(corner);
         None
     }
 

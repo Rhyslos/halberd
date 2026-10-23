@@ -17,6 +17,7 @@ mod export;
 mod files;
 mod import;
 mod planes;
+mod shapes;
 
 pub use error::IoError;
 pub use export::vmf_from_document;

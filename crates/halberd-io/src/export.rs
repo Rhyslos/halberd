@@ -2,7 +2,7 @@
 
 use crate::import::SOLID_SLOT;
 use crate::planes::{plane_from_points, points_of_face, same_plane};
-use halberd_doc::{BrushObject, Document, Object, ShapeObject};
+use halberd_doc::{BrushObject, Document, Object};
 use halberd_geom::Face;
 use halberd_vmf::{Block, Entry, Vmf, format_plane, id_of, parse_plane};
 
@@ -39,8 +39,8 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
     // needs, each marked so Halberd can put the shape back together.
     let shapes = doc.objects().filter_map(|(_, o)| o.as_shape());
     for (number, shape) in shapes.enumerate() {
-        for solid in shape_solids(shape, number + 1) {
-            world.push_block(solid_block(&solid, &mut ids));
+        for block in crate::shapes::shape_blocks(shape, number + 1, |b| solid_block(b, &mut ids)) {
+            world.push_block(block);
         }
     }
     world.entries.extend(data.world_trailer.iter().cloned());
@@ -82,40 +82,6 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
         entries,
         line_ending: data.line_ending,
     }
-}
-
-/// Key in a solid's `editor` block naming the floor-plan shape it is a
-/// piece of (a number, the same for every piece of one shape).
-pub(crate) const SHAPE_KEY: &str = "halberd_shape";
-/// Key holding the shape's outline, as `x y` pairs, then its bottom and
-/// top heights after a `|`.
-pub(crate) const OUTLINE_KEY: &str = "halberd_outline";
-
-/// The convex brushes a floor-plan shape is saved as, each marked with
-/// the shape's number and outline.
-fn shape_solids(shape: &ShapeObject, number: usize) -> Vec<BrushObject> {
-    let outline: Vec<String> = shape
-        .outline()
-        .iter()
-        .map(|p| format!("{} {}", p.x, p.y))
-        .collect();
-    let mut editor = Block::new("editor");
-    editor.push_pair("color", "220 140 60");
-    editor.push_pair("visgroupshown", "1");
-    editor.push_pair("visgroupautoshown", "1");
-    editor.push_pair(SHAPE_KEY, number.to_string());
-    editor.push_pair(
-        OUTLINE_KEY,
-        format!("{} | {} {}", outline.join(" "), shape.bottom(), shape.top()),
-    );
-    shape
-        .pieces()
-        .iter()
-        .map(|piece| {
-            let faces = vec![shape.look.copied(); piece.faces().len()];
-            BrushObject::with_faces(piece.clone(), faces, vec![Entry::Block(editor.clone())])
-        })
-        .collect()
 }
 
 /// A brush as a `solid` block: its kept entries, with its sides placed
@@ -190,7 +156,7 @@ fn side_block(face: &Face, info: &halberd_doc::FaceInfo, ids: &mut IdSource) -> 
 
 /// Hammer's world-aligned texture axes for a face, as `x y z` text:
 /// textures run along the two world axes the face is most nearly flat to.
-fn world_axes(face: &Face) -> (&'static str, &'static str) {
+pub(crate) fn world_axes(face: &Face) -> (&'static str, &'static str) {
     let n = face.plane().normal.abs();
     if n.z >= n.x && n.z >= n.y {
         ("1 0 0", "0 -1 0")
@@ -221,6 +187,8 @@ struct IdSource {
 impl IdSource {
     fn new(doc: &Document) -> Self {
         let mut highest = 1; // The world is id 1.
+        // Ids kept by shapes read from the file.
+        let mut shape_highest = 0;
         // Every id anywhere in what is kept: objects' own entries and every
         // block inside them (hidden brushes, `hidden` wrappers), and the
         // blocks around the world (hidden entities live in the footer).
@@ -248,7 +216,14 @@ impl IdSource {
             match object {
                 Object::Brush(b) => see_brush(b, &mut see),
                 Object::Entity(e) => see(&e.file_data),
-                Object::Shape(s) => see(&s.look.file_data),
+                Object::Shape(s) => {
+                    see(&s.look.file_data);
+                    for piece in s.file_ids() {
+                        shape_highest = shape_highest
+                            .max(usable(piece.solid))
+                            .max(piece.sides.iter().map(|&id| usable(id)).max().unwrap_or(0));
+                    }
+                }
             }
         }
         let data = doc.file_data();
@@ -261,7 +236,7 @@ impl IdSource {
             see(part);
         }
         Self {
-            next: highest.saturating_add(1),
+            next: highest.max(shape_highest).saturating_add(1),
         }
     }
 

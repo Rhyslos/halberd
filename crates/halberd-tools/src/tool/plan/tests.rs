@@ -132,6 +132,60 @@ fn too_few_corners_or_a_crossing_outline_is_refused() {
 }
 
 #[test]
+fn a_refused_outline_stays_so_it_can_be_fixed() {
+    // Regression: a refused finish threw the whole outline away.
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = plan_tools();
+    // A bow tie, closed by clicking the first corner.
+    for p in [
+        L[0],
+        L[1],
+        Vec3::new(0.0, 256.0, 0.0),
+        Vec3::new(256.0, 256.0, 0.0),
+    ] {
+        click(&mut tools, &camera, &doc, p);
+    }
+    assert!(matches!(
+        click(&mut tools, &camera, &doc, L[0]),
+        Some(ToolAction::Refused(_))
+    ));
+    assert_eq!(
+        tools.plan_preview().unwrap().corners.len(),
+        4,
+        "still there"
+    );
+    // Take back the crossing corners and finish properly.
+    tools.undo_plan_corner();
+    tools.undo_plan_corner();
+    click(&mut tools, &camera, &doc, L[2]);
+    click(&mut tools, &camera, &doc, L[5]);
+    let shape = added_shape(tools.finish_plan());
+    assert_eq!(shape.outline().len(), 4);
+}
+
+#[test]
+fn corners_stop_at_the_limit_with_a_reason() {
+    let (camera, doc) = (top_down(), Document::new());
+    let mut tools = plan_tools();
+    let corners: Vec<Vec2> = (0..halberd_geom::MAX_OUTLINE_POINTS)
+        .map(|i| Vec2::new(i as f32 * 16.0, (i % 2) as f32 * 16.0 - 1000.0))
+        .collect();
+    tools.plan = Some(super::PlanDraft {
+        base: 0.0,
+        corners,
+        next: None,
+    });
+    match click(&mut tools, &camera, &doc, Vec3::new(0.0, 160.0, 0.0)) {
+        Some(ToolAction::Refused(why)) => assert!(why.contains("at most 256"), "{why}"),
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+    assert_eq!(
+        tools.plan_preview().unwrap().corners.len(),
+        halberd_geom::MAX_OUTLINE_POINTS
+    );
+}
+
+#[test]
 fn escape_and_changing_shape_drop_the_plan() {
     let (camera, doc) = (top_down(), Document::new());
     let mut tools = plan_tools();

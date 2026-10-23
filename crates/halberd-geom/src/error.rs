@@ -23,6 +23,9 @@ pub enum GeomError {
     WouldOpen,
     /// An outline crosses or touches itself.
     CrossesItself,
+    /// An outline has a corner so sharp its brush can't keep its corners
+    /// where they belong.
+    TooSharp,
 }
 
 impl fmt::Display for GeomError {
@@ -36,6 +39,9 @@ impl fmt::Display for GeomError {
             Self::BevelTooWide => "the bevel is wider than the faces beside the edge",
             Self::WouldOpen => "without that face the shape would be open",
             Self::CrossesItself => "the outline crosses itself",
+            Self::TooSharp => {
+                "a corner of the outline is too sharp to make a clean brush (widen it a little)"
+            }
             Self::TooManyPieces => {
                 "it would need more than 256 pieces (for stairs: use taller steps or a lower height)"
             }

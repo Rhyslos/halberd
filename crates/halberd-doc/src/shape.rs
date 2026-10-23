@@ -18,6 +18,20 @@ pub struct ShapeObject {
     /// The look of every face (material and texture alignment).
     pub look: FaceInfo,
     pieces: Vec<Brush>,
+    /// The ids its pieces had in the file it was read from, one per
+    /// piece (empty for a new shape), so saving keeps them: overlays and
+    /// decals refer to faces by id.
+    file_ids: Vec<PieceIds>,
+}
+
+/// The ids a shape's piece was saved with: the solid's, and each side's in
+/// the order of the piece's faces.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PieceIds {
+    /// The solid's id.
+    pub solid: u64,
+    /// Each face's side id, in face order.
+    pub sides: Vec<u64>,
 }
 
 impl ShapeObject {
@@ -33,7 +47,35 @@ impl ShapeObject {
             top,
             look,
             pieces,
+            file_ids: Vec::new(),
         })
+    }
+
+    /// The same shape, remembering the ids its pieces were read with.
+    /// Ids that don't fit the pieces (a different number of pieces or
+    /// faces) are not kept.
+    #[must_use]
+    pub fn with_file_ids(mut self, ids: Vec<PieceIds>) -> Self {
+        self.file_ids = if fits(&self.pieces, &ids) {
+            ids
+        } else {
+            Vec::new()
+        };
+        self
+    }
+
+    /// The ids its pieces were read with, one per piece, or none.
+    pub fn file_ids(&self) -> &[PieceIds] {
+        &self.file_ids
+    }
+
+    /// A copy of this shape, without the saved ids (a copy is a new object
+    /// and must not share them).
+    #[must_use]
+    pub fn copied(&self) -> Self {
+        let mut copy = self.clone();
+        copy.file_ids.clear();
+        copy
     }
 
     /// The outline, counter-clockwise seen from above.
@@ -83,8 +125,20 @@ impl ShapeObject {
             .map(|p| f(p.extend(self.bottom)).truncate().round())
             .collect();
         let (bottom, top) = (low.z.min(high.z).round(), low.z.max(high.z).round());
-        Self::new(&outline, bottom, top, self.look.clone())
+        // Moved pieces keep their ids, as moved brushes do, while the
+        // shape still splits the same way.
+        Ok(Self::new(&outline, bottom, top, self.look.clone())?
+            .with_file_ids(self.file_ids.clone()))
     }
+}
+
+/// True if `ids` has one entry per piece with one side id per face.
+fn fits(pieces: &[Brush], ids: &[PieceIds]) -> bool {
+    ids.len() == pieces.len()
+        && pieces
+            .iter()
+            .zip(ids)
+            .all(|(p, i)| p.faces().len() == i.sides.len())
 }
 
 #[cfg(test)]
