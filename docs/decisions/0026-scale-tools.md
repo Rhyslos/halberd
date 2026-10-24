@@ -16,8 +16,8 @@ Blockouts go wrong at scale: doorways a player can't walk through, ceilings they
 
 Option 2.
 
-- **Clearance** (`halberd_tools::clearance`): the space a standing player takes (32 × 32 × 72 units), then a crouching one (36 units tall), is tested against the map's brushes (world brushes, brush entities and floor plan shapes; touching a wall or the floor doesn't count). The figure is blue where a player stands, orange where one could only crouch, red where one wouldn't fit. Its label says so, with the room left above the head.
-- **Following the pointer** (View → **Player follows the pointer**): in a 3D view the figure stands on whatever is under the pointer.
+- **Clearance** (`halberd_tools::clearance`): the space a standing player takes (32 × 32 × 72 units), then a crouching one (36 units tall), is tested against the map's solid brushes (world brushes, solid brush entities and floor plan shapes; triggers, `func_illusionary`, areaportals and other volumes players walk through don't count, and touching a wall or the floor doesn't either). Players step up to 18 units, so on a slope, a stair or a low step the player stands on the highest point within that. The room above the head is the lowest point of anything over the player's whole footprint, so thin beams and pipes count. The figure is blue where a player stands, orange where one could only crouch, red where one wouldn't fit. Its label says so, with the room left above the head.
+- **Following the pointer** (View → **Player follows the pointer**): in a 3D view the figure stands on the solid brush under the pointer; pointing at a wall or a ceiling's underside stands it on the floor beside or below. The grid, props and point entities aren't stood on. With nothing selected and following off, the figure stands at the origin as a plain size reference and makes no claim.
 - **Readouts:** while drawing, the box's width × depth × height shows above it; with something selected, its size shows in the first view's corner. Both use the chosen unit.
 - **Feet** joins Hammer units and metres (a unit is an inch, as Source scales characters).
 
@@ -25,4 +25,5 @@ Option 2.
 
 - Props and point entities don't block the figure (their exact shapes aren't solid in Halberd's model of the map); props' collision models may differ from their looks anyway.
 - A slanted brush passing close to a corner of the player's box may count as touching it: the check errs towards "doesn't fit".
-- Jump and step heights (18-unit steps) are not checked yet.
+- Jump heights are not checked yet.
+- The check runs while the pointer moves; a 10,000-brush map takes a few milliseconds per check.

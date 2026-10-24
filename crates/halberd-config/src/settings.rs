@@ -277,6 +277,13 @@ mod tests {
         assert!(!metres.editor.show_player_scale);
         let text = toml::to_string(&metres).unwrap();
         assert!(text.contains("length_unit = \"metres\""), "{text}");
+        let feet: Settings = toml::from_str("[editor]\nlength_unit = \"feet\"\n").unwrap();
+        assert_eq!(feet.editor.length_unit, LengthUnit::Feet);
+        assert!(
+            toml::to_string(&feet)
+                .unwrap()
+                .contains("length_unit = \"feet\"")
+        );
     }
 
     #[test]

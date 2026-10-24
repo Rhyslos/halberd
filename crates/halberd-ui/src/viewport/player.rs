@@ -7,8 +7,7 @@ use halberd_config::LengthUnit;
 use halberd_doc::Document;
 use halberd_geom::Aabb;
 use halberd_tools::{
-    Clearance, DocumentScene, Fit, PLAYER_CROUCH_HEIGHT, PLAYER_HEIGHT, SceneQuery, clearance,
-    player_bounds,
+    Clearance, Fit, PLAYER_CROUCH_HEIGHT, PLAYER_HEIGHT, clearance, floor_under, player_bounds,
 };
 
 /// What the player figure knows between frames.
@@ -16,10 +15,11 @@ use halberd_tools::{
 pub(super) struct PlayerProbe {
     /// The figure stands where the pointer is in the 3D view.
     pub(super) follows: bool,
-    /// Where it last stood under the pointer.
-    follow_feet: Option<Vec3>,
-    /// The last check, with where and on which map state it was made.
-    checked: Option<((Vec3, u64, u64), Clearance)>,
+    /// Where it last stood under the pointer, and on which map.
+    follow_feet: Option<(u64, Vec3)>,
+    /// The last check (`None`: nothing worth checking), with where and on
+    /// which map state it was made.
+    checked: Option<((Vec3, u64, u64), Option<Clearance>)>,
 }
 
 impl ViewportPanel {
@@ -37,10 +37,12 @@ impl ViewportPanel {
         }
     }
 
-    /// Whether a player fits where the figure stands now, if it is shown.
+    /// Whether a player fits where the figure stands now, if it is shown
+    /// somewhere worth checking (beside the selection or the box being
+    /// drawn, or under the pointer; not at the origin with nothing there).
     pub fn player_clearance(&self) -> Option<Clearance> {
-        self.player_at
-            .and(self.probe.checked.map(|(_, clearance)| clearance))
+        self.player_at?;
+        self.probe.checked.and_then(|(_, clearance)| clearance)
     }
 
     /// Places the player figure for this frame and checks whether a
@@ -51,27 +53,51 @@ impl ViewportPanel {
             self.player_at = None;
             return;
         }
+        let instance = doc.instance();
         if self.probe.follows
             && self.panes[self.active].view == PaneView::Perspective
             && let Some((at, size)) = pointer
         {
             let ray = self.active_camera().ray_through(at, size);
-            if let Some(hit) = DocumentScene::new(doc).pick(&ray) {
-                self.probe.follow_feet = Some(hit);
+            if let Some(feet) = floor_under(doc, &ray) {
+                self.probe.follow_feet = Some((instance, feet));
             }
         }
-        let feet = match (self.probe.follows, self.probe.follow_feet) {
-            (true, Some(feet)) => feet,
-            _ => {
+        // A position from another map means nothing on this one.
+        if self
+            .probe
+            .follow_feet
+            .is_some_and(|(map, _)| map != instance)
+        {
+            self.probe.follow_feet = None;
+        }
+        let following = self
+            .probe
+            .follows
+            .then_some(self.probe.follow_feet)
+            .flatten();
+        let (feet, worth_checking) = match following {
+            Some((_, feet)) => (feet, true),
+            None => {
                 let camera = self.reference_camera();
-                beside(self.tools.preview(), doc, camera.position)
+                let preview = self.tools.preview();
+                let something = preview.is_some() || !doc.selection().is_empty();
+                (beside(preview, doc, camera.position), something)
             }
         };
-        let key = (feet, doc.instance(), doc.revision());
+        let key = (feet, instance, doc.revision());
         let fresh = self.probe.checked.is_some_and(|(k, _)| k == key);
         if !fresh {
-            self.probe.checked = Some((key, clearance(doc, feet)));
+            let check = worth_checking.then(|| clearance(doc, feet));
+            self.probe.checked = Some((key, check));
         }
+        // On a slope or a low step the figure stands where it would rest.
+        let feet = self
+            .probe
+            .checked
+            .and_then(|(_, c)| c)
+            .filter(|c| c.fit != Fit::Blocked)
+            .map_or(feet, |c| c.feet);
         self.player_at = Some(player_bounds(feet));
     }
 }
@@ -128,6 +154,7 @@ mod tests {
         let stands = Clearance {
             fit: Fit::Stands,
             headroom: Some(56.0),
+            feet: Vec3::ZERO,
         };
         assert_eq!(
             label(LengthUnit::Units, Some(stands)),
@@ -137,6 +164,7 @@ mod tests {
         let crouch = Clearance {
             fit: Fit::CrouchOnly,
             headroom: Some(4.0),
+            feet: Vec3::ZERO,
         };
         assert_eq!(
             label(LengthUnit::Feet, Some(crouch)),
@@ -145,6 +173,7 @@ mod tests {
         let blocked = Clearance {
             fit: Fit::Blocked,
             headroom: None,
+            feet: Vec3::ZERO,
         };
         assert_eq!(
             label(LengthUnit::Units, Some(blocked)),

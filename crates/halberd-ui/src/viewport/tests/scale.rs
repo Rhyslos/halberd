@@ -68,3 +68,44 @@ fn the_figure_can_follow_the_pointer_onto_what_is_under_it() {
     h.run();
     assert_eq!(last_view(&h).player.unwrap().min.z, 0.0);
 }
+
+#[test]
+fn following_ignores_the_grid_and_steps_off_walls() {
+    // Regression: the invisible grid at height 0 was stood on, hiding a
+    // floor below it, and pointing at a wall planted the feet on it.
+    let mut h = harness(ViewportOptions::default());
+    h.state_mut()
+        .doc
+        .execute(Command::AddBrushes(vec![cuboid(
+            Vec3::new(-2048.0, -2048.0, -64.0),
+            Vec3::new(2048.0, 2048.0, -48.0),
+        )]))
+        .unwrap();
+    h.state_mut().doc.clear_selection();
+    h.state_mut().panel.set_player_follows(true);
+    h.hover_at(egui::pos2(400.0, 300.0));
+    h.run();
+    let player = last_view(&h).player.unwrap();
+    assert!(
+        (player.min.z + 48.0).abs() < 0.01,
+        "on the real floor: {player:?}"
+    );
+}
+
+#[test]
+fn with_nothing_selected_the_figure_makes_no_claim() {
+    let mut h = harness(ViewportOptions::default());
+    // The origin is inside this brush, but nothing is selected.
+    h.state_mut()
+        .doc
+        .execute(Command::AddBrushes(vec![cuboid(
+            Vec3::splat(-64.0),
+            Vec3::splat(64.0),
+        )]))
+        .unwrap();
+    h.state_mut().doc.clear_selection();
+    h.run();
+    let view = last_view(&h);
+    assert!(view.player.is_some());
+    assert_eq!(view.player_fit, None, "no colour, no warning");
+}
