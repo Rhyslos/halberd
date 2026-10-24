@@ -158,7 +158,10 @@ mod tests {
         let prop = EntityObject::point(
             "prop_static",
             Vec3::new(12.0, -3.5, 0.0),
-            &[("model", "models/props_c17/oildrum001.mdl"), ("angles", "0 90 0")],
+            &[
+                ("model", "models/props_c17/oildrum001.mdl"),
+                ("angles", "0 90 0"),
+            ],
         );
         let pairs: Vec<(&str, &str)> = prop.settings().collect();
         assert_eq!(
@@ -182,7 +185,10 @@ mod tests {
         assert_eq!(moved.origin, Some(Vec3::new(64.0, 0.25, -8.0)));
         let turned = moved.with_rotation(rotation_of(Vec3::new(30.0, 45.0, 10.0)));
         let angles = turned.angles();
-        assert!((angles - Vec3::new(30.0, 45.0, 10.0)).abs().max_element() < 0.01, "{angles}");
+        assert!(
+            (angles - Vec3::new(30.0, 45.0, 10.0)).abs().max_element() < 0.01,
+            "{angles}"
+        );
         // Yaw 90 turns the model's front (X) to face Y; pitch tips it down.
         let front = rotation_of(Vec3::new(0.0, 90.0, 0.0)) * Vec3::X;
         assert!((front - Vec3::Y).length() < 1e-5);
@@ -199,8 +205,18 @@ mod tests {
             &[("angles", "0 90 0")],
         );
         let placed = prop.placed_box(Some(local)).unwrap();
-        assert!((placed.min - Vec3::new(95.0, -10.0, 0.0)).abs().max_element() < 1e-4);
-        assert!((placed.max - Vec3::new(105.0, 10.0, 40.0)).abs().max_element() < 1e-4);
+        assert!(
+            (placed.min - Vec3::new(95.0, -10.0, 0.0))
+                .abs()
+                .max_element()
+                < 1e-4
+        );
+        assert!(
+            (placed.max - Vec3::new(105.0, 10.0, 40.0))
+                .abs()
+                .max_element()
+                < 1e-4
+        );
         assert_eq!(prop.placed_box(None), prop.marker());
         let mut bad = prop.clone();
         bad.set_setting("angles", "nonsense");

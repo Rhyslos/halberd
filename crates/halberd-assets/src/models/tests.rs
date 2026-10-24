@@ -33,7 +33,10 @@ fn content() -> (tempfile::TempDir, GameContent) {
     let mut vpk = VpkBuilder::new();
     vpk.add("models/props_junk/wood_crate001a.mdl", &crate_files.mdl)
         .add("models/props_junk/wood_crate001a.vvd", &crate_files.vvd)
-        .add("models/props_junk/wood_crate001a.dx90.vtx", &crate_files.vtx)
+        .add(
+            "models/props_junk/wood_crate001a.dx90.vtx",
+            &crate_files.vtx,
+        )
         .add(
             "materials/models/props_debris/wood_crate001a.vmt",
             b"VertexLitGeneric { $basetexture models/props_debris/wood_crate001a }",
@@ -80,7 +83,10 @@ fn a_model_loads_with_its_materials_found_in_its_folders() {
     // Found in the second folder; the missing one assumes the first.
     assert_eq!(
         loaded.materials,
-        ["MODELS/PROPS_DEBRIS/WOOD_CRATE001A", "MODELS/PROPS_JUNK/MISSING"]
+        [
+            "MODELS/PROPS_DEBRIS/WOOD_CRATE001A",
+            "MODELS/PROPS_JUNK/MISSING"
+        ]
     );
     let barrel = load_model(&content, "MODELS\\MINE\\BARREL.MDL");
     assert_eq!(barrel.model.unwrap().bounds.1, [16.0, 16.0, 40.0]);
@@ -111,5 +117,8 @@ fn the_loader_reads_in_the_background_once_per_request() {
     assert_eq!(ready.len(), 1);
     assert!(ready[0].model.is_ok());
     assert!(!loader.is_pending("models/mine/barrel.mdl"));
-    assert!(waker.recv_timeout(Duration::from_millis(200)).is_err(), "asked once");
+    assert!(
+        waker.recv_timeout(Duration::from_millis(200)).is_err(),
+        "asked once"
+    );
 }

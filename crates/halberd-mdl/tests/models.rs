@@ -71,7 +71,10 @@ fn a_model_reads_its_meshes_materials_and_bounds() {
     assert_eq!(model.name, "test/box.mdl");
     assert!(model.static_prop);
     assert_eq!(model.materials, ["oildrum001", "oildrum001_lid"]);
-    assert_eq!(model.material_folders, ["models\\props_c17\\", "models/shared/"]);
+    assert_eq!(
+        model.material_folders,
+        ["models\\props_c17\\", "models/shared/"]
+    );
     assert_eq!(model.meshes.len(), 2);
     // The first skin maps reference 0 to texture 1, reference 1 to 0.
     assert_eq!(model.meshes[0].material, 1);
@@ -87,16 +90,25 @@ fn a_model_reads_its_meshes_materials_and_bounds() {
 fn files_that_dont_belong_together_are_refused() {
     let mut b = two_meshes();
     put_i32(&mut b.vvd, 8, 99);
-    assert_eq!(Model::parse(&b.mdl, &b.vvd, &b.vtx), Err(MdlError::Mismatched));
+    assert_eq!(
+        Model::parse(&b.mdl, &b.vvd, &b.vtx),
+        Err(MdlError::Mismatched)
+    );
     let mut b = two_meshes();
     put_i32(&mut b.vtx, 12, 99);
-    assert_eq!(Model::parse(&b.mdl, &b.vvd, &b.vtx), Err(MdlError::Mismatched));
+    assert_eq!(
+        Model::parse(&b.mdl, &b.vvd, &b.vtx),
+        Err(MdlError::Mismatched)
+    );
 }
 
 #[test]
 fn bad_models_are_refused_with_a_reason() {
     let b = two_meshes();
-    assert_eq!(Model::parse(b"nope", &b.vvd, &b.vtx), Err(MdlError::WrongKind(".mdl")));
+    assert_eq!(
+        Model::parse(b"nope", &b.vvd, &b.vtx),
+        Err(MdlError::WrongKind(".mdl"))
+    );
     let mut old = b.mdl.clone();
     put_i32(&mut old, 4, 37);
     assert_eq!(
@@ -145,7 +157,11 @@ fn fixups_choose_the_full_detail_vertices() {
     }
     b.vvd = vvd;
     let model = Model::parse(&b.mdl, &b.vvd, &b.vtx).unwrap();
-    let xs: Vec<f32> = model.meshes[0].vertices.iter().map(|v| v.position[0]).collect();
+    let xs: Vec<f32> = model.meshes[0]
+        .vertices
+        .iter()
+        .map(|v| v.position[0])
+        .collect();
     assert_eq!(xs, [1.0, 2.0, 4.0]);
 }
 
@@ -178,7 +194,11 @@ fn fuzz_damaged_models_never_crash() {
         }
         if let Ok(model) = Model::parse(&files[0], &files[1], &files[2]) {
             for mesh in &model.meshes {
-                assert!(mesh.indices.iter().all(|&i| (i as usize) < mesh.vertices.len()));
+                assert!(
+                    mesh.indices
+                        .iter()
+                        .all(|&i| (i as usize) < mesh.vertices.len())
+                );
                 assert!(mesh.material < model.materials.len().max(1));
             }
         }

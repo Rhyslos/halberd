@@ -19,7 +19,10 @@ impl<'a> Bytes<'a> {
     pub(crate) fn slice(&self, at: usize, n: usize) -> Result<&'a [u8], MdlError> {
         at.checked_add(n)
             .and_then(|end| self.data.get(at..end))
-            .ok_or(MdlError::Damaged(self.file, "something points past its end"))
+            .ok_or(MdlError::Damaged(
+                self.file,
+                "something points past its end",
+            ))
     }
 
     fn array<const N: usize>(&self, at: usize) -> Result<[u8; N], MdlError> {
@@ -49,7 +52,12 @@ impl<'a> Bytes<'a> {
     }
 
     /// A count: an `i32` that must be between 0 and `max`.
-    pub(crate) fn count(&self, at: usize, max: usize, what: &'static str) -> Result<usize, MdlError> {
+    pub(crate) fn count(
+        &self,
+        at: usize,
+        max: usize,
+        what: &'static str,
+    ) -> Result<usize, MdlError> {
         let n = self.i32(at)?;
         let n = usize::try_from(n).map_err(|_| MdlError::Damaged(self.file, what))?;
         if n > max {
@@ -62,7 +70,9 @@ impl<'a> Bytes<'a> {
     /// files are relative to the structure that holds them).
     pub(crate) fn offset(&self, base: usize, at: usize) -> Result<usize, MdlError> {
         let delta = i64::from(self.i32(at)?);
-        let target = i64::try_from(base).unwrap_or(i64::MAX).saturating_add(delta);
+        let target = i64::try_from(base)
+            .unwrap_or(i64::MAX)
+            .saturating_add(delta);
         usize::try_from(target)
             .ok()
             .filter(|&t| t <= self.data.len())
@@ -80,7 +90,10 @@ impl<'a> Bytes<'a> {
             .iter()
             .take(513)
             .position(|&b| b == 0)
-            .ok_or(MdlError::Damaged(self.file, "a name is too long or never ends"))?;
+            .ok_or(MdlError::Damaged(
+                self.file,
+                "a name is too long or never ends",
+            ))?;
         Ok(String::from_utf8_lossy(&rest[..end]).into_owned())
     }
 

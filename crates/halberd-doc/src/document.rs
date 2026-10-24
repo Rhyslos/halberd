@@ -486,7 +486,10 @@ impl Document {
                 if entity.origin.is_none() {
                     return Err(DocError::NothingToDo);
                 }
-                Ok(Change::Inserted(vec![(self.new_id(), Object::Entity(entity))]))
+                Ok(Change::Inserted(vec![(
+                    self.new_id(),
+                    Object::Entity(entity),
+                )]))
             }
             Command::AddShape(shape) => {
                 if self.objects.len() >= MAX_OBJECTS {

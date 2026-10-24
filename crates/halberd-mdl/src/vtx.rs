@@ -74,7 +74,12 @@ fn walk(b: &Bytes<'_>, group_size: usize) -> Result<Triangles, MdlError> {
 }
 
 /// One mesh's triangles.
-fn mesh(b: &Bytes<'_>, at: usize, group_size: usize, total: &mut usize) -> Result<Vec<u32>, MdlError> {
+fn mesh(
+    b: &Bytes<'_>,
+    at: usize,
+    group_size: usize,
+    total: &mut usize,
+) -> Result<Vec<u32>, MdlError> {
     let group_count = b.count(at, MAX_STRIP_GROUPS, "its number of strip groups")?;
     let groups_at = b.offset(at, at + 4)?;
     let mut corners = Vec::new();

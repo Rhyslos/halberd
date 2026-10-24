@@ -1525,6 +1525,7 @@ dependencies = [
  "glam",
  "halberd-doc",
  "halberd-geom",
+ "halberd-mdl",
  "halberd-tools",
  "pollster 1.0.1",
  "wgpu",

@@ -590,3 +590,72 @@ fn textured_mode_shows_a_materials_real_texture_once_it_arrives() {
 fn green_minus_red(p: [u8; 4]) -> i32 {
     i32::from(p[1]) - i32::from(p[0])
 }
+
+#[test]
+fn a_prop_shows_its_model_once_it_arrives_with_its_texture() {
+    use halberd_doc::EntityObject;
+    use halberd_mdl::example::{ExampleModel, box_mesh, model_files};
+    use halberd_render::PropModel;
+    let Some(gpu) = gpu() else { return };
+    let mut doc = Document::new();
+    doc.execute(Command::AddEntity(EntityObject::point(
+        "prop_static",
+        Vec3::new(0.0, 0.0, 0.0),
+        &[("model", "models/crate.mdl"), ("angles", "0 45 0")],
+    )))
+    .unwrap();
+    doc.clear_selection();
+    let mut renderer = ViewportRenderer::new(&gpu.device, best_sample_count(&gpu.adapter));
+    renderer.update_scene(&gpu.device, &doc);
+    assert_eq!(renderer.wanted_models(), ["models/crate.mdl"]);
+    let target = renderer.create_target(&gpu.device, [400, 300]);
+    // Level with the model, so the sky (not the grid) is behind it.
+    let camera = Camera::looking_at(Vec3::new(-420.0, -300.0, 60.0), Vec3::new(0.0, 0.0, 64.0));
+    // Until the model arrives, the prop is a small marker box.
+    // A side of the model, off the Z axis, above the horizon.
+    let top = Vec3::new(-40.0, -40.0, 110.0);
+    let before = render(&gpu, &renderer, &target, camera);
+    let background = background_srgb();
+    let background = i32::from(background[0]) + i32::from(background[1]) + i32::from(background[2]);
+    let before = before.best_near(top, brightness);
+    assert!(before < background + 40, "{before}");
+    let files = model_files(&ExampleModel {
+        materials: &["crate"],
+        meshes: &[box_mesh([-64.0, -64.0, 0.0], [64.0, 64.0, 128.0], 0)],
+        ..ExampleModel::default()
+    });
+    let model = halberd_mdl::Model::parse(&files.mdl, &files.vvd, &files.vtx).unwrap();
+    renderer.add_model(
+        "models/crate.mdl",
+        Some(PropModel::new(&model, &["MODELS/CRATE".into()])),
+    );
+    renderer.update_scene(&gpu.device, &doc);
+    let after = render(&gpu, &renderer, &target, camera);
+    assert!(
+        after.best_near(top, brightness) > background + 120,
+        "the model's top is drawn"
+    );
+    // Its texture, once loaded, is stretched across each side (0 to 1).
+    assert_eq!(renderer.wanted_textures(), ["MODELS/CRATE"]);
+    let green = [20u8, 220, 30, 255].repeat(4 * 4);
+    renderer.upload_texture(
+        &gpu.device,
+        &gpu.queue,
+        "models/crate",
+        (4, 4, &green),
+        (1024, 1024),
+    );
+    let textured = render_mode(
+        &gpu,
+        &renderer,
+        &target,
+        camera,
+        None,
+        None,
+        RenderMode::Textured,
+    );
+    assert!(
+        textured.best_near(top, green_minus_red) > 80,
+        "the texture shows"
+    );
+}

@@ -7,6 +7,7 @@
 
 use crate::frame::{FrameParams, FrameUniforms, GRID_HALF_EXTENT, RenderMode};
 use crate::lines::{LineVertex, axis_lines};
+use crate::models::PropModel;
 use crate::pipelines::{PipelineKind, create_pipeline};
 use crate::scene::{
     PLAYER_OUTLINE_VERTICES, PREVIEW_COLOR, SceneGeometry, box_outline, player_outline,
@@ -97,6 +98,8 @@ pub struct ViewportRenderer {
     bind_group: wgpu::BindGroup,
     /// Material textures for the Textured mode.
     textures: MaterialTextures,
+    /// The models props show.
+    models: crate::models::ModelCache,
     grid_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
     overlay_pipeline: wgpu::RenderPipeline,
@@ -281,6 +284,7 @@ impl ViewportRenderer {
             axis_buffer,
             axis_vertex_count: axes.len() as u32,
             scene: SceneBuffers::default(),
+            models: crate::models::ModelCache::default(),
             preview_buffer,
             preview_shape: Vec::new(),
             player_buffer,
@@ -295,15 +299,35 @@ impl ViewportRenderer {
         if self.scene.shows == Some(state) {
             return;
         }
+        self.models.note_used(doc);
         let textures = &mut self.textures;
+        let models = &self.models;
         let mut used = std::collections::HashSet::new();
-        let geometry = SceneGeometry::from_document_with(doc, &mut |name| {
-            used.insert(name.to_ascii_uppercase());
-            textures.layer_for(name)
-        });
+        let geometry = SceneGeometry::from_document_with(
+            doc,
+            &mut |name| {
+                used.insert(name.to_ascii_uppercase());
+                textures.layer_for(name)
+            },
+            &|name| models.get(name),
+        );
         textures.keep_only(&used);
         self.set_scene(device, &geometry);
         self.scene.shows = Some(state);
+    }
+
+    /// Models the map's props show that have not been asked for yet (lower
+    /// case). Each is asked for once: hand them over with
+    /// [`Self::add_model`].
+    pub fn wanted_models(&mut self) -> Vec<String> {
+        self.models.take_wanted()
+    }
+
+    /// Model `name` has been read (`None`: it can't be shown, and its props
+    /// stay marker boxes). The next frame redraws the map with it.
+    pub fn add_model(&mut self, name: &str, model: Option<PropModel>) {
+        self.models.arrived(name, model);
+        self.scene.shows = None;
     }
 
     /// Materials whose textures the Textured mode wants and has not asked

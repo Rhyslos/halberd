@@ -53,7 +53,10 @@ pub(crate) fn parse(data: &[u8], checksum: i32) -> Result<Vec<Vertex>, MdlError>
     if total > MAX_VERTICES {
         return Err(MdlError::TooLarge("its number of vertices"));
     }
-    if runs.iter().any(|&(first, count)| first.saturating_add(count) > stored) {
+    if runs
+        .iter()
+        .any(|&(first, count)| first.saturating_add(count) > stored)
+    {
         return Err(MdlError::Damaged(FILE, "a vertex is missing"));
     }
     let mut vertices = Vec::with_capacity(total);

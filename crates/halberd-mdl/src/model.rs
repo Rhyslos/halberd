@@ -74,11 +74,11 @@ impl Model {
                     .checked_add(mesh.vertex_count)
                     .and_then(|end| vertices.get(first..end))
                     .ok_or(MdlError::Damaged(".vvd", "a mesh's vertices are missing"))?;
-                if corners
-                    .iter()
-                    .any(|&c| c as usize >= mesh_vertices.len())
-                {
-                    return Err(MdlError::Damaged(".vtx", "a triangle uses a missing vertex"));
+                if corners.iter().any(|&c| c as usize >= mesh_vertices.len()) {
+                    return Err(MdlError::Damaged(
+                        ".vtx",
+                        "a triangle uses a missing vertex",
+                    ));
                 }
                 let texture = match skin {
                     Some(row) => row.get(mesh.material).map_or(0, |&t| usize::from(t)),
@@ -98,7 +98,11 @@ impl Model {
             }
         }
         let finite = min.iter().chain(&max).all(|v| v.is_finite());
-        let bounds = if finite { (min, max) } else { ([0.0; 3], [0.0; 3]) };
+        let bounds = if finite {
+            (min, max)
+        } else {
+            ([0.0; 3], [0.0; 3])
+        };
         Ok(Self {
             name: info.name.replace('\\', "/"),
             static_prop: info.is_static_prop(),
