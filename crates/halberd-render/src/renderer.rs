@@ -5,7 +5,7 @@
 //! shows the finished colour image however it likes; the editor hands it to
 //! egui as a texture.
 
-use crate::frame::{FrameParams, FrameUniforms, GRID_HALF_EXTENT};
+use crate::frame::{FrameParams, FrameUniforms, GRID_HALF_EXTENT, RenderMode};
 use crate::lines::{LineVertex, axis_lines};
 use crate::pipelines::{PipelineKind, create_pipeline};
 use crate::scene::{
@@ -434,8 +434,10 @@ impl ViewportRenderer {
             });
             pass.set_bind_group(0, &self.bind_group, &[]);
             // Solids first, so the transparent grid is hidden behind them.
-            pass.set_pipeline(&self.brush_pipeline);
-            self.scene.faces.draw(&mut pass);
+            if params.mode != RenderMode::Wireframe {
+                pass.set_pipeline(&self.brush_pipeline);
+                self.scene.faces.draw(&mut pass);
+            }
             pass.set_pipeline(&self.grid_pipeline);
             pass.draw(0..6, 0..1);
             pass.set_pipeline(&self.line_pipeline);

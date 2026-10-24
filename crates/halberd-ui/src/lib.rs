@@ -30,9 +30,9 @@ pub use keymap::{KEYBINDS, KeyCap, KeyContext, Keybind, binds_with, mouse_binds}
 pub use layout::{default_layout, is_complete, restore_or_default};
 pub use panel::Panel;
 pub use viewport::{
-    INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL, MAX_VIEWS, NoRenderer, PaneView, SHAPE_OP_KEYS,
-    VIEWPORT_LABEL, ViewLayout, ViewSetup, ViewportOptions, ViewportPanel, ViewportRenderer,
-    ViewportView,
+    INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL, MAX_VIEWS, NoRenderer, PaneView, RenderMode,
+    SHAPE_OP_KEYS, VIEWPORT_LABEL, ViewLayout, ViewSetup, ViewportOptions, ViewportPanel,
+    ViewportRenderer, ViewportView,
 };
 pub use workbench::{
     AppInfo, CANCEL_BUTTON, DELETE_SHORTCUT, DONT_SAVE_BUTTON, FileIntent, NEW_SHORTCUT,

@@ -9,7 +9,6 @@
 //! leaves them ordinary brushes, unmarked, so no edit made in another
 //! editor is lost and old marks never get mixed up with new shapes.
 
-use crate::export::world_axes;
 use glam::Vec2;
 use halberd_doc::{BrushObject, FaceInfo, MapObject, PieceIds, ShapeObject};
 use halberd_vmf::{Block, Entry};
@@ -273,8 +272,8 @@ fn as_written(piece: &BrushObject, material: &str) -> bool {
             .iter()
             .zip(piece.faces())
             .all(|(face, info)| {
-                let (u, v) = world_axes(face);
-                let (u, v) = (format!("[{u} 0] 0.25"), format!("[{v} 0] 0.25"));
+                let axes = halberd_doc::TextureAxes::world_aligned(face.plane().normal);
+                let (u, v) = (axes.u.to_hammer(), axes.v.to_hammer());
                 info.material == material
                     && info.file_data.iter().all(|e| match e {
                         Entry::Pair(k, value) => match k.to_ascii_lowercase().as_str() {

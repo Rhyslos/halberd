@@ -211,3 +211,64 @@ fn deleting_an_entitys_shown_brushes_keeps_its_unshown_ones() {
     );
     assert!(!saved.contains("\"id\" \"23\""));
 }
+
+#[test]
+fn texture_axes_that_no_longer_fit_a_face_are_saved_world_aligned() {
+    // As Extrude made them: every face of a new brush copies one wall's
+    // look, so the top would have its texture smeared into streaks.
+    use halberd_doc::{BrushObject, FaceInfo};
+    let wall = FaceInfo {
+        material: "BRICK/BRICKWALL001A".into(),
+        // As read from a file: every side lists its plane and material.
+        file_data: vec![
+            Entry::Pair("plane".into(), "(0 0 0) (0 1 0) (0 0 1)".into()),
+            Entry::Pair("material".into(), "BRICK/BRICKWALL001A".into()),
+            Entry::Pair("uaxis".into(), "[0 1 0 0] 0.5".into()),
+            Entry::Pair("vaxis".into(), "[0 0 -1 0] 0.5".into()),
+            Entry::Pair("rotation".into(), "0".into()),
+        ],
+        ..FaceInfo::default()
+    };
+    let brush = Brush::cuboid(Aabb::from_corners(Vec3::ZERO, Vec3::splat(64.0))).unwrap();
+    let faces = vec![wall; brush.faces().len()];
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![brush])).unwrap();
+    let id = doc.objects().next().unwrap().0;
+    let object = BrushObject::with_faces(
+        doc.get(id).unwrap().as_brush().unwrap().brush().clone(),
+        faces,
+        Vec::new(),
+    );
+    doc.execute(Command::ShapeEdit {
+        label: "Extrude".into(),
+        changed: vec![(id, object)],
+        added: Vec::new(),
+        removed: Vec::new(),
+        select_added: false,
+    })
+    .unwrap();
+    let vmf = Vmf::parse(&saved_text(&doc)).unwrap();
+    let solid = vmf.world().unwrap().blocks("solid").next().unwrap();
+    for side in solid.blocks("side") {
+        let plane = halberd_vmf::parse_plane(side.get("plane").unwrap()).unwrap();
+        let a = Vec3::new(plane[0][0] as f32, plane[0][1] as f32, plane[0][2] as f32);
+        let b = Vec3::new(plane[1][0] as f32, plane[1][1] as f32, plane[1][2] as f32);
+        let c = Vec3::new(plane[2][0] as f32, plane[2][1] as f32, plane[2][2] as f32);
+        let normal = (c - a).cross(b - a).normalize();
+        let (u, v) = (side.get("uaxis").unwrap(), side.get("vaxis").unwrap());
+        if normal.x.abs() > 0.9 {
+            assert_eq!(
+                (u, v),
+                ("[0 1 0 0] 0.5", "[0 0 -1 0] 0.5"),
+                "the walls keep theirs"
+            );
+        }
+        if normal.z.abs() > 0.9 {
+            assert_eq!(
+                (u, v),
+                ("[1 0 0 0] 0.5", "[0 -1 0 0] 0.5"),
+                "floor and top refitted"
+            );
+        }
+    }
+}

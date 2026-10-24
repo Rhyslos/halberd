@@ -274,3 +274,62 @@ fn while_a_floor_plan_is_drawn_other_views_still_zoom_and_take_corners() {
     );
     assert_eq!(h.state().panel.active_view(), 0);
 }
+
+#[test]
+fn side_views_start_as_wireframes_and_each_view_picks_how_it_draws() {
+    let mut h = four_views();
+    let modes: Vec<RenderMode> = last_views(&h, 4).iter().map(|v| v.render_mode).collect();
+    assert_eq!(
+        modes,
+        [
+            RenderMode::Flat,
+            RenderMode::Wireframe,
+            RenderMode::Wireframe,
+            RenderMode::Wireframe
+        ]
+    );
+    h.get_by_label_contains("Perspective").click();
+    h.run();
+    h.get_by_label("Textured").click();
+    h.run();
+    h.run();
+    assert_eq!(h.state().panel.render_mode(0), RenderMode::Textured);
+    assert_eq!(last_views(&h, 4)[0].render_mode, RenderMode::Textured);
+    assert_eq!(
+        last_views(&h, 4)[1].render_mode,
+        RenderMode::Wireframe,
+        "others unchanged"
+    );
+}
+
+#[test]
+fn render_modes_are_saved_and_older_saves_without_them_still_load() {
+    let mut panel = ViewportPanel::new(None, ViewportOptions::default());
+    panel.set_render_mode(1, RenderMode::Textured);
+    let setup = panel.view_setup();
+    let back = ViewportPanel::new(None, ViewportOptions::default()).with_view_setup(setup.clone());
+    assert_eq!(back.render_mode(1), RenderMode::Textured);
+    // A setup saved before render modes existed.
+    let old = ViewSetup {
+        modes: Vec::new(),
+        ..setup
+    };
+    let back = ViewportPanel::new(None, ViewportOptions::default()).with_view_setup(old.clone());
+    assert_eq!(
+        back.render_mode(1),
+        RenderMode::Wireframe,
+        "the default for Top"
+    );
+    // Regression: views restored into other slots started with the slot's
+    // mode, so a 3D view in slot 1 came back as a wireframe.
+    let swapped = ViewSetup {
+        views: vec![PaneView::Side(Side::Top), PaneView::Perspective],
+        ..old
+    };
+    let back = ViewportPanel::new(None, ViewportOptions::default()).with_view_setup(swapped);
+    assert_eq!(back.render_mode(0), RenderMode::Wireframe);
+    assert_eq!(back.render_mode(1), RenderMode::Flat);
+    let text = "(layout: Four, views: [Perspective], sides: [])";
+    let parsed: ViewSetup = ron::from_str(text).unwrap();
+    assert!(parsed.modes.is_empty());
+}

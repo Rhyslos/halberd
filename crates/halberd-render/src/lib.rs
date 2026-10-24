@@ -18,7 +18,7 @@ mod renderer;
 mod scene;
 
 pub use frame::{
-    FrameParams, GRID_HALF_EXTENT, GridPlane, MAJOR_EVERY, SUPER_SPACING, grid_spacings,
+    FrameParams, GRID_HALF_EXTENT, GridPlane, MAJOR_EVERY, RenderMode, SUPER_SPACING, grid_spacings,
 };
 pub use lines::{LineVertex, X_AXIS_COLOR, Y_AXIS_COLOR, Z_AXIS_COLOR, Z_AXIS_HEIGHT, axis_lines};
 pub use readback::read_pixels;
@@ -27,9 +27,10 @@ pub use renderer::{
     ViewportTarget, best_sample_count,
 };
 pub use scene::{
-    BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, FaceVertex, PLAYER_COLOR, PLAYER_OUTLINE_VERTICES,
-    POINT_ENTITY_COLOR, PREVIEW_COLOR, PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR,
-    SceneGeometry, box_outline, player_outline, shape_outline,
+    BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, ENTITY_EDGE_COLOR, FaceVertex, PLAYER_COLOR,
+    PLAYER_OUTLINE_VERTICES, POINT_ENTITY_COLOR, POINT_ENTITY_EDGE_COLOR, PREVIEW_COLOR,
+    PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR, SceneGeometry, TEXTURE_SIZE, box_outline,
+    material_hue, player_outline, shape_outline,
 };
 
 #[cfg(test)]

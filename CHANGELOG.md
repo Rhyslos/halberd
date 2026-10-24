@@ -6,6 +6,8 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **Render modes.** Each view's menu (click its name) has **Draw as**: **Wireframe** (outlines only, see-through), **Flat** (solid, one colour) or **Textured**. Side views start as wireframes, as in Hammer; the 3D view starts flat. Until Halberd reads Garry's Mod's real textures (the next milestone), Textured shows each material as its own coloured pattern laid out exactly as the texture would be (with each face's saved alignment and scale), so you can already see which faces share a material and how textures line up. The choice is remembered per view.
+
 - **Several views.** **Views** in the viewport's top-right corner (also in the View menu) shows one, two (side by side or stacked), three, four (as in Hammer) or six views. Click a view's name in its top-left corner to choose what it shows: the 3D perspective, or a flat **Top**, **Bottom**, **Front**, **Back**, **Left** or **Right** view without perspective, like Hammer's 2D views. In a side view, drag with the right or middle button to move it and scroll to zoom around the pointer. Selecting, the gizmo and part picking work in every view; the selection and drags show in all of them. Shapes are drawn in the 3D view or the Top and Bottom views (side views say so for now). The views, and what each shows, are remembered between sessions.
 
 - **Floor plans.** A new **Floor plan** shape in the Draw tool's shape list (B, then B again). Click corner after corner on the grid, or on top of a brush; click the first corner again, or press **Enter**, to finish (**Backspace** takes back a corner, **Escape** cancels). The outline may have dents, like an L-shaped room; it stands as tall as the Height field. It stays one shape you can select, move, scale and turn, and is saved as the fewest convex brushes Source needs, cut along straight lines that continue its walls where possible (an L becomes two rectangles), which open again as the same shape, keeping their ids. If another editor changed anything about the pieces (moved, reshaped, retextured, deleted or copied one), they open as ordinary brushes with those changes kept, and the Console says so. An outline with a corner too sharp to make clean brushes is refused with a reason; a refused outline stays on screen to fix. Delete removes selected shapes in any pick mode. **Make brushes from shape** (Ctrl+Shift+B, in the Shape menu) turns a shape into ordinary brushes to edit them one by one.
@@ -79,6 +81,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Fixed
 
+- Faces whose texture no longer fit them (after turning a brush, or on the new faces of an extruded loaded wall) were saved with their texture smeared into streaks; they are now saved world-aligned, keeping their scale.
 - A very quick click in the viewport (down and up before the next frame, common with touchpads or on slow machines) was missed by the tools; it now counts.
 - Pressing Escape to leave a text box (the Console's or Keybinds' search, a Properties field) no longer also deselects everything in the map.
 - Ctrl+W released quickly no longer also counts as W, and other shortcut keys check the modifier keys held when the key went down.

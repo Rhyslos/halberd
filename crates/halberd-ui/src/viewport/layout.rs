@@ -127,11 +127,60 @@ impl PaneView {
     }
 }
 
+/// How a view draws brushes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum RenderMode {
+    /// Outlines only, as Hammer's 2D views.
+    Wireframe,
+    /// Solid faces in one colour, shaded by which way they face.
+    #[default]
+    Flat,
+    /// Solid faces showing each face's material and how its texture lies.
+    /// Until real textures are read, each material is a coloured pattern.
+    Textured,
+}
+
+impl RenderMode {
+    /// Every mode, in menu order.
+    pub const ALL: [RenderMode; 3] = [Self::Wireframe, Self::Flat, Self::Textured];
+
+    /// Name for the interface.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Wireframe => "Wireframe",
+            Self::Flat => "Flat",
+            Self::Textured => "Textured",
+        }
+    }
+
+    /// One-line explanation, for tooltips.
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Wireframe => "Outlines only, so you can see through everything",
+            Self::Flat => "Solid faces in one colour",
+            Self::Textured => {
+                "Solid faces showing each face's material and texture alignment (a coloured \
+                 pattern per material until real textures are read)"
+            }
+        }
+    }
+
+    /// How a view showing `view` starts: side views as wireframes, as in
+    /// Hammer; the 3D view solid.
+    pub fn default_for(view: PaneView) -> Self {
+        match view {
+            PaneView::Perspective => Self::Flat,
+            PaneView::Side(_) => Self::Wireframe,
+        }
+    }
+}
+
 /// One view's state: what it shows and its cameras (each kind keeps its
 /// own, so switching back finds the view as it was left).
 #[derive(Debug, Clone)]
 pub(super) struct Pane {
     pub(super) view: PaneView,
+    pub(super) mode: RenderMode,
     pub(super) perspective: CameraController,
     pub(super) side: SideCamera,
     pub(super) right_was_held: bool,
@@ -147,6 +196,7 @@ impl Pane {
         };
         Self {
             view,
+            mode: RenderMode::default_for(view),
             perspective,
             side: SideCamera::new(side),
             right_was_held: false,
@@ -190,6 +240,9 @@ pub struct ViewSetup {
     pub views: Vec<PaneView>,
     /// Each view's side camera, in view order.
     pub sides: Vec<SideCamera>,
+    /// How each view draws brushes, in view order.
+    #[serde(default)]
+    pub modes: Vec<RenderMode>,
 }
 
 #[cfg(test)]
