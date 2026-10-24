@@ -84,3 +84,4 @@ With the Select tool and a gizmo mode picked, handles appear around the selectio
 - In these modes a drag draws a box that picks every part inside it (`marquee` gives the box while dragging; Ctrl adds).
 - `element_overlay` gives what to draw: every corner or edge that can be picked, the picked ones, and the one under the pointer, in screen points.
 - Tests drive clicks and drags through the controller: picking each kind, moving a face, a corner and an edge, turning a face, Escape, entity brushes, and 60 random drags.
+- **Materials** (`tool/material.rs`): `set_material` chooses the material new brushes and shapes get (`material`; none means Halberd's default). `apply_material` gives the `SetMaterial` edit for the picked faces in Face mode, otherwise for the selected brushes, shapes and brush entities, or a plain-language reason when nothing is selected.

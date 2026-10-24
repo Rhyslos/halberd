@@ -447,6 +447,20 @@ impl Document {
                 }
                 Ok(Change::Modified(objects))
             }
+            Command::AddBrushObjects(brushes) => {
+                if brushes.is_empty() {
+                    return Err(DocError::NothingToDo);
+                }
+                if self.objects.len() + brushes.len() > MAX_OBJECTS {
+                    return Err(DocError::TooManyObjects);
+                }
+                let objects = brushes
+                    .into_iter()
+                    .map(|brush| (self.new_id(), Object::Brush(brush.as_new())))
+                    .collect();
+                Ok(Change::Inserted(objects))
+            }
+            Command::SetMaterial { material, faces } => self.prepare_set_material(&material, faces),
             Command::AddShape(shape) => {
                 if self.objects.len() >= MAX_OBJECTS {
                     return Err(DocError::TooManyObjects);
@@ -667,6 +681,7 @@ impl Document {
 
 #[cfg(test)]
 mod map_tests;
+mod materials;
 #[cfg(test)]
 mod shape_tests;
 #[cfg(test)]

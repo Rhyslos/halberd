@@ -204,6 +204,12 @@ impl GameContent {
     /// The bytes of `path` (`materials/brick/brickwall001a.vtf`, any case),
     /// from the first mounted place that has it.
     pub fn read(&self, path: &str) -> Result<Vec<u8>, ContentError> {
+        self.read_at_most(path, MAX_LOOSE_FILE)
+    }
+
+    /// Like [`Self::read`], but a file bigger than `limit` bytes is refused
+    /// before anything is read (for small text files such as materials).
+    pub fn read_at_most(&self, path: &str, limit: u64) -> Result<Vec<u8>, ContentError> {
         let relative =
             relative_path(path).ok_or_else(|| ContentError::BadPath(path.to_string()))?;
         let key = relative.to_string_lossy().replace('\\', "/");
@@ -212,11 +218,15 @@ impl GameContent {
         let mut problem = None;
         for source in &self.sources {
             let found = match source {
-                Source::Archive(vpk) if vpk.contains(&key) => {
-                    Some(vpk.read(&key).map_err(|e| e.to_string()))
+                Source::Archive(vpk) => vpk.entry(&key).map(|entry| {
+                    if entry.size() > limit {
+                        return Err(TOO_LARGE.to_string());
+                    }
+                    vpk.read_entry(entry).map_err(|e| e.to_string())
+                }),
+                Source::Folder(folder) => {
+                    find_in_folder(folder, &relative).map(|f| read_loose(&f, limit))
                 }
-                Source::Archive(_) => None,
-                Source::Folder(folder) => find_in_folder(folder, &relative).map(|f| read_loose(&f)),
             };
             match found {
                 Some(Ok(bytes)) => return Ok(bytes),
@@ -230,6 +240,49 @@ impl GameContent {
             Some(why) => ContentError::Unreadable(path.to_string(), why),
             None => ContentError::NotFound(path.to_string()),
         })
+    }
+
+    /// Every loose file (in mounted folders) under the folder `prefix`
+    /// whose name ends with `extension`, as paths inside the game, lower
+    /// case; at most `limit`. Slow (it walks the folders): call it off the
+    /// interface thread.
+    pub fn loose_files(&self, prefix: &str, extension: &str, limit: usize) -> Vec<String> {
+        let Some(relative) = relative_path(prefix) else {
+            return Vec::new();
+        };
+        let extension = extension.to_ascii_lowercase();
+        let mut found = BTreeSet::new();
+        for source in &self.sources {
+            let Source::Folder(folder) = source else {
+                continue;
+            };
+            let Some(start) = find_dir_in_folder(folder, &relative) else {
+                continue;
+            };
+            let mut stack = vec![start];
+            while let Some(dir) = stack.pop() {
+                for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                    if found.len() >= limit {
+                        return found.into_iter().collect();
+                    }
+                    let path = entry.path();
+                    match entry.file_type() {
+                        Ok(t) if t.is_dir() => stack.push(path),
+                        Ok(t) if t.is_file() => {
+                            let inside = path.strip_prefix(folder).ok();
+                            let name = inside.map(|p| {
+                                p.to_string_lossy().replace('\\', "/").to_ascii_lowercase()
+                            });
+                            if let Some(name) = name.filter(|n| n.ends_with(&extension)) {
+                                found.insert(name);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        found.into_iter().collect()
     }
 
     /// Every archived file whose path starts with `prefix` and ends with
@@ -388,10 +441,37 @@ fn find_in_folder(folder: &Path, relative: &Path) -> Option<PathBuf> {
     at.is_file().then_some(at)
 }
 
-fn read_loose(file: &Path) -> Result<Vec<u8>, String> {
+/// The folder at `relative` inside `folder`, matching names without regard
+/// to case.
+fn find_dir_in_folder(folder: &Path, relative: &Path) -> Option<PathBuf> {
+    let mut at = folder.to_path_buf();
+    for part in relative.components() {
+        let wanted = part.as_os_str().to_str()?;
+        let direct = at.join(wanted);
+        at = if direct.is_dir() {
+            direct
+        } else {
+            std::fs::read_dir(&at)
+                .ok()?
+                .flatten()
+                .find(|e| {
+                    e.file_name()
+                        .to_str()
+                        .is_some_and(|n| n.eq_ignore_ascii_case(wanted))
+                })?
+                .path()
+        };
+    }
+    at.is_dir().then_some(at)
+}
+
+/// Why a file over the size limit was not read.
+const TOO_LARGE: &str = "it is larger than any real file of its kind";
+
+fn read_loose(file: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let size = std::fs::metadata(file).map_err(|e| e.to_string())?.len();
-    if size > MAX_LOOSE_FILE {
-        return Err("it is larger than any real game file".into());
+    if size > limit.min(MAX_LOOSE_FILE) {
+        return Err(TOO_LARGE.into());
     }
     std::fs::read(file).map_err(|e| e.to_string())
 }

@@ -18,6 +18,17 @@ struct Frame {
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
+// Material textures, one layer each, for the Textured mode.
+@group(0) @binding(1) var material_textures: texture_2d_array<f32>;
+@group(0) @binding(2) var material_sampler: sampler;
+// Per layer: the texture's real width and height, and 1 once loaded.
+struct MaterialTable {
+    layers: array<vec4<f32>, 256>,
+};
+@group(0) @binding(3) var<uniform> material_table: MaterialTable;
+
+// The texture size face texture coordinates are given in (TEXTURE_SIZE).
+const PATTERN_TEXELS: f32 = 128.0;
 
 // ---------------------------------------------------------------- grid ---
 
@@ -124,8 +135,9 @@ struct BrushIn {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) color: vec4<f32>,
-    // Texture coordinates, material hue, and 1 if the face has a material
-    // (2 if it is also selected).
+    // Texture coordinates, material hue, and a flag: 1 if the face has a
+    // material, 2 if it is also selected, plus 4 × (layer + 1) when its
+    // material's real texture is in a layer.
     @location(3) texture: vec4<f32>,
 };
 
@@ -178,11 +190,23 @@ fn brush_fs(in: BrushOut) -> @location(0) vec4<f32> {
     let diffuse = max(dot(normalize(in.normal), light), 0.0);
     let shade = 0.38 + 0.62 * diffuse;
     var color = in.color.rgb;
-    if frame.plane.w > 0.5 && frame.plane.w < 1.5 && in.texture.w > 0.5 {
-        let pattern = material_pattern(in.texture);
+    // Unpack the flag (see BrushIn).
+    let packed = floor(in.texture.w + 0.5);
+    let layer_plus = floor(packed / 4.0);
+    let flag = packed - layer_plus * 4.0;
+    let layer = clamp(i32(layer_plus) - 1, 0, 255);
+    let info = material_table.layers[layer];
+    // The real texture, sampled everywhere (sampling must not depend on
+    // the branches below) and used where it is loaded.
+    let real_uv = in.texture.xy * PATTERN_TEXELS / max(info.xy, vec2<f32>(1.0));
+    let texel = textureSample(material_textures, material_sampler, real_uv, layer).rgb;
+    let pattern = material_pattern(in.texture);
+    if frame.plane.w > 0.5 && frame.plane.w < 1.5 && flag > 0.5 {
+        let has_texture = layer_plus > 0.5 && info.z > 0.5;
+        let look = select(pattern, texel, has_texture);
         // Selected faces keep a red tint so the selection still shows.
-        let selected = in.texture.w > 1.5;
-        color = select(pattern, mix(pattern, in.color.rgb, 0.55), selected);
+        let selected = flag > 1.5;
+        color = select(look, mix(look, in.color.rgb, 0.55), selected);
     }
     return vec4<f32>(color * shade, in.color.a);
 }

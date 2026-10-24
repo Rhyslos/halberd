@@ -16,6 +16,7 @@ mod console;
 mod keybinds;
 mod keymap;
 mod layout;
+mod materials;
 mod panel;
 mod panels;
 mod viewport;
@@ -28,6 +29,9 @@ pub use console::{
 pub use keybinds::{KEYBINDS_SEARCH_NAME, KEYBINDS_TITLE, KeybindsViewer, drawn_keys};
 pub use keymap::{KEYBINDS, KeyCap, KeyContext, Keybind, binds_with, mouse_binds};
 pub use layout::{default_layout, is_complete, restore_or_default};
+pub use materials::{
+    APPLY_MATERIAL_LABEL, BrowserAction, MATERIAL_SEARCH_NAME, MaterialBrowser, THUMBNAIL_SIZE,
+};
 pub use panel::Panel;
 pub use viewport::{
     INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL, MAX_VIEWS, NoRenderer, PaneView, RenderMode,

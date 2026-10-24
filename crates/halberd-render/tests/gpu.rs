@@ -544,3 +544,49 @@ fn textured_mode_shows_a_pattern_on_the_faces() {
         spread(&textured)
     );
 }
+
+#[test]
+fn textured_mode_shows_a_materials_real_texture_once_it_arrives() {
+    let Some(gpu) = gpu() else { return };
+    let (mut renderer, target, camera) = box_scene(&gpu, false);
+    // The box's material is asked for once.
+    assert_eq!(renderer.wanted_textures(), ["DEV/DEV_MEASUREGENERIC01B"]);
+    assert!(renderer.wanted_textures().is_empty());
+    let green = [20u8, 220, 30, 255].repeat(4 * 4);
+    renderer.upload_texture(
+        &gpu.device,
+        &gpu.queue,
+        "dev/dev_measuregeneric01b",
+        (4, 4, &green),
+        (512, 512),
+    );
+    let shot = render_mode(
+        &gpu,
+        &renderer,
+        &target,
+        camera,
+        None,
+        None,
+        RenderMode::Textured,
+    );
+    let top = Vec3::new(0.0, -30.0, 128.0);
+    assert!(
+        shot.best_near(top, green_minus_red) > 80,
+        "the top face is the texture's green"
+    );
+    // Flat mode is unchanged.
+    let flat = render_mode(
+        &gpu,
+        &renderer,
+        &target,
+        camera,
+        None,
+        None,
+        RenderMode::Flat,
+    );
+    assert!(flat.best_near(top, green_minus_red) < 20);
+}
+
+fn green_minus_red(p: [u8; 4]) -> i32 {
+    i32::from(p[1]) - i32::from(p[0])
+}

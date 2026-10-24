@@ -52,3 +52,5 @@ The workbench is implemented: a menu bar (File, Edit, View, Keybinds, Help) and 
 - Tab buttons and the viewport are labelled for screen readers.
 
 Tests use `egui_kittest` to run the real interface without a window: click menus, measure where each panel is drawn, and drive the viewport with simulated right-drags, middle-drags, scrolling and WASD, draw boxes with left-drags, click to select, and use Delete, Ctrl+Z and Ctrl+Y.
+
+**Material browser** (`materials.rs`, `MaterialBrowser`, in the Library panel once names are given; `workbench/library.rs`): a search box (every word must match), the count shown, and a grid of tiles drawn only where visible. Tiles on screen ask for their picture once (`take_wanted`; pictures arrive through `add_picture`, the 600 shown most recently kept; pictures over 512 pixels are refused). A click picks (`BrowserAction::Pick`), a double-click or **Apply to selection** applies (`BrowserAction::Apply`); the workbench then sets the tools' material and runs the edit, warning in the Console when nothing is selected. Before names arrive the panel says how far reading the game's content has got (`ContentStatus`).

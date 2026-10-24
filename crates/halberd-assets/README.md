@@ -36,3 +36,9 @@ Mounting game content (`content.rs`, `GameContent`):
 4. `archived_files` lists archived files by folder and extension (for the material browser); `summary` gives a line for the Console.
 
 Indexing loose files and caching decoded assets arrive with the browsers.
+
+Materials (`materials.rs`, see [decision 0023](../../docs/decisions/0023-materials.md)):
+
+1. `material_names` lists every `materials/*.vmt` in the archives and loose folders (at most 200,000 loose ones; `GameContent::loose_files`), named as Hammer names them (`BRICK/BRICKWALL001A`), sorted.
+2. `load_material` reads a material, follows `patch` materials to what they include (at most 8 deep), and decodes its texture at most `max_size` pixels on each side (`MaterialImage`: the picture, the texture's full size, whether it is a tool material, and a plain-language problem if there is no picture).
+3. `MaterialLoader` does that on its own thread: `request` a material at a size (asked once until it arrives), `poll` for finished ones; the `wake` callback lets the window redraw. The biggest size waiting is read first (the views' textures), then the newest request. Material files over 1 MB are refused unread (`GameContent::read_at_most`).

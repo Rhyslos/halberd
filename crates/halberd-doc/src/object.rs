@@ -160,6 +160,29 @@ impl BrushObject {
         shaped
     }
 
+    /// This brush as a new world brush: same shape and looks, without
+    /// saved ids or an entity (for [`crate::Command::AddBrushObjects`]).
+    pub fn as_new(&self) -> Self {
+        Self::with_faces(
+            self.brush.clone(),
+            self.faces.iter().map(FaceInfo::copied).collect(),
+            self.copied_data(),
+        )
+    }
+
+    /// Puts `material` on face `index` (every face if `None`). Returns
+    /// false if nothing changed.
+    pub fn set_material(&mut self, index: Option<usize>, material: &str) -> bool {
+        let mut changed = false;
+        for (i, face) in self.faces.iter_mut().enumerate() {
+            if index.is_none_or(|k| k == i) && face.material != material {
+                face.material = material.to_string();
+                changed = true;
+            }
+        }
+        changed
+    }
+
     /// A brush from a shape and its face data, in face order (`faces` must
     /// have one entry per face of `brush`; missing ones get the default).
     pub fn with_faces(brush: Brush, faces: Vec<FaceInfo>, file_data: Vec<Entry>) -> Self {

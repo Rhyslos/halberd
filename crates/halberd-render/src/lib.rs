@@ -16,6 +16,7 @@ mod pipelines;
 mod readback;
 mod renderer;
 mod scene;
+mod textures;
 
 pub use frame::{
     FrameParams, GRID_HALF_EXTENT, GridPlane, MAJOR_EVERY, RenderMode, SUPER_SPACING, grid_spacings,
@@ -30,8 +31,9 @@ pub use scene::{
     BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, ENTITY_EDGE_COLOR, FaceVertex, PLAYER_COLOR,
     PLAYER_OUTLINE_VERTICES, POINT_ENTITY_COLOR, POINT_ENTITY_EDGE_COLOR, PREVIEW_COLOR,
     PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR, SceneGeometry, TEXTURE_SIZE, box_outline,
-    material_hue, player_outline, shape_outline,
+    material_hue, player_outline, shape_outline, texture_flag,
 };
+pub use textures::{MATERIAL_TEXTURE_SIZE, MAX_MATERIAL_TEXTURES};
 
 #[cfg(test)]
 mod shader_tests {
