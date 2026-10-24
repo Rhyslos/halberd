@@ -14,13 +14,13 @@ pub(crate) const MAP_HEADING: &str = "Map";
 /// a big map every frame would be wasted work).
 #[derive(Debug, Default)]
 pub(crate) struct StatsCache {
-    shown: Option<((u64, u64), MapStats)>,
+    shown: Option<((u64, u64, u64), MapStats)>,
 }
 
 impl StatsCache {
     /// The stats for `doc` as it is now.
     pub(crate) fn get(&mut self, doc: &Document) -> &MapStats {
-        let key = (doc.instance(), doc.revision());
+        let key = (doc.instance(), doc.revision(), doc.model_box_revision());
         if self.shown.as_ref().is_some_and(|(k, _)| *k != key) {
             self.shown = None;
         }
@@ -44,55 +44,70 @@ pub(crate) fn show(ui: &mut Ui, doc: &mut Document, unit: LengthUnit, cache: &mu
     let stats = cache.get(doc).clone();
     ui.add_space(8.0);
     ui.label(RichText::new(MAP_HEADING).strong().size(15.0));
-    match stats.bounds {
-        Some(b) => {
-            let size = b.size();
-            let n = |v: f32| {
-                let text = unit.format(f64::from(v));
-                text.trim_end_matches(unit.suffix()).to_string()
-            };
-            ui.label(format!(
-                "Size: {} × {} × {}{}",
-                n(size.x),
-                n(size.y),
-                n(size.z),
-                unit.suffix()
-            ))
-            .on_hover_text("Width, depth and height of everything in the map");
-            let largest = size.max_element() / (MAP_HALF_SIZE * 2.0);
-            ui.add(
-                ProgressBar::new(largest.clamp(0.0, 1.0))
-                    .text(format!(
-                        "{:.0}% of the largest map ({} across)",
-                        largest * 100.0,
-                        unit.format(f64::from(MAP_HALF_SIZE * 2.0))
-                    ))
-                    .fill(meter_color(largest)),
-            );
-        }
-        None => {
-            ui.label(RichText::new("Empty").weak());
-        }
-    }
-    if !stats.outside.is_empty() {
-        ui.horizontal_wrapped(|ui| {
-            let count = stats.outside.len();
-            ui.colored_label(
-                meter_color(1.0),
-                format!(
-                    "{count} object{} reach{} past the map's edge ({} from the middle), \
-                     which won't compile.",
-                    if count == 1 { "" } else { "s" },
-                    if count == 1 { "es" } else { "" },
-                    unit.format(f64::from(MAP_HALF_SIZE))
-                ),
-            );
-            if ui.button(SELECT_OUTSIDE_LABEL).clicked() {
-                doc.set_selection(stats.outside.iter().copied());
-            }
-        });
-    }
+    size_section(ui, &stats, unit);
+    edge_section(ui, doc, &stats, unit);
     ui.add_space(8.0);
+    meters_section(ui, &stats);
+}
+
+/// The map's size, and how much of the largest map it spans.
+fn size_section(ui: &mut Ui, stats: &MapStats, unit: LengthUnit) {
+    let Some(b) = stats.bounds else {
+        ui.label(RichText::new("Empty").weak());
+        return;
+    };
+    let size = b.size();
+    let n = |v: f32| {
+        let text = unit.format(f64::from(v));
+        text.trim_end_matches(unit.suffix()).to_string()
+    };
+    ui.label(format!(
+        "Size: {} × {} × {}{}",
+        n(size.x),
+        n(size.y),
+        n(size.z),
+        unit.suffix()
+    ))
+    .on_hover_text("Width, depth and height of everything in the map");
+    let largest = size.max_element() / (MAP_HALF_SIZE * 2.0);
+    ui.add(
+        ProgressBar::new(largest.clamp(0.0, 1.0))
+            .text(format!(
+                "{:.0}% of the largest map ({} across)",
+                largest * 100.0,
+                unit.format(f64::from(MAP_HALF_SIZE * 2.0))
+            ))
+            .fill(meter_color(largest)),
+    );
+}
+
+/// What reaches past the map's edge, with a button selecting it.
+fn edge_section(ui: &mut Ui, doc: &mut Document, stats: &MapStats, unit: LengthUnit) {
+    if stats.outside.is_empty() {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        let count = stats.outside.len();
+        ui.colored_label(
+            meter_color(1.0),
+            format!(
+                "{count} object{} reach{} past the map's edge ({} from the middle), where \
+                 the compiler cuts {} off and the game can't handle {}.",
+                if count == 1 { "" } else { "s" },
+                if count == 1 { "es" } else { "" },
+                unit.format(f64::from(MAP_HALF_SIZE)),
+                if count == 1 { "it" } else { "them" },
+                if count == 1 { "it" } else { "them" },
+            ),
+        );
+        if ui.button(SELECT_OUTSIDE_LABEL).clicked() {
+            doc.set_selection(stats.outside.iter().copied());
+        }
+    });
+}
+
+/// The engine limit meters.
+fn meters_section(ui: &mut Ui, stats: &MapStats) {
     ui.label(RichText::new("Engine limits").strong());
     ui.label(
         RichText::new("Estimates; the compiler's counts can differ a little.")
@@ -162,5 +177,27 @@ mod tests {
         doc.execute(halberd_doc::Command::AddBrushes(vec![cube]))
             .unwrap();
         assert_eq!(cache.get(&doc).meters[0].count, 1);
+    }
+
+    #[test]
+    fn the_cache_counts_again_when_a_models_size_arrives() {
+        // Regression: props' sizes arrive without an edit, so the size and
+        // the edge list stayed stale.
+        let mut doc = Document::new();
+        doc.execute(halberd_doc::Command::AddEntity(
+            halberd_doc::EntityObject::point(
+                "prop_static",
+                glam::Vec3::new(16_300.0, 0.0, 0.0),
+                &[("model", "models/big.mdl")],
+            ),
+        ))
+        .unwrap();
+        let mut cache = StatsCache::default();
+        assert!(cache.get(&doc).outside.is_empty());
+        doc.set_model_box(
+            "models/big.mdl",
+            halberd_geom::Aabb::from_corners(glam::Vec3::splat(-500.0), glam::Vec3::splat(500.0)),
+        );
+        assert_eq!(cache.get(&doc).outside.len(), 1);
     }
 }

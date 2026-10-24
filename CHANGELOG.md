@@ -6,7 +6,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
-- **Map size and engine limits.** With nothing selected, **Properties** shows the **Map**: its size, how much of the largest possible Source map it spans, and meters for the engine's limits (brushes, brush sides, entities, brush entities, lights and materials), green, then yellow, then red as they fill. Hover a meter to see what happens past the limit. Anything reaching past the map's edge (16,384 units from the middle) is counted, with a button to select it.
+- **Map size and engine limits.** With nothing selected, **Properties** shows the **Map**: its size, how much of the largest possible Source map it spans, and meters for the engine's limits (brushes, brush sides, entities, brush entities, lights and materials), green, then yellow, then red as they fill. Hover a meter to see what happens past the limit. Anything reaching past the map's edge (16,384 units from the middle), where the compiler cuts it off, is counted, with a button to select it.
 
 - **Scale tools.** The player figure now checks whether a player fits where it stands: blue if they can stand, orange if they could only crouch, red if they wouldn't fit, with the room left above their head in its label. It stands on slopes and steps as a player would, and walks through triggers. Turn on **View → Player follows the pointer** and the figure stands on whatever is under the pointer in the 3D view, so you can sweep it through doorways and under ceilings. While you draw, the box's width × depth × height shows above it; with something selected, its size shows in the view's corner. Lengths can now be shown in **feet** too (View menu).
 

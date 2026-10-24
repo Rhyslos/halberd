@@ -32,6 +32,9 @@ pub struct Document {
     /// Each model's box in its own space, by lower-case name, as far as
     /// models have been read (for picking and framing props).
     model_boxes: HashMap<String, Aabb>,
+    /// Goes up whenever a model's box is learnt or changes (which moves
+    /// props' boxes without being an edit).
+    model_box_revision: u64,
 }
 
 impl Default for Document {
@@ -48,6 +51,7 @@ impl Default for Document {
             saved_revision: 0,
             file_data: MapFileData::default(),
             model_boxes: HashMap::new(),
+            model_box_revision: 0,
         }
     }
 }
@@ -67,6 +71,7 @@ impl Clone for Document {
             saved_revision: self.saved_revision,
             file_data: self.file_data.clone(),
             model_boxes: self.model_boxes.clone(),
+            model_box_revision: self.model_box_revision,
         }
     }
 }
