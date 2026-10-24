@@ -6,8 +6,9 @@
 use super::ViewportPanel;
 use egui::{Color32, Painter, Rect, Stroke, vec2};
 use glam::{Vec2, Vec3};
-use halberd_doc::Document;
+use halberd_doc::{Document, ObjectId};
 use halberd_tools::Camera;
+use std::collections::HashSet;
 
 /// Colour of a connection leaving the selection.
 const OUTGOING_COLOR: Color32 = Color32::from_rgb(90, 220, 120);
@@ -52,9 +53,13 @@ pub(super) struct Link {
     color: Color32,
 }
 
-/// The lines, and the document state they were worked out for.
+/// The lines, and the document state they were worked out for. Which
+/// entities are joined is worked out only when names or connections
+/// change; where the lines run, whenever anything moves.
 #[derive(Debug, Default)]
 pub(super) struct LinkCache {
+    pairs_key: Option<(u64, u64)>,
+    pairs: Vec<(ObjectId, ObjectId)>,
     key: Option<(u64, u64, u64, u64, ConnectionView)>,
     links: Vec<Link>,
 }
@@ -83,7 +88,12 @@ impl ViewportPanel {
             return;
         }
         self.links.key = Some(key);
-        self.links.links = links_for(doc, self.connection_view);
+        let pairs_key = (doc.instance(), doc.logic_revision());
+        if self.links.pairs_key != Some(pairs_key) {
+            self.links.pairs_key = Some(pairs_key);
+            self.links.pairs = doc.connection_links();
+        }
+        self.links.links = links_for(doc, &self.links.pairs, self.connection_view);
     }
 
     /// The number of lines drawn now (for tests).
@@ -99,14 +109,25 @@ impl ViewportPanel {
     }
 }
 
-fn links_for(doc: &Document, view: ConnectionView) -> Vec<Link> {
+fn links_for(doc: &Document, pairs: &[(ObjectId, ObjectId)], view: ConnectionView) -> Vec<Link> {
     if view == ConnectionView::Off {
         return Vec::new();
     }
-    let selection = doc.selection();
+    // A brush picked inside a brush entity stands for the entity.
+    let selection: HashSet<ObjectId> = doc
+        .selection()
+        .iter()
+        .map(|id| {
+            doc.get(*id)
+                .and_then(|o| o.as_brush())
+                .and_then(|b| b.entity())
+                .unwrap_or(*id)
+        })
+        .collect();
     let center = |id| doc.bounds_of(id).map(|b| b.center());
-    doc.connection_links()
-        .into_iter()
+    pairs
+        .iter()
+        .copied()
         .filter_map(|(from, to)| {
             let color = if selection.contains(&from) {
                 OUTGOING_COLOR

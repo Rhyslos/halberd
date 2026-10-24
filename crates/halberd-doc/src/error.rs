@@ -18,6 +18,8 @@ pub enum DocError {
     NotABrush(ObjectId),
     /// The object is not an entity, so nothing can join it.
     NotAnEntity(ObjectId),
+    /// An entity would have more than [`crate::MAX_CONNECTIONS`] outputs.
+    TooManyConnections,
 }
 
 impl fmt::Display for DocError {
@@ -28,6 +30,11 @@ impl fmt::Display for DocError {
             Self::TooManyObjects => f.write_str("the map has reached its object limit"),
             Self::NotABrush(id) => write!(f, "object {id} is not a brush"),
             Self::NotAnEntity(id) => write!(f, "object {id} is not an entity"),
+            Self::TooManyConnections => write!(
+                f,
+                "an entity can have at most {} outputs",
+                crate::MAX_CONNECTIONS
+            ),
         }
     }
 }

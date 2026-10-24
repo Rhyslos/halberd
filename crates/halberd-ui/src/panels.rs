@@ -10,6 +10,7 @@ use halberd_geom::{Aabb, Brush, MIN_SIZE, Plane};
 use std::collections::BTreeSet;
 
 mod entity_settings;
+mod io_index;
 mod keyvalues;
 mod outputs;
 #[cfg(test)]

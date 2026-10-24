@@ -91,10 +91,11 @@ fn the_targets_inputs_are_offered_and_wrong_ones_warned() {
     let mut h = harness_for(wb);
     h.run();
     assert!(
-        h.query_by_label("A light_dynamic has no input \"Explode\".")
+        h.query_by_label("A light_dynamic has no input \"Explode\" in the game's entity list.")
             .is_some()
     );
-    h.get_by_label(&connection_field_name(0, "input")).click();
+    h.get_by_label(&format!("{} list", connection_field_name(0, "input")))
+        .click();
     h.run();
     h.get_by_label("TurnOn").click();
     h.run();
@@ -150,4 +151,83 @@ fn the_views_draw_connections_of_the_selection_or_all() {
         .set_connection_view(ConnectionView::Off);
     h.run();
     assert_eq!(h.state().viewport().connection_lines(), 0);
+}
+
+#[test]
+fn showing_an_entity_never_changes_its_outputs() {
+    // Regression: a delay over an hour was cut down (with an undo step)
+    // just by selecting the entity.
+    let (mut wb, relay, _) = setup();
+    let mut long = Connection::new("OnTrigger", "lamp", "TurnOn");
+    long.delay = 5000.0;
+    wb.document_mut()
+        .execute(Command::SetConnections {
+            id: relay,
+            connections: vec![long.clone()],
+        })
+        .unwrap();
+    let steps_before = wb.document().undo_label().map(str::to_string);
+    let revision = wb.document().revision();
+    let mut h = harness_for(wb);
+    h.run_steps(3);
+    assert_eq!(connections(h.state(), relay), [long]);
+    assert_eq!(h.state().document().revision(), revision);
+    assert_eq!(
+        h.state().document().undo_label().map(str::to_string),
+        steps_before
+    );
+}
+
+#[test]
+fn inputs_the_entity_list_lacks_can_still_be_typed() {
+    let (mut wb, relay, _) = setup();
+    wb.document_mut()
+        .execute(Command::SetConnections {
+            id: relay,
+            connections: vec![Connection::new("OnTrigger", "lamp", "TurnOn")],
+        })
+        .unwrap();
+    let mut h = harness_for(wb);
+    h.run();
+    h.get_by_label(&connection_field_name(0, "input")).click();
+    h.run();
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("AddOutput".into()));
+    h.key_press(egui::Key::Enter);
+    h.run();
+    assert_eq!(connections(h.state(), relay)[0].input, "AddOutput");
+}
+
+#[test]
+fn a_brush_picked_inside_an_entity_shows_the_entitys_connections() {
+    let (mut wb, relay, _) = setup();
+    let cube = halberd_geom::Brush::cuboid(halberd_geom::Aabb::from_corners(
+        Vec3::ZERO,
+        Vec3::splat(32.0),
+    ))
+    .unwrap();
+    wb.document_mut()
+        .execute(Command::AddBrushes(vec![cube]))
+        .unwrap();
+    let brush = wb.document().objects().last().unwrap().0;
+    let mut button = EntityObject {
+        classname: "func_button".into(),
+        origin: None,
+        file_data: vec![halberd_kv::Entry::Pair(
+            "classname".into(),
+            "func_button".into(),
+        )],
+    };
+    button = button.with_connections(&[Connection::new("OnPressed", "relay", "Trigger")]);
+    wb.document_mut()
+        .execute(Command::TieToEntity {
+            objects: vec![brush],
+            entity: button,
+        })
+        .unwrap();
+    wb.document_mut().set_selection([brush]);
+    let mut h = harness_for(wb);
+    h.run();
+    assert_eq!(h.state().viewport().connection_lines(), 1);
+    let _ = relay;
 }

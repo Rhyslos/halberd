@@ -100,19 +100,14 @@ impl Connection {
     }
 }
 
-/// A delay as Hammer writes it: whole seconds plainly, else up to two
-/// decimals.
+/// A delay as text: the shortest form that reads back as the same
+/// number ("2", "0.5", "0.001"), so delays used to order outputs keep their
+/// precision.
 fn format_delay(delay: f32) -> String {
-    let delay = if delay.is_finite() {
-        delay.max(0.0)
+    if delay.is_finite() {
+        format!("{delay}")
     } else {
-        0.0
-    };
-    if (delay - delay.round()).abs() < 0.0005 {
-        format!("{}", delay.round() as i64)
-    } else {
-        let text = format!("{delay:.2}");
-        text.trim_end_matches('0').to_string()
+        "0".into()
     }
 }
 
@@ -134,44 +129,89 @@ impl EntityObject {
             .collect()
     }
 
-    /// The same entity with `connections` in place of those it had. Lines
-    /// that couldn't be read are kept, after the new ones.
+    /// The same entity with `connections` in place of those
+    /// [`Self::connections`] gave. Lines that didn't change are kept
+    /// exactly as they were (their spacing, separators and place); lines
+    /// that can't be read, and readable lines past [`MAX_CONNECTIONS`], are
+    /// kept where they are; new lines go where they belong in the order,
+    /// or at the end of the last `connections` block.
     pub fn with_connections(&self, connections: &[Connection]) -> Self {
-        let mut kept = Vec::new();
-        let mut at = None;
+        let mut wanted = connections.iter().take(MAX_CONNECTIONS).peekable();
+        let olds = self.connections();
+        let mut readable = 0usize;
         let mut file_data = Vec::with_capacity(self.file_data.len() + 1);
+        let mut last_block = None;
         for entry in &self.file_data {
-            match entry {
-                Entry::Block(b) if b.name.eq_ignore_ascii_case("connections") => {
-                    at.get_or_insert(file_data.len());
-                    kept.extend(
-                        b.entries
-                            .iter()
-                            .filter(|e| match e {
-                                Entry::Pair(o, v) => Connection::parse(o, v).is_none(),
-                                Entry::Block(_) => true,
-                            })
-                            .cloned(),
-                    );
+            let Entry::Block(block) = entry else {
+                file_data.push(entry.clone());
+                continue;
+            };
+            if !block.name.eq_ignore_ascii_case("connections") {
+                file_data.push(entry.clone());
+                continue;
+            }
+            let mut out = Block::new(block.name.clone());
+            for line in &block.entries {
+                let old = match line {
+                    Entry::Pair(o, v) if readable < MAX_CONNECTIONS => Connection::parse(o, v),
+                    _ => None,
+                };
+                let Some(old) = old else {
+                    out.entries.push(line.clone());
+                    continue;
+                };
+                readable += 1;
+                let rest: Vec<&Connection> = wanted.clone().collect();
+                if !rest.contains(&&old) {
+                    // Changed or removed. A wanted line that isn't one of
+                    // the old lines still to come takes its place.
+                    let later = olds.get(readable..).unwrap_or(&[]);
+                    if let Some(next) = wanted.next_if(|n| !later.contains(n)) {
+                        out.push_pair(next.output.clone(), next.value());
+                    }
+                    continue;
                 }
-                other => file_data.push(other.clone()),
+                // Write the wanted lines that come before this one.
+                for next in wanted.by_ref() {
+                    if *next == old {
+                        out.entries.push(line.clone());
+                        break;
+                    }
+                    out.push_pair(next.output.clone(), next.value());
+                }
+            }
+            last_block = Some(file_data.len());
+            file_data.push(Entry::Block(out));
+        }
+        let left: Vec<&Connection> = wanted.collect();
+        if !left.is_empty() {
+            let at = match last_block {
+                Some(at) => at,
+                None => {
+                    // After the settings, before any other block.
+                    let at = file_data
+                        .iter()
+                        .position(|e| matches!(e, Entry::Block(_)))
+                        .unwrap_or(file_data.len());
+                    file_data.insert(at, Entry::Block(Block::new("connections")));
+                    at
+                }
+            };
+            if let Some(Entry::Block(block)) = file_data.get_mut(at) {
+                for c in left {
+                    block.push_pair(c.output.clone(), c.value());
+                }
             }
         }
-        let mut block = Block::new("connections");
-        for c in connections.iter().take(MAX_CONNECTIONS) {
-            block.push_pair(c.output.clone(), c.value());
-        }
-        block.entries.extend(kept);
-        if !block.entries.is_empty() {
-            // Where the old block was, else after the settings.
-            let at = at.unwrap_or_else(|| {
-                file_data
-                    .iter()
-                    .position(|e| matches!(e, Entry::Block(_)))
-                    .unwrap_or(file_data.len())
-            });
-            file_data.insert(at, Entry::Block(block));
-        }
+        // A block left empty by this edit goes (one that was empty stays).
+        file_data.retain(|e| match e {
+            Entry::Block(b)
+                if b.name.eq_ignore_ascii_case("connections") && b.entries.is_empty() =>
+            {
+                self.file_data.contains(e)
+            }
+            _ => true,
+        });
         Self {
             file_data,
             ..self.clone()
@@ -184,17 +224,23 @@ impl EntityObject {
     }
 }
 
-/// True if an output's `target` text means the entity named `name`:
-/// names compare without regard to case, and a target ending in `*`
-/// matches every name starting with what comes before it, as in the game.
+/// True if an output's `target` text means the entity named `name`, as
+/// the game decides: letters compare without regard to case, and a `*`
+/// matches everything from there on (so `door*` and `do*r` both match
+/// every name starting with "do").
 pub fn target_matches(target: &str, name: &str) -> bool {
     let target = target.trim();
-    match target.strip_suffix('*') {
-        Some(prefix) => name
-            .to_ascii_lowercase()
-            .starts_with(&prefix.to_ascii_lowercase()),
-        None => target.eq_ignore_ascii_case(name),
+    let mut name_chars = name.chars();
+    for t in target.chars() {
+        if t == '*' {
+            return true;
+        }
+        match name_chars.next() {
+            Some(n) if n.eq_ignore_ascii_case(&t) => {}
+            _ => return false,
+        }
     }
+    name_chars.next().is_none()
 }
 
 /// True for the game's special targets (`!player`, `!self`, `!activator`,
@@ -257,12 +303,84 @@ mod tests {
         assert_eq!(plain.with_connections(&[]), plain);
     }
 
+    /// An entity whose connections block holds `lines` (output, value).
+    fn with_lines(lines: &[(&str, &str)]) -> EntityObject {
+        let mut e = EntityObject::point("logic_relay", Vec3::ZERO, &[]);
+        let mut block = Block::new("Connections");
+        for (o, v) in lines {
+            block.push_pair(*o, *v);
+        }
+        e.file_data.push(Entry::Block(block));
+        e
+    }
+
+    #[test]
+    fn untouched_lines_come_back_exactly() {
+        // Regression: an edit rewrote every line (rounding delays, turning
+        // ESC into commas, moving unreadable lines, renaming the block).
+        let e = with_lines(&[
+            ("OnTrigger", "a,Open,,0.001,-1"),
+            ("OnTrigger", "b\u{1b}Close\u{1b}x,y\u{1b}0.125\u{1b}1"),
+            ("Junk", "not readable"),
+            ("OnTrigger", " c , Toggle,,2.996,-1"),
+        ]);
+        assert_eq!(e.with_connections(&e.connections()), e);
+        // Changing the second keeps the others as they were.
+        let mut changed = e.connections();
+        changed[1].delay = 5.0;
+        let after = e.with_connections(&changed);
+        let Some(Entry::Block(b)) = after.file_data.last() else {
+            panic!("block kept");
+        };
+        assert_eq!(b.name, "Connections");
+        assert_eq!(
+            b.entries[0],
+            Entry::Pair("OnTrigger".into(), "a,Open,,0.001,-1".into())
+        );
+        assert_eq!(
+            b.entries[2],
+            Entry::Pair("Junk".into(), "not readable".into())
+        );
+        assert_eq!(b.entries.len(), 4);
+        // Removing the first and adding one at the end.
+        let mut fewer = e.connections();
+        fewer.remove(0);
+        fewer.push(Connection::new("OnUser1", "d", "Kill"));
+        let after = e.with_connections(&fewer);
+        assert_eq!(after.connections(), fewer);
+    }
+
+    #[test]
+    fn lines_past_the_limit_are_kept_on_any_edit() {
+        // Regression: readable lines past the limit were deleted.
+        let lines: Vec<(String, String)> = (0..MAX_CONNECTIONS + 9)
+            .map(|i| ("OnTrigger".to_string(), format!("t{i},Kill,,0,-1")))
+            .collect();
+        let pairs: Vec<(&str, &str)> = lines
+            .iter()
+            .map(|(o, v)| (o.as_str(), v.as_str()))
+            .collect();
+        let e = with_lines(&pairs);
+        let mut all = e.connections();
+        assert_eq!(all.len(), MAX_CONNECTIONS);
+        all[0].delay = 1.0;
+        let after = e.with_connections(&all);
+        let Some(Entry::Block(b)) = after.file_data.last() else {
+            panic!("block kept");
+        };
+        assert_eq!(b.entries.len(), MAX_CONNECTIONS + 9);
+    }
+
     #[test]
     fn targets_match_names_and_wildcards() {
         assert!(target_matches("Door1", "door1"));
         assert!(target_matches("door*", "door_left"));
         assert!(!target_matches("door*", "lamp"));
         assert!(!target_matches("door1", "door10"));
+        // As in the game, a star anywhere ends the comparison.
+        assert!(target_matches("do*r", "dog"));
+        assert!(target_matches("*", "anything"));
+        assert!(!target_matches("door", "doo"));
         assert!(is_special_target("!player"));
         assert!(!is_special_target("player"));
     }
@@ -271,13 +389,16 @@ mod tests {
     fn delays_read_as_hammer_writes_them() {
         assert_eq!(format_delay(2.0), "2");
         assert_eq!(format_delay(0.5), "0.5");
-        assert_eq!(format_delay(-3.0), "0");
+        assert_eq!(format_delay(-3.0), "-3");
+        assert_eq!(format_delay(0.001), "0.001");
+        assert_eq!(format_delay(0.125), "0.125");
+        assert_eq!(format_delay(2.996), "2.996");
         assert_eq!(format_delay(f32::NAN), "0");
     }
 
     #[test]
     fn fuzz_odd_connection_lines_never_crash() {
-        let alphabet = b"ab,01.-\x1b!*x ";
+        let alphabet = b"ab,01.-\x1b!*x e9";
         let mut seed: u64 = 0xC0;
         for _ in 0..5000 {
             let text: String = (0..20)
@@ -289,10 +410,14 @@ mod tests {
                 })
                 .collect();
             if let Some(c) = Connection::parse("OnX", &text) {
+                // Whatever is read is written so it reads back the same.
                 assert_eq!(
-                    Connection::parse("OnX", &c.value()).map(|d| d.target),
-                    Some(c.target)
+                    Connection::parse("OnX", &c.value()),
+                    Some(c.clone()),
+                    "{text:?}"
                 );
+                let e = with_lines(&[("OnX", text.as_str())]);
+                assert_eq!(e.with_connections(&e.connections()), e);
             }
         }
     }
