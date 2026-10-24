@@ -248,6 +248,10 @@ pub struct ResolvedClass {
 
 /// How deep bases may include bases.
 const MAX_BASE_DEPTH: usize = 32;
+/// Most bases included in one class.
+const MAX_BASES: usize = 256;
+/// Most keyvalues, inputs or outputs a class gets with its bases.
+const MAX_RESOLVED_ITEMS: usize = 4096;
 
 impl Fgd {
     /// Adds or replaces a class.
@@ -284,6 +288,8 @@ impl Fgd {
             .iter()
             .filter_map(|n| self.classes.get(n))
             .filter(|c| c.kind != ClassKind::Base)
+            // The world itself: a map has exactly one, made by the editor.
+            .filter(|c| !c.name.eq_ignore_ascii_case("worldspawn"))
     }
 
     /// How many classes there are (base classes included).
@@ -294,6 +300,18 @@ impl Fgd {
     /// True if no class was read.
     pub fn is_empty(&self) -> bool {
         self.classes.is_empty() && self.bases.is_empty()
+    }
+
+    /// The size of class `name` from its own or a base's `size(...)`
+    /// helper, without working out its keys (cheap, for every class).
+    pub fn size_of(&self, name: &str) -> Option<([f32; 3], [f32; 3])> {
+        let class = self.class(name)?;
+        if let Some(helper) = class.helper("size") {
+            return size_of(helper);
+        }
+        let mut chain = Vec::new();
+        self.collect_bases(class, 0, &mut chain);
+        chain.iter().rev().find_map(|c| size_of(c.helper("size")?))
     }
 
     /// The class called `name` with its bases' keys, inputs, outputs and
@@ -310,10 +328,15 @@ impl Fgd {
             outputs: Vec::new(),
             helpers: class.helpers.clone(),
         };
+        let (mut keys, mut inputs, mut outputs) = Default::default();
         for c in chain.iter().chain(std::iter::once(&class)) {
-            merge_by(&mut out.keys, &c.keys, |k| k.name.to_ascii_lowercase());
-            merge_by(&mut out.inputs, &c.inputs, |k| k.name.to_ascii_lowercase());
-            merge_by(&mut out.outputs, &c.outputs, |k| {
+            merge_by(&mut out.keys, &mut keys, &c.keys, |k| {
+                k.name.to_ascii_lowercase()
+            });
+            merge_by(&mut out.inputs, &mut inputs, &c.inputs, |k| {
+                k.name.to_ascii_lowercase()
+            });
+            merge_by(&mut out.outputs, &mut outputs, &c.outputs, |k| {
                 k.name.to_ascii_lowercase()
             });
         }
@@ -329,7 +352,7 @@ impl Fgd {
 
     /// Every base of `class`, deepest first, each once.
     fn collect_bases(&self, class: &EntityClass, depth: usize, out: &mut Vec<EntityClass>) {
-        if depth >= MAX_BASE_DEPTH {
+        if depth >= MAX_BASE_DEPTH || out.len() >= MAX_BASES {
             return;
         }
         let same = |a: &EntityClass, b: &EntityClass| {
@@ -352,12 +375,23 @@ impl Fgd {
 
 /// Adds `more` to `into`; an item whose key is already there replaces it
 /// in place.
-fn merge_by<T: Clone>(into: &mut Vec<T>, more: &[T], key: impl Fn(&T) -> String) {
+/// `index` holds where each key already is in `into`. At most
+/// [`MAX_RESOLVED_ITEMS`] are kept.
+fn merge_by<T: Clone>(
+    into: &mut Vec<T>,
+    index: &mut HashMap<String, usize>,
+    more: &[T],
+    key: impl Fn(&T) -> String,
+) {
     for item in more {
         let k = key(item);
-        match into.iter_mut().find(|i| key(i) == k) {
-            Some(existing) => *existing = item.clone(),
-            None => into.push(item.clone()),
+        match index.get(&k) {
+            Some(&at) => into[at] = item.clone(),
+            None if into.len() < MAX_RESOLVED_ITEMS => {
+                index.insert(k, into.len());
+                into.push(item.clone());
+            }
+            None => {}
         }
     }
 }

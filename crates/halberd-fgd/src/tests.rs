@@ -197,3 +197,35 @@ fn a_base_class_and_a_point_class_may_share_a_name() {
     assert_eq!(names, ["_light", "_distance"]);
     assert_eq!(fgd.len(), 2);
 }
+
+#[test]
+fn a_class_with_very_many_big_bases_resolves_quickly_and_capped() {
+    // Regression: a hostile file with 200 bases of 200 keys each took a
+    // minute to resolve.
+    let mut text = String::new();
+    for b in 0..200 {
+        text.push_str(&format!("@BaseClass = B{b} ["));
+        for k in 0..200 {
+            text.push_str(&format!(" k{b}_{k}(string)"));
+        }
+        text.push_str(" ]\n");
+    }
+    let bases: Vec<String> = (0..200).map(|b| format!("B{b}")).collect();
+    text.push_str(&format!("@PointClass base({}) = big []", bases.join(", ")));
+    let fgd = parse(&text, "big.fgd");
+    let started = std::time::Instant::now();
+    let big = fgd.resolved("big").unwrap();
+    assert!(started.elapsed().as_secs() < 5, "{:?}", started.elapsed());
+    assert_eq!(big.keys.len(), 4096, "capped");
+}
+
+#[test]
+fn worldspawn_is_never_offered_and_sizes_come_from_bases() {
+    let fgd = parse(
+        r#"@SolidClass = worldspawn [] @BaseClass size(-1 -1 -1, 1 1 1) = Small []
+           @PointClass base(Small) = tiny []"#,
+        "w.fgd",
+    );
+    assert!(fgd.placeable().all(|c| c.name != "worldspawn"));
+    assert_eq!(fgd.size_of("tiny"), Some(([-1.0; 3], [1.0; 3])));
+}
