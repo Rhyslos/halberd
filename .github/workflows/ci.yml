@@ -91,17 +91,26 @@ jobs:
 
   deny:
     name: Licenses and vulnerabilities
-    # cargo-deny's action runs in a Docker container, which has failed on
-    # the ubuntu-latest runners since they began moving to Ubuntu 26
-    # (2026-10-19). Kept on 24.04 until that settles.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
-        with:
-          command: check
+      # cargo-deny is built here rather than run from its Docker action, so
+      # a failure's reason shows on the pull request page (the action's
+      # output only reached the log).
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      - name: Check licenses, advisories, bans and sources
+        run: |
+          if ! cargo deny --all-features check > deny.log 2>&1; then
+            cat deny.log
+            grep -E '^error' -A3 deny.log | head -60 | while IFS= read -r line; do
+              echo "::error title=cargo-deny::${line}"
+            done
+            exit 1
+          fi
+          cat deny.log
 
   build:
     name: Build (${{ matrix.name }})
