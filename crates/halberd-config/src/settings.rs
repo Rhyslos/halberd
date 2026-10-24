@@ -58,7 +58,7 @@ pub struct EditorSettings {
     /// Whether WASD moves the camera while right mouse is held.
     /// `None` means the user has not been asked yet (first launch).
     pub wasd_movement: Option<bool>,
-    /// The unit lengths are shown and typed in (`"units"` or `"metres"`).
+    /// The unit lengths are shown and typed in (`"units"`, `"metres"` or `"feet"`).
     pub length_unit: LengthUnit,
     /// Whether a player-sized figure is shown in the viewport for scale.
     pub show_player_scale: bool,
@@ -277,6 +277,13 @@ mod tests {
         assert!(!metres.editor.show_player_scale);
         let text = toml::to_string(&metres).unwrap();
         assert!(text.contains("length_unit = \"metres\""), "{text}");
+        let feet: Settings = toml::from_str("[editor]\nlength_unit = \"feet\"\n").unwrap();
+        assert_eq!(feet.editor.length_unit, LengthUnit::Feet);
+        assert!(
+            toml::to_string(&feet)
+                .unwrap()
+                .contains("length_unit = \"feet\"")
+        );
     }
 
     #[test]

@@ -430,6 +430,7 @@ fn the_player_figure_is_drawn_and_hidden_behind_brushes() {
             Vec3::new(x + 16.0, y + 16.0, 72.0),
         ),
         eye_height: 64.0,
+        color: halberd_render::PLAYER_COLOR,
     };
     // In the open, beside the box: its top edge shows.
     let beside = figure(-160.0, 0.0);

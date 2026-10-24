@@ -17,7 +17,7 @@ use halberd_doc::Document;
 use halberd_geom::Aabb;
 use halberd_tools::{
     CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, Tool, ToolController,
-    ViewportInput, player_bounds,
+    ViewportInput,
 };
 
 mod draw_options;
@@ -26,6 +26,8 @@ mod gizmo;
 mod layout;
 mod panes;
 mod plan;
+mod player;
+mod readout;
 mod shape_ops;
 mod tools;
 
@@ -52,6 +54,8 @@ pub struct ViewportView {
     pub preview_shape: Vec<halberd_geom::Brush>,
     /// Where to draw the player figure for scale, if shown.
     pub player: Option<Aabb>,
+    /// Whether a player fits where the figure stands (to colour it).
+    pub player_fit: Option<halberd_tools::Fit>,
     /// Which view this is (0 to [`MAX_VIEWS`] - 1), so a renderer can keep
     /// an image for each.
     pub id: usize,
@@ -125,6 +129,10 @@ pub const VIEWPORT_LABEL: &str = "3D viewport";
 const PIVOT_COLOR: Color32 = Color32::from_rgb(255, 196, 64);
 /// Colour of the player figure's label (matches the figure).
 const PLAYER_LABEL_COLOR: Color32 = Color32::from_rgb(120, 190, 255);
+/// Label colour when a player only fits crouching.
+const PLAYER_CROUCH_LABEL_COLOR: Color32 = Color32::from_rgb(255, 170, 60);
+/// Label colour when a player doesn't fit.
+const PLAYER_BLOCKED_LABEL_COLOR: Color32 = Color32::from_rgb(255, 90, 80);
 /// Gap between the player figure and what it stands next to, in units.
 const PLAYER_GAP: f32 = 32.0;
 
@@ -142,6 +150,8 @@ pub struct ViewportPanel {
     camera_view: usize,
     /// Where the player figure stands this frame, the same in every view.
     player_at: Option<Aabb>,
+    /// Where the figure stands under the pointer, and whether it fits.
+    probe: player::PlayerProbe,
     tools: ToolController,
     grid_size: f32,
     left_was_held: bool,
@@ -178,6 +188,7 @@ impl ViewportPanel {
             active: 0,
             camera_view: 0,
             player_at: None,
+            probe: player::PlayerProbe::default(),
             tools: ToolController::new(options.grid_size),
             grid_size: options.grid_size,
             left_was_held: false,
@@ -309,10 +320,14 @@ impl ViewportPanel {
         }
         let active = self.active;
         let notes = self.update_tools(ui, &responses[active], rects[active], doc);
-        self.player_at = self.show_player.then(|| {
-            let camera = self.reference_camera();
-            player_bounds(player_feet(self.tools.preview(), doc, camera.position))
+        let pointer = responses[active].hover_pos().map(|p| {
+            let rect = rects[active];
+            (
+                Vec2::new(p.x - rect.min.x, p.y - rect.min.y),
+                Vec2::new(rect.width().max(1.0), rect.height().max(1.0)),
+            )
         });
+        self.place_player(doc, pointer);
         // Pointer movement already triggers redraws; only flying with a key
         // held needs frames without new input.
         if animating {
@@ -517,28 +532,6 @@ fn view_label(index: usize) -> String {
 
 /// Outline of the view that gets the input, when there are several.
 const ACTIVE_VIEW_COLOR: Color32 = Color32::from_rgb(90, 120, 170);
-
-/// Where the player figure stands: beside the box being drawn, else beside
-/// the selection, on its floor and on the side facing the camera; with
-/// neither, at the origin.
-fn player_feet(preview: Option<Aabb>, doc: &Document, camera: Vec3) -> Vec3 {
-    let Some(b) = preview.or_else(|| doc.selection_bounds()) else {
-        return Vec3::ZERO;
-    };
-    let reach = PLAYER_GAP + halberd_tools::PLAYER_WIDTH * 0.5;
-    let c = b.center();
-    let sides = [
-        Vec3::new(b.max.x + reach, c.y, b.min.z),
-        Vec3::new(b.min.x - reach, c.y, b.min.z),
-        Vec3::new(c.x, b.max.y + reach, b.min.z),
-        Vec3::new(c.x, b.min.y - reach, b.min.z),
-    ];
-    let distance = |p: &Vec3| p.truncate().distance_squared(camera.truncate());
-    sides
-        .into_iter()
-        .min_by(|a, b| distance(a).total_cmp(&distance(b)))
-        .unwrap_or(Vec3::ZERO)
-}
 
 #[cfg(test)]
 mod tests;

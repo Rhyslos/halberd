@@ -25,6 +25,7 @@
 //! [`ToolAction`] rather than changing the map themselves.
 
 mod camera;
+mod clearance;
 mod controller;
 mod elements;
 mod gizmo;
@@ -35,6 +36,9 @@ mod tool;
 
 pub use camera::{
     Camera, DEFAULT_FOV_Y, FAR_PLANE, MAP_EDGE, MAX_PITCH, NEAR_PLANE, Ray, WORLD_LIMIT, WORLD_UP,
+};
+pub use clearance::{
+    Clearance, Fit, PLAYER_CROUCH_HEIGHT, PLAYER_STEP_HEIGHT, clearance, floor_under,
 };
 pub use controller::{
     CameraController, CameraMode, CameraState, DEFAULT_FLY_SPEED, FAST_MULTIPLIER, FLY_SPEED_RANGE,

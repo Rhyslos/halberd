@@ -111,6 +111,10 @@ Each frame, for each view:
 
 Rendering sits behind the `ViewportRenderer` trait, so the panel runs in tests with no GPU. See [decision 0008](docs/decisions/0008-viewport-rendering-and-camera.md).
 
+### Scale
+
+The player figure's place and clearance are worked out by the viewport panel each frame (`halberd_tools::clearance`, cached while the figure and map stay the same) and drawn by the renderer in a colour for whether a player fits ([decision 0026](docs/decisions/0026-scale-tools.md)).
+
 ## Opening and saving maps
 
 1. **File menu** (`halberd-ui`): the workbench asks "save changes?" if needed, then returns an action (Open, Save, Save As, Quit).

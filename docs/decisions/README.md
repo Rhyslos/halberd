@@ -32,3 +32,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0023](0023-materials.md) | Materials: reading textures, the browser and per-face materials | Accepted |
 | [0024](0024-props.md) | Props: reading models, the prop browser and placing props | Accepted |
 | [0025](0025-basic-entities.md) | Basic entities: spawn points, lights, the sun and the sky | Accepted |
+| [0026](0026-scale-tools.md) | GMod scale tools: player clearance and size readouts | Accepted |

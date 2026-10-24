@@ -29,11 +29,7 @@ fn length_field(
 ) -> Option<f32> {
     let mut value = unit.from_units(f64::from(units));
     let field = egui::DragValue::new(&mut value)
-        .speed(if unit == LengthUnit::Metres {
-            0.01
-        } else {
-            1.0
-        })
+        .speed(unit.drag_speed())
         .range(unit.from_units(f64::from(range.0))..=unit.from_units(f64::from(range.1)))
         .fixed_decimals(unit.decimals())
         .suffix(unit.suffix())
