@@ -4,7 +4,7 @@
 //! with the two ends marked, and a banner offers to fly to it or hide it.
 
 use super::ViewportPanel;
-use egui::{Align2, Color32, FontId, Painter, Pos2, Rect, Stroke, Ui, UiBuilder, vec2};
+use egui::{Align2, Color32, FontId, Painter, Pos2, Rect, Stroke, Ui, vec2};
 use glam::{Vec2, Vec3};
 use halberd_geom::Aabb;
 use halberd_tools::{Camera, NEAR_PLANE};
@@ -55,6 +55,18 @@ impl ViewportPanel {
             .map(|l| l.points.as_slice())
     }
 
+    /// True if the last compile found a leak path (shown or hidden).
+    pub fn has_leak(&self) -> bool {
+        self.leak.is_some()
+    }
+
+    /// Shows or hides the leak path, if there is one.
+    pub fn set_leak_shown(&mut self, shown: bool) {
+        if let Some(leak) = &mut self.leak {
+            leak.shown = shown;
+        }
+    }
+
     /// Points every view at the whole leak path.
     pub fn go_to_leak(&mut self) {
         let Some(path) = &self.leak else {
@@ -80,40 +92,53 @@ impl ViewportPanel {
         if self.leak_path().is_none() {
             return;
         }
-        let area = Rect::from_center_size(
-            Pos2::new(full.center().x, full.bottom() - 30.0),
-            vec2(full.width().min(560.0), 28.0),
-        );
-        ui.painter()
-            .rect_filled(area, 4.0, Color32::from_rgba_unmultiplied(90, 16, 16, 230));
-        let mut child = ui.new_child(
-            UiBuilder::new()
-                .max_rect(area.shrink2(vec2(8.0, 2.0)))
-                .layout(egui::Layout::left_to_right(egui::Align::Center)),
-        );
-        child.label(
-            egui::RichText::new(LEAK_BANNER_TEXT)
-                .strong()
-                .color(LABEL_COLOR),
-        );
-        child
-            .label(
-                egui::RichText::new("(red line: from outside to the leaking entity)")
-                    .small()
-                    .color(Color32::from_gray(210)),
-            )
-            .on_hover_text(
-                "Light and visibility can't be worked out until the map is sealed. Follow the \
-                 red line from the outside in: where it passes through a wall, there is a gap \
-                 to close (or an entity sitting outside the map).",
-            );
-        if child.button(GO_TO_LEAK_LABEL).clicked() {
+        // Its own layer (sized to fit), so clicks on it never reach the
+        // view underneath.
+        let mut go = false;
+        let mut hide = false;
+        egui::Area::new(ui.id().with("halberd_leak_banner"))
+            .fixed_pos(Pos2::new(full.center().x, full.bottom() - 16.0))
+            .pivot(Align2::CENTER_BOTTOM)
+            .constrain_to(full)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(90, 16, 16, 235))
+                    .corner_radius(4.0)
+                    .inner_margin(egui::Margin::symmetric(8, 4))
+                    .show(ui, |ui| {
+                        ui.set_max_width(full.width() - 16.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                egui::RichText::new(LEAK_BANNER_TEXT)
+                                    .strong()
+                                    .color(LABEL_COLOR),
+                            );
+                            ui.label(
+                                egui::RichText::new(
+                                    "(red line: from outside to the leaking entity)",
+                                )
+                                .small()
+                                .color(Color32::from_gray(210)),
+                            )
+                            .on_hover_text(
+                                "Light and visibility can't be worked out until the map is \
+                                 sealed. Follow the red line from the outside in: where it passes \
+                                 through a wall, there is a gap to close (or an entity sitting \
+                                 outside the map).",
+                            );
+                            go = ui.button(GO_TO_LEAK_LABEL).clicked();
+                            hide = ui
+                                .button(HIDE_LEAK_LABEL)
+                                .on_hover_text("View → Show leak path brings it back")
+                                .clicked();
+                        });
+                    });
+            });
+        if go {
             self.go_to_leak();
         }
-        if child.button(HIDE_LEAK_LABEL).clicked()
-            && let Some(leak) = &mut self.leak
-        {
-            leak.shown = false;
+        if hide {
+            self.set_leak_shown(false);
         }
     }
 }

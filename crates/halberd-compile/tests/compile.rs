@@ -263,3 +263,19 @@ fn a_leak_check_runs_vbsp_alone_and_installs_nothing() {
     assert_eq!(result(&events).as_ref().unwrap().installed, None);
     assert!(!installed.exists());
 }
+
+#[test]
+fn an_old_leak_path_is_not_taken_for_a_new_compile() {
+    // Regression guard: a pointfile left by an earlier leak, then a map
+    // that is sealed (but fails later for another reason).
+    let (_dir, job) = setup("world { CRASH }");
+    std::fs::write(job.vmf.with_extension("lin"), "0 0 0\n64 0 0\n").unwrap();
+    let events = run(job, None);
+    assert!(result(&events).is_err());
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, CompileEvent::LeakPath(_))),
+        "the stale path was removed before compiling"
+    );
+}

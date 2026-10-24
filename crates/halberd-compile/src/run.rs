@@ -32,9 +32,9 @@ pub enum CompileEvent {
     },
     /// A line of the tool's output.
     Line(String, LineKind),
-    /// The map leaks; this is the path vbsp found from an entity inside
-    /// the map out to the void (the gap is where it crosses the map's
-    /// outer wall).
+    /// The map leaks; this is the path vbsp found from outside the map
+    /// (first point) to the leaking entity (last point). The gap is where
+    /// it crosses the map's outer wall.
     LeakPath(Vec<[f32; 3]>),
     /// The compile is over.
     Finished(Result<Compiled, CompileError>),
@@ -154,9 +154,9 @@ fn run(
             label: step.label,
         });
         if let Err(e) = run_step(job, step, stop, report) {
-            if e == CompileError::Leaked
-                && let Some(points) = crate::read_pointfile(&job.vmf)
-            {
+            // A leak, or an area portal leak (which vbsp reports in other
+            // words), leaves a pointfile.
+            if let Some(points) = crate::read_pointfile(&job.vmf) {
                 report(CompileEvent::LeakPath(points));
             }
             return Err(e);

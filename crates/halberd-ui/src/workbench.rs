@@ -8,7 +8,8 @@ use crate::panel::Panel;
 use crate::panels::{about_contents, placeholder, properties_contents, scene_contents};
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
 pub use compile::{
-    COMPILE_LABEL, COMPILE_SHORTCUT, CompileLine, LEAK_CHECK_LABEL, STOP_COMPILE_LABEL,
+    COMPILE_LABEL, COMPILE_SHORTCUT, CompileLine, LEAK_CHECK_LABEL, SHOW_LEAK_LABEL,
+    STOP_COMPILE_LABEL,
 };
 use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
@@ -483,6 +484,7 @@ impl Workbench {
             {
                 self.viewport.set_player_follows(follows);
             }
+            self.leak_menu_item(ui);
         });
         if ui
             .button(KEYBINDS_TITLE)

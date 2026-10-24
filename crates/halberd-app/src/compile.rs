@@ -6,7 +6,9 @@
 
 use eframe::egui;
 use halberd_assets::{FoundBy, GmodInstall};
-use halberd_compile::{CompileEvent, CompileJob, CompileRunner, Launcher, LineKind, Profile};
+use halberd_compile::{
+    CompileError, CompileEvent, CompileJob, CompileRunner, Launcher, LineKind, Profile,
+};
 use halberd_ui::{CompileLine, Workbench};
 use std::path::{Path, PathBuf};
 
@@ -186,6 +188,7 @@ impl CompileSession {
                     };
                     workbench.compile_finished(Ok(note));
                 }
+                CompileEvent::Finished(Err(CompileError::Leaked)) => workbench.compile_found_leak(),
                 CompileEvent::Finished(Err(why)) => {
                     workbench.compile_finished(Err(why.to_string()))
                 }

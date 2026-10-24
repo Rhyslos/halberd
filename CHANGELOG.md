@@ -6,7 +6,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
-- **Leaks shown in the views.** When a compile finds that the map isn't sealed, every view draws a red line from the empty space outside the map, through the gap, to the entity that leaks, with both ends labelled. A banner offers **Go to leak** (points the views at the line) and **Hide leak**. Where the line passes through a wall is where the gap is. **File → Check for leaks** finds out whether the map is sealed without compiling all of it. The line goes away once a compile succeeds or another map is opened.
+- **Leaks shown in the views.** When a compile finds that the map isn't sealed, every view draws a red line from the empty space outside the map, through the gap, to the entity that leaks, with both ends labelled. A banner offers **Go to leak** (points the views at the line) and **Hide leak** (**View → Show leak path** brings it back). Where the line passes through a wall is where the gap is. **File → Check for leaks** finds out whether the map is sealed without compiling all of it. The line goes away once a compile succeeds or another map is opened.
 
 - **Compile and play.** **File → Compile and play** (F9) compiles a quick test of the map with Garry's Mod's own tools (fast visibility and lighting) and starts the game on it. Unsaved changes are included, and your map file isn't touched. A small window shows each step with a **Stop compiling** button; the compilers' output goes to the Console, with warnings and errors coloured. A leak stops the compile with an explanation, and a map of the same name that Halberd didn't make (such as a stock map) is never replaced. Needs Garry's Mod on Windows, which includes the compile tools.
 

@@ -161,3 +161,46 @@ fn a_path_too_short_or_broken_is_not_shown() {
         .any(|e| e.message.starts_with("The map has a leak"));
     assert!(quiet, "no warning without a line to show");
 }
+
+#[test]
+fn a_leak_found_by_a_check_is_its_answer_not_a_failure() {
+    let mut wb = Workbench::new(info(), None);
+    wb.leak_check_started("my_map");
+    wb.set_leak_path(&PATH);
+    wb.compile_found_leak();
+    assert!(!wb.is_compiling());
+    let last = wb.console().entries().last().unwrap().clone();
+    assert_eq!(last.level, LogLevel::Warning);
+    assert!(last.message.starts_with("Leak found"), "{}", last.message);
+    assert!(last.message.contains("red line") && !last.message.contains("failed"));
+
+    // A compile without a path to show says to look for the gap.
+    let mut wb = Workbench::new(info(), None);
+    wb.compile_started("my_map");
+    wb.compile_found_leak();
+    let last = wb.console().entries().last().unwrap().clone();
+    assert_eq!(last.level, LogLevel::Error);
+    assert!(
+        last.message
+            .starts_with("The compile stopped: the map leaks")
+    );
+    assert!(last.message.contains("didn't say where"));
+}
+
+#[test]
+fn a_hidden_leak_comes_back_from_the_view_menu() {
+    let mut h = harness_with_actions(Workbench::new(info(), None));
+    h.run_steps(3);
+    h.state_mut().0.set_leak_path(&PATH);
+    h.run_steps(3);
+    h.get_by_label(HIDE_LEAK_LABEL).click();
+    h.run_steps(3);
+    assert!(h.state().0.viewport().leak_path().is_none());
+    assert!(h.state().0.viewport().has_leak());
+    h.get_by_label("View").click();
+    h.run_steps(3);
+    h.get_by_label(SHOW_LEAK_LABEL).click();
+    h.run_steps(3);
+    assert!(h.state().0.viewport().leak_path().is_some());
+    assert!(h.query_by_label(LEAK_BANNER_TEXT).is_some());
+}

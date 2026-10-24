@@ -17,6 +17,8 @@ pub const COMPILE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::
 pub const COMPILE_LABEL: &str = "Compile and play";
 /// File → Check for leaks.
 pub const LEAK_CHECK_LABEL: &str = "Check for leaks";
+/// View → show the leak path (after hiding it).
+pub const SHOW_LEAK_LABEL: &str = "Show leak path";
 /// The button that stops a compile.
 pub const STOP_COMPILE_LABEL: &str = "Stop compiling";
 
@@ -127,6 +129,49 @@ impl Workbench {
             (Err(why), true) => {
                 self.push_entry(LogEntry::error(format!("The leak check failed: {why}")));
             }
+        }
+    }
+
+    /// The compile or leak check stopped because the map leaks. For a
+    /// check that is its answer, not a failure.
+    pub fn compile_found_leak(&mut self) {
+        let progress = self.compiling.take();
+        let took = progress
+            .as_ref()
+            .map_or(0, |p| p.started.elapsed().as_secs());
+        let check = progress.is_some_and(|p| p.check);
+        let shown = self.viewport.leak_path().is_some();
+        let where_ = if shown {
+            "Follow the red line in the views from outside to the gap, close it"
+        } else {
+            "The compiler didn't say where; look for a gap in the outer walls (or an entity \
+             outside them), close it"
+        };
+        let message = if check {
+            format!("Leak found (checked in {took} s). {where_} and check again.")
+        } else {
+            format!("The compile stopped: the map leaks. {where_} and compile again.")
+        };
+        self.push_entry(if check {
+            LogEntry::warning(message)
+        } else {
+            LogEntry::error(message)
+        });
+    }
+
+    /// The View menu's entry that shows a hidden leak path again.
+    pub(super) fn leak_menu_item(&mut self, ui: &mut Ui) {
+        let mut shown = self.viewport.leak_path().is_some();
+        if ui
+            .add_enabled(
+                self.viewport.has_leak(),
+                egui::Checkbox::new(&mut shown, SHOW_LEAK_LABEL),
+            )
+            .on_hover_text("The red line from the last compile that found a leak")
+            .on_disabled_hover_text("No leak found by the last compile")
+            .changed()
+        {
+            self.viewport.set_leak_shown(shown);
         }
     }
 
