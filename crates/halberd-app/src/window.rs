@@ -6,6 +6,7 @@ use crate::files;
 use crate::gpu::GpuViewport;
 use crate::logging::LogBook;
 use crate::preferences::PreferenceSaver;
+use crate::props::PropFeed;
 use eframe::egui;
 use halberd_assets::{GameContent, GmodInstall, MaterialLoader};
 use halberd_config::{Settings, SettingsStore};
@@ -51,6 +52,8 @@ struct HalberdApp {
     content: Option<Arc<GameContent>>,
     /// Reads material pictures for the browser, once content is mounted.
     materials: Option<MaterialLoader>,
+    /// Reads models for the prop browser and the views.
+    props: Option<PropFeed>,
 }
 
 impl eframe::App for HalberdApp {
@@ -60,9 +63,14 @@ impl eframe::App for HalberdApp {
             self.workbench.console_mut().push_logged(entry);
         }
         match self.loading.as_ref().map(ContentLoader::poll) {
-            Some(Mounting::Ready(Mounted { content, materials })) => {
+            Some(Mounting::Ready(Mounted {
+                content,
+                materials,
+                models,
+            })) => {
                 self.loading = None;
                 self.workbench.materials_mut().set_names(materials);
+                self.workbench.props_mut().set_names(models);
                 self.workbench.push_console(content.summary());
                 for problem in content.problems() {
                     self.workbench.push_warning(problem.clone());
@@ -72,6 +80,10 @@ impl eframe::App for HalberdApp {
                 let content = Arc::new(content);
                 let wake = ctx.clone();
                 self.materials = Some(MaterialLoader::new(Arc::clone(&content), move || {
+                    wake.request_repaint();
+                }));
+                let wake = ctx.clone();
+                self.props = Some(PropFeed::new(Arc::clone(&content), move || {
                     wake.request_repaint();
                 }));
                 self.content = Some(content);
@@ -103,6 +115,9 @@ impl eframe::App for HalberdApp {
                     .add_picture(&picture.name, result);
             }
         }
+        if let Some(feed) = &mut self.props {
+            feed.deliver(&mut self.workbench, self.gpu.as_mut());
+        }
         // The window's close button: with unsaved changes, ask first.
         let close_requested = ctx.input(|i| i.viewport().close_requested());
         if close_requested && !self.allow_close && self.workbench.is_modified() {
@@ -129,6 +144,9 @@ impl eframe::App for HalberdApp {
                     loader.request(&name, MATERIAL_TEXTURE_SIZE);
                 }
             }
+        }
+        if let Some(feed) = &mut self.props {
+            feed.ask(&mut self.workbench, self.gpu.as_mut());
         }
         let title = self.workbench.window_title();
         if title != self.title {
@@ -242,6 +260,7 @@ pub(crate) fn run(
                     loading,
                     content: None,
                     materials: None,
+                    props: None,
                 }))
             }),
         )

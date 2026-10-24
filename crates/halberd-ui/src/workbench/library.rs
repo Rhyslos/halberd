@@ -1,10 +1,17 @@
-//! The Library panel: the material browser once the game's content is
-//! read, and what the workbench does when a material is picked or applied.
+//! The Library panel: the material and prop browsers once the game's
+//! content is read, and what the workbench does when something is picked.
 
 use super::Workbench;
-use crate::materials::{BrowserAction, MaterialBrowser};
+use crate::materials::{AssetBrowser, BrowserAction};
 use crate::panels::placeholder;
 use egui::Ui;
+use halberd_tools::PropChoice;
+use std::collections::HashMap;
+
+/// Label of the Library's materials tab.
+pub const MATERIALS_TAB: &str = "Materials";
+/// Label of the Library's props tab.
+pub const PROPS_TAB: &str = "Props";
 
 /// How far mounting the game's content has got, for the Library panel.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -18,49 +25,138 @@ pub enum ContentStatus {
     Mounted(String),
 }
 
-/// Draws the Library panel. What the user did in the browser is put in
-/// `action`, for the workbench to carry out once the panels are drawn.
-pub(super) fn show(
-    ui: &mut Ui,
-    materials: &mut MaterialBrowser,
-    status: &ContentStatus,
-    can_apply: bool,
-    action: &mut Option<BrowserAction>,
-) {
-    if !materials.is_empty() {
-        if let Some(done) = materials.show(ui, can_apply) {
-            *action = Some(done);
+/// The Library panel's state.
+pub(super) struct Library {
+    pub(super) materials: AssetBrowser,
+    pub(super) props: AssetBrowser,
+    /// True while the props tab is shown.
+    showing_props: bool,
+    /// What is known of each model read (lower-case name), for placing.
+    prop_infos: HashMap<String, PropChoice>,
+    /// A prop picked before its model was read; placed once it is.
+    pending_prop: Option<String>,
+    pub(super) status: ContentStatus,
+}
+
+impl Default for Library {
+    fn default() -> Self {
+        Self {
+            materials: AssetBrowser::materials(),
+            props: AssetBrowser::props(),
+            showing_props: false,
+            prop_infos: HashMap::new(),
+            pending_prop: None,
+            status: ContentStatus::NoGame,
         }
-        return;
     }
-    let content = match status {
-        ContentStatus::NoGame => "Garry's Mod was not found, so its materials and models can't be \
-             shown. Start Halberd with --gmod-dir to point at it."
-            .to_string(),
-        ContentStatus::Mounting => "Reading Garry's Mod's content…".to_string(),
-        ContentStatus::Mounted(summary) => summary.clone(),
-    };
-    placeholder(
-        ui,
-        "Props, materials and entities",
-        &format!("{content}\n\nMaterials appear here once the game's content is read."),
-    );
+}
+
+/// What the user did in the Library.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum LibraryAction {
+    Material(BrowserAction),
+    Prop(BrowserAction),
+}
+
+impl Library {
+    /// Draws the panel. What the user did is put in `action`, for the
+    /// workbench to carry out once the panels are drawn.
+    pub(super) fn show(
+        &mut self,
+        ui: &mut Ui,
+        can_apply: bool,
+        action: &mut Option<LibraryAction>,
+    ) {
+        if self.materials.is_empty() && self.props.is_empty() {
+            let content = match &self.status {
+                ContentStatus::NoGame => "Garry's Mod was not found, so its materials and models \
+                     can't be shown. Start Halberd with --gmod-dir to point at it."
+                    .to_string(),
+                ContentStatus::Mounting => "Reading Garry's Mod's content…".to_string(),
+                ContentStatus::Mounted(summary) => summary.clone(),
+            };
+            placeholder(
+                ui,
+                "Props, materials and entities",
+                &format!(
+                    "{content}\n\nMaterials and props appear here once the game's content is read."
+                ),
+            );
+            return;
+        }
+        ui.horizontal(|ui| {
+            if ui
+                .selectable_label(!self.showing_props, MATERIALS_TAB)
+                .clicked()
+            {
+                self.showing_props = false;
+            }
+            if ui.selectable_label(self.showing_props, PROPS_TAB).clicked() {
+                self.showing_props = true;
+            }
+        });
+        ui.separator();
+        if self.showing_props {
+            if let Some(done) = self.props.show(ui, can_apply) {
+                *action = Some(LibraryAction::Prop(done));
+            }
+        } else if let Some(done) = self.materials.show(ui, can_apply) {
+            *action = Some(LibraryAction::Material(done));
+        }
+    }
 }
 
 impl Workbench {
     /// The material browser, for handing it names and pictures.
-    pub fn materials_mut(&mut self) -> &mut MaterialBrowser {
-        &mut self.materials
+    pub fn materials_mut(&mut self) -> &mut AssetBrowser {
+        &mut self.library.materials
+    }
+
+    /// The prop browser, for handing it model names and pictures.
+    pub fn props_mut(&mut self) -> &mut AssetBrowser {
+        &mut self.library.props
+    }
+
+    /// Tells the Library what a model is like once it has been read, so
+    /// it can be placed. A prop picked while it was being read is chosen
+    /// for the Place tool now.
+    pub fn add_prop_info(&mut self, prop: PropChoice) {
+        let key = prop.model.to_ascii_lowercase();
+        if self.library.pending_prop.as_deref() == Some(key.as_str()) {
+            self.library.pending_prop = None;
+            self.viewport.tools_mut().set_prop(Some(prop.clone()));
+        }
+        self.library.prop_infos.insert(key, prop);
     }
 
     /// Tells the Library panel how far mounting the game's content has got.
     pub fn set_content_status(&mut self, status: ContentStatus) {
-        self.content_status = status;
+        self.library.status = status;
     }
 
     /// What the Library panel says about the game's content.
     pub fn content_status(&self) -> &ContentStatus {
-        &self.content_status
+        &self.library.status
+    }
+
+    /// Carries out what the user did in the Library.
+    pub(super) fn library_action(&mut self, action: LibraryAction) {
+        match action {
+            LibraryAction::Material(action) => self.browser_action(action),
+            LibraryAction::Prop(BrowserAction::Pick(name) | BrowserAction::Apply(name)) => {
+                let key = name.to_ascii_lowercase();
+                match self.library.prop_infos.get(&key) {
+                    Some(prop) => {
+                        let prop = prop.clone();
+                        self.library.pending_prop = None;
+                        self.viewport.tools_mut().set_prop(Some(prop));
+                    }
+                    // Its model is still being read (its picture is on the
+                    // way); it is chosen when it arrives.
+                    None => self.library.pending_prop = Some(key),
+                }
+            }
+        }
     }
 
     /// Carries out what the user did in the material browser: a picked

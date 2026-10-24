@@ -36,3 +36,38 @@ impl Document {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{Command, Document, EntityObject};
+    use glam::Vec3;
+    use halberd_geom::Aabb;
+
+    #[test]
+    fn a_prop_is_picked_and_framed_by_its_models_box_once_known() {
+        let mut doc = Document::new();
+        let prop = EntityObject::point(
+            "prop_static",
+            Vec3::new(0.0, 0.0, 0.0),
+            &[("model", "models/lamppost.mdl")],
+        );
+        let command = Command::AddEntity(prop);
+        assert_eq!(command.describe(), "Place prop");
+        doc.execute(command).unwrap();
+        let id = doc.objects().next().unwrap().0;
+        // Aiming at the top of a tall lamp post misses the small marker…
+        let from = Vec3::new(0.0, -500.0, 150.0);
+        assert_eq!(doc.pick(from, Vec3::Y), None);
+        // …until the model's box is known (which is not an edit).
+        let revision = doc.revision();
+        doc.set_model_box(
+            "MODELS/LAMPPOST.MDL",
+            Aabb::from_corners(Vec3::new(-4.0, -4.0, 0.0), Vec3::new(4.0, 4.0, 176.0)),
+        );
+        assert_eq!(doc.pick(from, Vec3::Y).map(|(hit, _)| hit), Some(id));
+        assert_eq!(doc.bounds_of(id).unwrap().max.z, 176.0);
+        assert_eq!(doc.revision(), revision);
+        let light = Command::AddEntity(EntityObject::point("light", Vec3::ZERO, &[]));
+        assert_eq!(light.describe(), "Add light");
+    }
+}

@@ -4,7 +4,6 @@
 use crate::console::Console;
 use crate::keybinds::{KEYBINDS_TITLE, KeybindsViewer};
 use crate::layout::{default_layout, restore_or_default};
-use crate::materials::{BrowserAction, MaterialBrowser};
 use crate::panel::Panel;
 use crate::panels::{about_contents, placeholder, properties_contents, scene_contents};
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
@@ -13,7 +12,8 @@ use egui_dock::{DockArea, DockState, Style, TabViewer};
 use halberd_config::LengthUnit;
 use halberd_doc::{Command, Document};
 use halberd_tools::SelectMode;
-pub use library::ContentStatus;
+pub use library::{ContentStatus, MATERIALS_TAB, PROPS_TAB};
+use library::{Library, LibraryAction};
 
 /// Facts about the program shown in the window and the About box.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,10 +101,8 @@ pub struct Workbench {
     asking_to_save: Option<FileIntent>,
     /// A problem to show in a message box.
     error: Option<String>,
-    /// What the Library panel says about the game's content.
-    content_status: ContentStatus,
-    /// The material browser, in the Library panel.
-    materials: MaterialBrowser,
+    /// The Library panel: the material and prop browsers.
+    library: Library,
 }
 
 impl Workbench {
@@ -126,8 +124,7 @@ impl Workbench {
             file_path: None,
             asking_to_save: None,
             error: None,
-            content_status: ContentStatus::NoGame,
-            materials: MaterialBrowser::default(),
+            library: Library::default(),
         };
         if let Some(note) = note {
             workbench.push_warning(note);
@@ -281,7 +278,7 @@ impl Workbench {
         });
 
         let mut notes = Vec::new();
-        let mut browser_action = None;
+        let mut library_action = None;
         let mut viewer = PanelViewer {
             console: &mut self.console,
             viewport: &mut self.viewport,
@@ -289,9 +286,8 @@ impl Workbench {
             doc: &mut self.doc,
             notes: &mut notes,
             length_unit: self.length_unit,
-            content_status: &self.content_status,
-            materials: &mut self.materials,
-            browser_action: &mut browser_action,
+            library: &mut self.library,
+            library_action: &mut library_action,
         };
         DockArea::new(&mut self.dock)
             .style(Style::from_egui(ui.style().as_ref()))
@@ -302,8 +298,8 @@ impl Workbench {
         for note in notes {
             self.push_warning(note);
         }
-        if let Some(action) = browser_action {
-            self.browser_action(action);
+        if let Some(action) = library_action {
+            self.library_action(action);
         }
 
         let mut about_open = self.about_open;
@@ -471,9 +467,8 @@ struct PanelViewer<'a> {
     /// Messages for the Console, added after the panels are drawn.
     notes: &'a mut Vec<String>,
     length_unit: LengthUnit,
-    content_status: &'a ContentStatus,
-    materials: &'a mut MaterialBrowser,
-    browser_action: &'a mut Option<BrowserAction>,
+    library: &'a mut Library,
+    library_action: &'a mut Option<LibraryAction>,
 }
 
 impl TabViewer for PanelViewer<'_> {
@@ -532,13 +527,8 @@ impl TabViewer for PanelViewer<'_> {
                 self.notes.extend(notes);
             }
             Panel::Library => {
-                library::show(
-                    ui,
-                    self.materials,
-                    self.content_status,
-                    !self.doc.selection().is_empty(),
-                    self.browser_action,
-                );
+                let can_apply = !self.doc.selection().is_empty();
+                self.library.show(ui, can_apply, self.library_action);
             }
             Panel::Scene => scene_contents(ui, self.doc),
             Panel::Layers => placeholder(

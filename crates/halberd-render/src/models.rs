@@ -51,6 +51,18 @@ impl PropModel {
         Self { meshes }
     }
 
+    /// The smallest box around its corners (min, max), if it has any.
+    pub fn bounds(&self) -> Option<(glam::Vec3, glam::Vec3)> {
+        let mut points = self
+            .meshes
+            .iter()
+            .flat_map(|m| &m.vertices)
+            .map(|v| glam::Vec3::from(v.position))
+            .filter(|p| p.is_finite());
+        let first = points.next()?;
+        Some(points.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p))))
+    }
+
     /// How many triangles it has.
     pub fn triangle_count(&self) -> usize {
         self.meshes.iter().map(|m| m.indices.len() / 3).sum()
@@ -126,13 +138,18 @@ impl ModelCache {
         std::mem::take(&mut self.wanted)
     }
 
-    /// Model `name` arrived (`None`: it can't be shown).
-    pub(crate) fn arrived(&mut self, name: &str, model: Option<PropModel>) {
-        let known = match model {
+    /// Model `name` arrived (`None`: it can't be shown). Kept only if the
+    /// map's props asked for it (models read for other reasons, such as
+    /// browser pictures, are not kept).
+    pub(crate) fn arrived(&mut self, name: &str, model: Option<PropModel>) -> bool {
+        let Some(known) = self.known.get_mut(&name.to_ascii_lowercase()) else {
+            return false;
+        };
+        *known = match model {
             Some(model) => Known::Ready(model),
             None => Known::Missing,
         };
-        self.known.insert(name.to_ascii_lowercase(), known);
+        true
     }
 }
 
@@ -184,7 +201,10 @@ mod tests {
         cache.note_used(&doc);
         assert!(cache.take_wanted().is_empty());
         assert!(cache.get("models/crate.mdl").is_none());
-        cache.arrived("MODELS/CRATE.MDL", Some(PropModel::default()));
+        assert!(cache.arrived("MODELS/CRATE.MDL", Some(PropModel::default())));
         assert!(cache.get("models/crate.mdl").is_some());
+        // Models no prop asked for are not kept.
+        assert!(!cache.arrived("models/other.mdl", Some(PropModel::default())));
+        assert!(cache.get("models/other.mdl").is_none());
     }
 }

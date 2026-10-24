@@ -120,6 +120,11 @@ pub struct SceneGeometry {
     /// Outlines of selected brushes as a line list, drawn on top of
     /// everything so the selection is always visible.
     pub selected_edges: Vec<LineVertex>,
+    /// Outlines of props' triangles, shown only in the Wireframe mode
+    /// (solid props would look scribbled over).
+    pub prop_edges: Vec<LineVertex>,
+    /// The same for selected props, drawn on top in the Wireframe mode.
+    pub selected_prop_edges: Vec<LineVertex>,
 }
 
 impl SceneGeometry {

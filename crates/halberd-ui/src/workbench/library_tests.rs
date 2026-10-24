@@ -74,3 +74,56 @@ fn applying_with_nothing_selected_warns_instead() {
     assert_eq!(wb.viewport().tools().material(), Some(BRICK));
     assert!(face_materials(wb.document()).iter().all(|m| m != BRICK));
 }
+
+fn barrel() -> halberd_tools::PropChoice {
+    halberd_tools::PropChoice {
+        model: "models/props_c17/oildrum001.mdl".into(),
+        local: Aabb::from_corners(Vec3::new(-14.0, -14.0, 0.0), Vec3::new(14.0, 14.0, 46.0)),
+        static_prop: true,
+    }
+}
+
+#[test]
+fn picking_a_prop_starts_placing_it_once_its_model_is_read() {
+    let mut wb = Workbench::new(info(), None);
+    wb.materials_mut().set_names(vec![BRICK.to_string()]);
+    wb.props_mut()
+        .set_names(vec!["models/props_c17/oildrum001.mdl".to_string()]);
+    let mut h = harness_for(wb);
+    h.run();
+    h.get_by_label(PROPS_TAB).click();
+    h.run();
+    assert!(h.query_by_label("1 of 1 props").is_some());
+    h.get_by_label("models/props_c17/oildrum001.mdl").click();
+    h.run();
+    // Not read yet: nothing to place until it arrives.
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Select
+    );
+    h.state_mut().add_prop_info(barrel());
+    h.run();
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Place
+    );
+    assert!(h.query_by_label_contains(crate::PLACING_LABEL).is_some());
+    // Picking it again, now known, starts placing at once.
+    h.state_mut().viewport_mut().tools_mut().set_prop(None);
+    // The tile (the picked name is shown above the grid too).
+    h.query_all_by_label("models/props_c17/oildrum001.mdl")
+        .last()
+        .unwrap()
+        .click();
+    h.run();
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Place
+    );
+    h.get_by_label("Stop").click();
+    h.run();
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Select
+    );
+}

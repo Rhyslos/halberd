@@ -18,6 +18,8 @@ use halberd_doc::Document;
 use halberd_geom::Brush;
 use wgpu::util::DeviceExt;
 
+mod thumbnail;
+
 /// Colour format the viewport renders in: 8-bit RGBA, sRGB-encoded, so
 /// shaders work in linear colour and the GPU encodes on write.
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
@@ -125,6 +127,8 @@ struct SceneBuffers {
     faces: GpuList,
     edges: GpuList,
     selected_edges: GpuList,
+    prop_edges: GpuList,
+    selected_prop_edges: GpuList,
 }
 
 /// Vertices on the GPU, split over as many buffers as the GPU's size limit
@@ -324,10 +328,12 @@ impl ViewportRenderer {
     }
 
     /// Model `name` has been read (`None`: it can't be shown, and its props
-    /// stay marker boxes). The next frame redraws the map with it.
+    /// stay marker boxes). The next frame redraws the map with it. Models
+    /// no prop asked for (see [`Self::wanted_models`]) are not kept.
     pub fn add_model(&mut self, name: &str, model: Option<PropModel>) {
-        self.models.arrived(name, model);
-        self.scene.shows = None;
+        if self.models.arrived(name, model) {
+            self.scene.shows = None;
+        }
     }
 
     /// Materials whose textures the Textured mode wants and has not asked
@@ -373,6 +379,13 @@ impl ViewportRenderer {
                 device,
                 "halberd selection outlines",
                 &geometry.selected_edges,
+                2,
+            ),
+            prop_edges: GpuList::upload(device, "halberd prop outlines", &geometry.prop_edges, 2),
+            selected_prop_edges: GpuList::upload(
+                device,
+                "halberd selected prop outlines",
+                &geometry.selected_prop_edges,
                 2,
             ),
         };
@@ -528,6 +541,10 @@ impl ViewportRenderer {
             pass.set_vertex_buffer(0, self.axis_buffer.slice(..));
             pass.draw(0..self.axis_vertex_count, 0..1);
             self.scene.edges.draw(&mut pass);
+            let wireframe = params.mode == RenderMode::Wireframe;
+            if wireframe {
+                self.scene.prop_edges.draw(&mut pass);
+            }
             if let Some(lines) = &player {
                 pass.set_vertex_buffer(0, self.player_buffer.slice(..));
                 pass.draw(0..lines.len() as u32, 0..1);
@@ -535,6 +552,9 @@ impl ViewportRenderer {
             // On top of everything: the selection and the box being drawn.
             pass.set_pipeline(&self.overlay_pipeline);
             self.scene.selected_edges.draw(&mut pass);
+            if wireframe {
+                self.scene.selected_prop_edges.draw(&mut pass);
+            }
             if let Some(lines) = &preview {
                 pass.set_vertex_buffer(0, self.preview_buffer.slice(..));
                 pass.draw(0..lines.len() as u32, 0..1);

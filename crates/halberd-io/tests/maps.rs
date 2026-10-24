@@ -515,3 +515,42 @@ fn a_brush_split_in_two_saves_with_unique_ids() {
     let brushes = |d: &Document| d.objects().filter(|(_, o)| o.as_brush().is_some()).count();
     assert_eq!(brushes(&again), brushes(&doc));
 }
+
+#[test]
+fn a_placed_and_moved_prop_saves_as_hammer_writes_it_and_reads_back() {
+    use halberd_doc::EntityObject;
+    let mut doc = open(SAMPLE);
+    doc.execute(Command::AddEntity(EntityObject::point(
+        "prop_static",
+        Vec3::new(32.0, -16.0, 8.0),
+        &[
+            ("model", "models/props_c17/oildrum001.mdl"),
+            ("angles", "0 0 0"),
+        ],
+    )))
+    .unwrap();
+    let id = doc.objects().last().unwrap().0;
+    let prop = doc.get(id).unwrap().as_entity().unwrap().clone();
+    let moved = prop
+        .with_origin(Vec3::new(64.0, -16.0, 8.0))
+        .with_rotation(halberd_doc::rotation_of(Vec3::new(0.0, 90.0, 0.0)));
+    doc.execute(Command::TransformBrushes {
+        kind: TransformKind::Move,
+        brushes: Vec::new(),
+        shapes: Vec::new(),
+        entities: vec![(id, moved)],
+    })
+    .unwrap();
+    let text = saved_text(&doc);
+    let reopened = open(&text);
+    let prop = reopened
+        .objects()
+        .filter_map(|(_, o)| o.as_entity())
+        .find(|e| e.classname == "prop_static")
+        .expect("the prop is saved");
+    assert_eq!(prop.origin, Some(Vec3::new(64.0, -16.0, 8.0)));
+    assert_eq!(prop.setting("origin"), Some("64 -16 8"));
+    assert_eq!(prop.model(), Some("models/props_c17/oildrum001.mdl"));
+    assert_eq!(prop.setting("angles"), Some("0 90 0"));
+    assert!(prop.setting("id").is_some(), "given an id");
+}

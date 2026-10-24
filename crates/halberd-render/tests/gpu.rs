@@ -659,3 +659,41 @@ fn a_prop_shows_its_model_once_it_arrives_with_its_texture() {
         "the texture shows"
     );
 }
+
+#[test]
+fn a_thumbnail_shows_the_model_filling_the_picture() {
+    use halberd_mdl::example::{ExampleModel, box_mesh, model_files};
+    use halberd_render::PropModel;
+    let Some(gpu) = gpu() else { return };
+    let renderer = ViewportRenderer::new(&gpu.device, best_sample_count(&gpu.adapter));
+    let target = renderer.create_target(&gpu.device, [64, 64]);
+    let files = model_files(&ExampleModel {
+        materials: &["crate"],
+        meshes: &[box_mesh([0.0; 3], [8.0, 8.0, 40.0], 0)],
+        ..ExampleModel::default()
+    });
+    let model = halberd_mdl::Model::parse(&files.mdl, &files.vvd, &files.vtx).unwrap();
+    let pixels = renderer
+        .render_thumbnail(
+            &gpu.device,
+            &gpu.queue,
+            &target,
+            &PropModel::new(&model, &[]),
+        )
+        .unwrap();
+    assert_eq!(pixels.len(), 64 * 64 * 4);
+    let background = background_srgb();
+    let centre = &pixels[(32 * 64 + 32) * 4..][..3];
+    assert_ne!(centre, background.as_slice(), "the model is in the middle");
+    let corner = &pixels[..3];
+    assert_eq!(
+        corner,
+        background.as_slice(),
+        "the background shows around it"
+    );
+    assert!(
+        renderer
+            .render_thumbnail(&gpu.device, &gpu.queue, &target, &PropModel::default())
+            .is_none()
+    );
+}
