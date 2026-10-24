@@ -182,7 +182,7 @@ impl Frame {
             return None;
         }
         let size = size.max(Vec2::ONE);
-        let length = depth * 2.0 * (camera.fov_y * 0.5).tan() * GIZMO_ARM_POINTS / size.y;
+        let length = camera.units_per_point(pivot, size.y) * GIZMO_ARM_POINTS;
         Some(Self {
             pivot,
             length,
@@ -197,7 +197,12 @@ impl Frame {
 
     /// How directly the camera looks along `dir` (0: across, 1: along).
     fn facing(&self, dir: Vec3) -> f32 {
-        let view = (self.pivot - self.camera.position).normalize_or_zero();
+        // A flat view looks the same way everywhere.
+        let view = if self.camera.ortho.is_some() {
+            self.camera.forward()
+        } else {
+            (self.pivot - self.camera.position).normalize_or_zero()
+        };
         dir.dot(view).abs()
     }
 }

@@ -16,6 +16,8 @@
 //!   3, 4; 1 returns to Object), clicks pick corners, edges or faces of the
 //!   selected brushes, and the gizmo moves, rotates or scales them,
 //!   reshaping the brushes ([`halberd_geom::Brush::with_moved_points`]).
+//! - The six flat side views ([`SideCamera`], [`Side`]): Top, Bottom,
+//!   Front, Back, Left and Right, without perspective.
 //! - [`DocumentScene`]: what the camera and tools see of an open map.
 //!
 //! Input arrives as plain data ([`ViewportInput`], [`ToolInput`]), so
@@ -28,10 +30,11 @@ mod elements;
 mod gizmo;
 mod player;
 mod scene;
+mod side_view;
 mod tool;
 
 pub use camera::{
-    Camera, DEFAULT_FOV_Y, FAR_PLANE, MAX_PITCH, NEAR_PLANE, Ray, WORLD_LIMIT, WORLD_UP,
+    Camera, DEFAULT_FOV_Y, FAR_PLANE, MAP_EDGE, MAX_PITCH, NEAR_PLANE, Ray, WORLD_LIMIT, WORLD_UP,
 };
 pub use controller::{
     CameraController, CameraMode, CameraState, DEFAULT_FLY_SPEED, FAST_MULTIPLIER, FLY_SPEED_RANGE,
@@ -46,6 +49,7 @@ pub use gizmo::{
 };
 pub use player::{PLAYER_EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, player_bounds};
 pub use scene::DocumentScene;
+pub use side_view::{GRID_BEHIND, SIDE_VIEW_HEIGHT_RANGE, SIDE_VIEW_REACH, Side, SideCamera};
 pub use tool::{
     BOX_HEIGHT_RANGE, CLICK_SLOP, DEFAULT_BOX_HEIGHT, PlanPreview, SelectAfter, ShapeOp,
     ShapeOpOutcome, Tool, ToolAction, ToolController, ToolInput,

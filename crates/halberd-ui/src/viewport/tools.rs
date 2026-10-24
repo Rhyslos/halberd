@@ -1,7 +1,7 @@
 //! The viewport's left-mouse tools: reading their input, carrying out what
 //! they ask, and the tool switcher.
 
-use super::ViewportPanel;
+use super::{ViewportPanel, layout};
 use egui::{Align, Color32, Key, Layout, Modifiers, PointerButton, Rect, Ui, UiBuilder, vec2};
 use glam::Vec2;
 use halberd_doc::Document;
@@ -111,7 +111,8 @@ impl ViewportPanel {
         }
         // A left press while the right or middle button is moving the camera
         // belongs to the camera, not the tool.
-        let camera_busy = self.right_was_held || self.middle_was_held;
+        let pane = &self.panes[self.camera_view];
+        let camera_busy = pane.right_was_held || pane.middle_was_held;
         let pressed_here = response.is_pointer_button_down_on() && !camera_busy;
         // A click so quick that it went down and up within one frame (a
         // slow frame, or a touchpad tap) counts as held for this frame and
@@ -160,7 +161,24 @@ impl ViewportPanel {
             uniform,
             centered,
         };
-        let camera = *self.controller.camera();
+        let camera = self.active_camera();
+        let mut input = input;
+        // Drawing needs a floor to stand shapes on: the 3D view, or the
+        // Top or Bottom view.
+        if let layout::PaneView::Side(side) = self.panes[self.active].view
+            && !side.is_horizontal()
+            && self.tools.tool() == Tool::Box
+            && (!self.tools.is_drawing() || self.tools.is_drawing_plan())
+            && input.pressed
+        {
+            notes.push(format!(
+                "Shapes can't be drawn in the {} view yet: draw in the 3D view or the Top \
+                 view, then move them here.",
+                side.label()
+            ));
+            input.pressed = false;
+            input.held = false;
+        }
         let action = plan_action.or_else(|| self.tools.update(&input, &camera, doc));
         match action {
             Some(ToolAction::Select(id)) => doc.set_selection(id),
@@ -189,7 +207,8 @@ impl ViewportPanel {
     /// right button is held (flying uses W and S), Shift+W and Shift+S pick
     /// Move and Scale instead; R and T work either way.
     fn gizmo_keys(&mut self, ui: &Ui) {
-        let flying = self.right_was_held;
+        let pane = &self.panes[self.camera_view];
+        let flying = pane.view == layout::PaneView::Perspective && pane.right_was_held;
         let move_or_scale_ok = move |m: Modifiers| {
             if flying { m.shift_only() } else { m.is_none() }
         };

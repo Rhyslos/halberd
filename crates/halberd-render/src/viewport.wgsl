@@ -11,6 +11,9 @@ struct Frame {
     camera: vec4<f32>,
     // Grid spacings: minor, major, super; w = half the grid's width.
     grid: vec4<f32>,
+    // Where the grid lies: x = the axis it is flat across (0 X, 1 Y, 2 Z),
+    // y = its position along that axis, z = 1 to fade into the distance.
+    plane: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -22,8 +25,9 @@ struct GridOut {
     @location(0) world: vec2<f32>,
 };
 
-// One large square on the Z = 0 plane, drawn as two triangles. The grid
-// lines themselves are computed per pixel in the fragment shader.
+// One large square, flat across the axis `frame.plane` names (the ground,
+// Z = 0, in the 3D view), drawn as two triangles. The grid lines themselves
+// are computed per pixel in the fragment shader.
 @vertex
 fn grid_vs(@builtin(vertex_index) index: u32) -> GridOut {
     var corners = array<vec2<f32>, 6>(
@@ -31,8 +35,14 @@ fn grid_vs(@builtin(vertex_index) index: u32) -> GridOut {
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0),
     );
     let xy = corners[index] * frame.grid.w;
+    var world = vec3<f32>(xy, frame.plane.y);
+    if frame.plane.x < 0.5 {
+        world = vec3<f32>(frame.plane.y, xy.x, xy.y);
+    } else if frame.plane.x < 1.5 {
+        world = vec3<f32>(xy.x, frame.plane.y, xy.y);
+    }
     var out: GridOut;
-    out.clip = frame.view_proj * vec4<f32>(xy, 0.0, 1.0);
+    out.clip = frame.view_proj * vec4<f32>(world, 1.0);
     out.world = xy;
     return out;
 }
@@ -61,7 +71,10 @@ fn grid_fs(in: GridOut) -> @location(0) vec4<f32> {
     let height = abs(frame.camera.z);
     let reach = max(8192.0, height * 40.0);
     let distance = length(in.world - frame.camera.xy);
-    let distance_fade = 1.0 - smoothstep(reach * 0.4, reach, distance);
+    var distance_fade = 1.0 - smoothstep(reach * 0.4, reach, distance);
+    if frame.plane.z < 0.5 {
+        distance_fade = 1.0;
+    }
 
     let alpha = max(max(minor * 0.22, major * 0.45), super_ * 0.65) * distance_fade;
     if alpha <= 0.002 {

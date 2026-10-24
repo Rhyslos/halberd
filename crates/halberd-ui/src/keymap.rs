@@ -421,7 +421,7 @@ const fn bind(keys: &'static [KeyCap], action: &'static str, context: KeyContext
 }
 
 /// What the mouse does, for the viewer's list under the keyboard.
-pub fn mouse_binds() -> [(&'static str, String); 6] {
+pub fn mouse_binds() -> [(&'static str, String); 8] {
     [
         (
             "Left click",
@@ -445,6 +445,14 @@ pub fn mouse_binds() -> [(&'static str, String); 6] {
         (
             "Wheel",
             "Fly speed (Fly camera, holding right mouse)".into(),
+        ),
+        (
+            "Right or middle drag",
+            "In a side view (Top, Front, Right…): move the view".into(),
+        ),
+        (
+            "Wheel",
+            "In a side view: zoom in and out around the pointer".into(),
         ),
     ]
 }

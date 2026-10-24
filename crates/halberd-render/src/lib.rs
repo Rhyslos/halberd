@@ -17,7 +17,9 @@ mod readback;
 mod renderer;
 mod scene;
 
-pub use frame::{FrameParams, GRID_HALF_EXTENT, MAJOR_EVERY, SUPER_SPACING, grid_spacings};
+pub use frame::{
+    FrameParams, GRID_HALF_EXTENT, GridPlane, MAJOR_EVERY, SUPER_SPACING, grid_spacings,
+};
 pub use lines::{LineVertex, X_AXIS_COLOR, Y_AXIS_COLOR, Z_AXIS_COLOR, Z_AXIS_HEIGHT, axis_lines};
 pub use readback::read_pixels;
 pub use renderer::{

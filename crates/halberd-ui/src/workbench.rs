@@ -410,6 +410,14 @@ impl Workbench {
                 self.push_console("Panel layout reset to the standard arrangement.");
             }
             ui.separator();
+            ui.label("Viewport views");
+            let current = self.viewport.layout();
+            for layout in crate::ViewLayout::ALL {
+                if ui.radio(current == layout, layout.label()).clicked() {
+                    self.viewport.set_layout(layout);
+                }
+            }
+            ui.separator();
             ui.label("Show lengths in");
             for unit in LengthUnit::CHOICES {
                 if ui

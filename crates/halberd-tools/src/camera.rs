@@ -19,6 +19,8 @@ pub const WORLD_LIMIT: f32 = 131_072.0;
 pub const NEAR_PLANE: f32 = 1.0;
 /// Farthest distance the camera draws, in units.
 pub const FAR_PLANE: f32 = 262_144.0;
+/// Where Source maps end, on every axis: flat views start their rays here.
+pub const MAP_EDGE: f32 = 16_384.0;
 /// Default vertical field of view.
 pub const DEFAULT_FOV_Y: f32 = 70.0 * PI / 180.0;
 
@@ -51,7 +53,8 @@ impl Ray {
     }
 }
 
-/// A perspective camera described by its position and two angles.
+/// A camera described by its position and two angles: a perspective view,
+/// or a flat (orthographic) one for the side views.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Camera {
     /// Where the camera is.
@@ -62,6 +65,10 @@ pub struct Camera {
     pub pitch: f32,
     /// Vertical field of view, in radians.
     pub fov_y: f32,
+    /// For a flat view (no perspective, as Hammer's 2D views): half the
+    /// height it shows, in units. `None` for a perspective view.
+    #[serde(default)]
+    pub ortho: Option<f32>,
 }
 
 impl Default for Camera {
@@ -93,6 +100,17 @@ impl Camera {
             yaw,
             pitch,
             fov_y: DEFAULT_FOV_Y,
+            ortho: None,
+        }
+    }
+
+    /// How many units one point (screen unit) covers at `point`, in a
+    /// viewport `viewport_height` points tall.
+    pub fn units_per_point(&self, point: Vec3, viewport_height: f32) -> f32 {
+        let height = viewport_height.max(1.0);
+        match self.ortho {
+            Some(half) => 2.0 * half / height,
+            None => 2.0 * self.depth_of(point).max(0.0) * (self.fov_y * 0.5).tan() / height,
         }
     }
 
@@ -135,6 +153,16 @@ impl Camera {
         } else {
             1.0
         };
+        if let Some(half) = self.ortho {
+            let y_scale = 1.0 / half.max(1e-3);
+            let range = FAR_PLANE - NEAR_PLANE;
+            return Mat4::from_cols(
+                Vec4::new(y_scale / aspect, 0.0, 0.0, 0.0),
+                Vec4::new(0.0, y_scale, 0.0, 0.0),
+                Vec4::new(0.0, 0.0, -1.0 / range, 0.0),
+                Vec4::new(0.0, 0.0, -NEAR_PLANE / range, 1.0),
+            );
+        }
         let y_scale = 1.0 / (self.fov_y * 0.5).tan();
         let x_scale = y_scale / aspect;
         let depth = FAR_PLANE / (NEAR_PLANE - FAR_PLANE);
@@ -157,6 +185,27 @@ impl Camera {
         let size = size.max(Vec2::ONE);
         let ndc_x = 2.0 * point.x / size.x - 1.0;
         let ndc_y = 1.0 - 2.0 * point.y / size.y;
+        if let Some(half) = self.ortho {
+            // Every ray points the same way, from the plane of the camera.
+            let offset =
+                self.right() * (ndc_x * half * aspect_of(size)) + self.up() * (ndc_y * half);
+            let forward = self.forward();
+            let mut origin = self.position + offset;
+            // Start at the edge of the map rather than far behind it, so
+            // picking (which looks only so far along a ray) reaches it.
+            let axis = forward.abs().max_position();
+            if forward[axis].abs() > 0.5 {
+                let edge = -forward[axis].signum() * MAP_EDGE;
+                let ahead = (edge - origin[axis]) / forward[axis];
+                if ahead > 0.0 {
+                    origin += forward * ahead;
+                }
+            }
+            return Ray {
+                origin,
+                direction: forward,
+            };
+        }
         let half_height = (self.fov_y * 0.5).tan();
         let half_width = half_height * aspect_of(size);
         let direction = (self.forward()
@@ -236,6 +285,7 @@ impl Camera {
             yaw: wrap_angle(self.yaw),
             pitch: self.pitch.clamp(-MAX_PITCH, MAX_PITCH),
             fov_y: self.fov_y.clamp(MIN_FOV_Y, MAX_FOV_Y),
+            ortho: self.ortho.filter(|h| h.is_finite() && *h > 0.0),
         }
     }
 }
@@ -283,6 +333,7 @@ mod tests {
                     yaw,
                     pitch,
                     fov_y: DEFAULT_FOV_Y,
+                    ortho: None,
                 });
             }
         }
