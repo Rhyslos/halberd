@@ -106,6 +106,8 @@ pub struct Workbench {
     error: Option<String>,
     /// The Library panel: the material and prop browsers.
     library: Library,
+    /// The map's size and limits, kept while the map doesn't change.
+    stats: crate::panels::map_summary::StatsCache,
 }
 
 impl Workbench {
@@ -128,6 +130,7 @@ impl Workbench {
             asking_to_save: None,
             error: None,
             library: Library::default(),
+            stats: Default::default(),
         };
         if let Some(note) = note {
             workbench.push_warning(note);
@@ -291,6 +294,7 @@ impl Workbench {
             length_unit: self.length_unit,
             library: &mut self.library,
             library_action: &mut library_action,
+            stats: &mut self.stats,
         };
         DockArea::new(&mut self.dock)
             .style(Style::from_egui(ui.style().as_ref()))
@@ -489,6 +493,7 @@ struct PanelViewer<'a> {
     length_unit: LengthUnit,
     library: &'a mut Library,
     library_action: &'a mut Option<LibraryAction>,
+    stats: &'a mut crate::panels::map_summary::StatsCache,
 }
 
 impl TabViewer for PanelViewer<'_> {
@@ -559,7 +564,7 @@ impl TabViewer for PanelViewer<'_> {
                 "Layers group sections of a map so they can be hidden, locked and \
                  selected together. They are saved to Hammer as visgroups.",
             ),
-            Panel::Properties => properties_contents(ui, self.doc, self.length_unit),
+            Panel::Properties => properties_contents(ui, self.doc, self.length_unit, self.stats),
             Panel::Console => self.console.show(ui),
         }
     }
@@ -587,6 +592,8 @@ mod file_tests;
 mod keybinds_tests;
 #[cfg(test)]
 mod library_tests;
+#[cfg(test)]
+mod map_summary_tests;
 #[cfg(test)]
 mod shape_tests;
 #[cfg(test)]

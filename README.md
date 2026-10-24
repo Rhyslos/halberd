@@ -32,9 +32,9 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 14 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 15 of 19
 
-`██████████░░░` 74%
+`██████████░░░` 79%
 
 <details>
 <summary>Milestones</summary>
@@ -52,7 +52,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Prop browser with real model rendering
 - [x] Basic entities: spawn points, lights, sun, sky
 - [x] GMod scale tools: player reference, clearance checks, unit readout
-- [ ] Map sizer and engine limit meters
+- [x] Map sizer and engine limit meters
 - [ ] Quick-test compile, then launch GMod
 - [ ] Leak detection with a visual leak path
 - [ ] Settings page: key bindings, WASD toggle, camera speeds, memory budget
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-24 | Map size and engine limits: the map's size and live meters for Source's limits in Properties, with objects past the edge found |
 | 2026-10-24 | Scale tools: the player figure shows whether a player fits (and can follow the pointer), sizes are shown while drawing and for the selection, and feet join units and metres |
 | 2026-10-24 | Basic entities: spawn points, lights, spotlights and the sun placed from the Library and edited in Properties, and the sky picked from the game's skies |
 | 2026-10-24 | Props: a browser of the game's models with pictures, a Place tool, and real models drawn in every view |

@@ -24,6 +24,7 @@ mod history;
 mod map_data;
 mod object;
 mod shape;
+mod stats;
 mod texture;
 
 pub use command::{AddedBrush, Command, ElementKind, TransformKind};
@@ -37,4 +38,5 @@ pub use object::{
     POINT_ENTITY_HALF_SIZE,
 };
 pub use shape::{PieceIds, ShapeObject};
+pub use stats::{MAP_HALF_SIZE, MapStats, Meter};
 pub use texture::{DEFAULT_TEXTURE_SCALE, TextureAxes, TextureAxis};
