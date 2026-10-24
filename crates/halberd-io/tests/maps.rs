@@ -87,6 +87,7 @@ fn a_moved_brush_keeps_its_ids_materials_and_editor_data() {
         kind: TransformKind::Move,
         brushes: vec![(id, moved)],
         shapes: Vec::new(),
+        entities: Vec::new(),
     })
     .unwrap();
     let text = saved_text(&doc);
@@ -381,6 +382,7 @@ fn a_brush_inside_an_entity_can_be_moved_and_saved() {
         kind: TransformKind::Move,
         brushes: vec![(brush, moved)],
         shapes: Vec::new(),
+        entities: Vec::new(),
     })
     .unwrap();
     let text = saved_text(&doc);

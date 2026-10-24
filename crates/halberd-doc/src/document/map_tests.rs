@@ -180,6 +180,7 @@ fn an_entity_brush_moves_like_any_brush_and_stays_in_its_entity() {
         kind: crate::TransformKind::Move,
         brushes: vec![(a, cube_at(132.0))],
         shapes: Vec::new(),
+        entities: Vec::new(),
     })
     .unwrap();
     let brush = doc.get(a).unwrap().as_brush().unwrap();
