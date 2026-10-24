@@ -629,7 +629,8 @@ fn rings_partly_behind_the_camera_are_not_drawn() {
 }
 
 #[test]
-fn entities_alone_get_no_gizmo() {
+fn point_entities_alone_get_the_gizmo() {
+    // Props and lights move with the gizmo (they had none before props).
     use halberd_doc::{EntityObject, MapObject};
     let camera = angled();
     let light = MapObject::Entity(
@@ -644,7 +645,7 @@ fn entities_alone_get_no_gizmo() {
     let id = doc.objects().next().unwrap().0;
     doc.set_selection([id]);
     let t = tools(GizmoMode::Move);
-    assert!(t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
+    assert!(!t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
 }
 
 #[test]
@@ -673,4 +674,5 @@ fn a_brush_picked_inside_an_entity_gets_the_gizmo_but_the_entity_does_not() {
     assert!(!t.gizmo_shapes(&camera, SIZE, &doc).is_empty());
 }
 
+mod entities;
 mod shapes;

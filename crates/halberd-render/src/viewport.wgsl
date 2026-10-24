@@ -191,14 +191,22 @@ fn brush_fs(in: BrushOut) -> @location(0) vec4<f32> {
     let shade = 0.38 + 0.62 * diffuse;
     var color = in.color.rgb;
     // Unpack the flag (see BrushIn).
-    let packed = floor(in.texture.w + 0.5);
+    // Models' texture coordinates already run 0 to 1 across the texture
+    // (flag + 2048); brushes' are in pattern texels.
+    let packed_all = floor(in.texture.w + 0.5);
+    let normalized = packed_all >= 2048.0;
+    let packed = packed_all - select(0.0, 2048.0, normalized);
     let layer_plus = floor(packed / 4.0);
     let flag = packed - layer_plus * 4.0;
     let layer = clamp(i32(layer_plus) - 1, 0, 255);
     let info = material_table.layers[layer];
     // The real texture, sampled everywhere (sampling must not depend on
     // the branches below) and used where it is loaded.
-    let real_uv = in.texture.xy * PATTERN_TEXELS / max(info.xy, vec2<f32>(1.0));
+    let real_uv = select(
+        in.texture.xy * PATTERN_TEXELS / max(info.xy, vec2<f32>(1.0)),
+        in.texture.xy,
+        normalized,
+    );
     let texel = textureSample(material_textures, material_sampler, real_uv, layer).rgb;
     let pattern = material_pattern(in.texture);
     if frame.plane.w > 0.5 && frame.plane.w < 1.5 && flag > 0.5 {

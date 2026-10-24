@@ -13,6 +13,7 @@
 mod content;
 mod gmod;
 mod materials;
+mod models;
 mod steam;
 
 pub use content::{ContentError, GameContent, search_paths};
@@ -20,4 +21,5 @@ pub use gmod::{
     CompileTool, CompileTools, FoundBy, GMOD_APP_ID, GmodInstall, InvalidGmodDir, inspect_gmod_dir,
 };
 pub use materials::{MaterialImage, MaterialLoader, load_material, material_names};
+pub use models::{LoadedModel, ModelLoader, load_model, model_names};
 pub use steam::{Detection, DetectionError, detect_gmod, detect_gmod_in};

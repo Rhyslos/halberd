@@ -7,6 +7,9 @@ use glam::Vec2;
 use halberd_doc::Document;
 use halberd_tools::{GizmoMode, SelectMode, Tool, ToolAction, ToolInput};
 
+/// Start of the Place tool's toolbar row ("Placing oildrum001.mdl").
+pub const PLACING_LABEL: &str = "Placing";
+
 /// True if `key` went down this frame with modifiers `held` accepts, not
 /// counting the repeats a held key sends (holding W while flying must not
 /// flip the gizmo on and off). The modifiers are the ones held when the key
@@ -142,8 +145,13 @@ impl ViewportPanel {
         self.left_was_held = held;
 
         // Escape lets go of picked corners, edges or faces first, and
-        // deselects the brushes the next time.
-        if escape && !self.tools.is_busy() && !self.tools.clear_elements() {
+        // deselects the brushes the next time. While placing props, it only
+        // stops placing.
+        if escape
+            && self.tools.tool() != Tool::Place
+            && !self.tools.is_busy()
+            && !self.tools.clear_elements()
+        {
             doc.clear_selection();
         }
         let input = ToolInput {
@@ -308,10 +316,47 @@ impl ViewportPanel {
                     self.tools.set_inside_entities(inside);
                 }
             });
-        if self.tools.tool() == Tool::Box {
-            self.draw_options(ui, rect);
-        } else {
-            self.pick_options(ui, rect);
+        match self.tools.tool() {
+            Tool::Box => self.draw_options(ui, rect),
+            Tool::Place => self.place_options(ui, rect),
+            Tool::Select => self.pick_options(ui, rect),
+        }
+    }
+
+    /// The Place tool's second toolbar row: what is being placed.
+    fn place_options(&mut self, ui: &mut Ui, rect: Rect) {
+        let Some(prop) = self.tools.prop() else {
+            return;
+        };
+        let name = prop
+            .model
+            .rsplit('/')
+            .next()
+            .unwrap_or(&prop.model)
+            .to_string();
+        let class = prop.classname();
+        let area = Rect::from_min_size(
+            rect.left_top() + vec2(8.0, 60.0),
+            vec2((rect.width() - 16.0).max(0.0), 30.0),
+        );
+        let mut child = ui.new_child(
+            UiBuilder::new()
+                .max_rect(area)
+                .layout(Layout::left_to_right(Align::Center)),
+        );
+        let mut stop = false;
+        egui::Frame::new()
+            .fill(Color32::from_black_alpha(170))
+            .corner_radius(4.0)
+            .inner_margin(4.0)
+            .show(&mut child, |ui| {
+                ui.label(format!("{PLACING_LABEL} {name} ({class})"))
+                    .on_hover_text(Tool::Place.description());
+                ui.label(egui::RichText::new("Click to place · Esc stops").weak());
+                stop = ui.button("Stop").clicked();
+            });
+        if stop {
+            self.tools.set_prop(None);
         }
     }
 

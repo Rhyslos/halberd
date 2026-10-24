@@ -33,6 +33,9 @@ pub enum Tool {
     /// Drag on the grid or on a brush to draw the chosen shape (a box at
     /// first).
     Box,
+    /// Click to put down the prop chosen in the browser (chosen there, so
+    /// it is not in the tool switcher).
+    Place,
 }
 
 impl Tool {
@@ -44,6 +47,7 @@ impl Tool {
         match self {
             Self::Select => "Select",
             Self::Box => "Draw",
+            Self::Place => "Place",
         }
     }
 
@@ -59,6 +63,10 @@ impl Tool {
                  for a wall. Wedges and stairs climb, and arches span, the way you drag; R \
                  while drawing turns the shape. Shift: as wide as long and tall; Alt: the \
                  same, around where you started. B again lists the shapes (B)"
+            }
+            Self::Place => {
+                "Click on the grid or on a brush to put the chosen prop there, standing on \
+                 it; click again for more. Esc stops placing"
             }
         }
     }
@@ -151,6 +159,10 @@ pub struct ToolController {
     plan: Option<plan::PlanDraft>,
     /// The material new brushes get (`None`: the default).
     material: Option<String>,
+    /// The prop the Place tool puts down.
+    prop: Option<place::PropChoice>,
+    /// Where the Place tool would put it now (its origin).
+    place_at: Option<glam::Vec3>,
 }
 
 /// What a shape is built from.
@@ -178,6 +190,8 @@ impl ToolController {
             marquee: None,
             plan: None,
             material: None,
+            prop: None,
+            place_at: None,
         }
     }
 
@@ -420,6 +434,9 @@ impl ToolController {
 
     /// The box being drawn, for the preview outline.
     pub fn preview(&self) -> Option<Aabb> {
+        if self.tool == Tool::Place {
+            return self.place_preview();
+        }
         self.box_bounds(self.drag?)
     }
 
@@ -513,6 +530,7 @@ impl ToolController {
                 self.update_plan(input, ray.as_ref(), doc)
             }
             Tool::Box => self.update_box(input, ray.as_ref(), doc),
+            Tool::Place => self.update_place(input, ray.as_ref(), doc),
         }
     }
 
@@ -720,9 +738,11 @@ fn sane_grid(grid: f32) -> f32 {
 
 mod material;
 mod operations;
+mod place;
 mod plan;
 
 pub use operations::{SelectAfter, ShapeOp, ShapeOpOutcome};
+pub use place::PropChoice;
 pub use plan::PlanPreview;
 
 #[cfg(test)]

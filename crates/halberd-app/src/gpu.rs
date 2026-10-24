@@ -6,7 +6,7 @@ use eframe::egui_wgpu::RenderState;
 use eframe::wgpu;
 use halberd_doc::Document;
 use halberd_render::{
-    FrameParams, GridPlane, PlayerOutline, RenderMode, ViewportRenderer as GpuRenderer,
+    FrameParams, GridPlane, PlayerOutline, PropModel, RenderMode, ViewportRenderer as GpuRenderer,
     ViewportTarget,
 };
 use halberd_tools::PLAYER_EYE_HEIGHT;
@@ -18,6 +18,8 @@ pub(crate) struct GpuViewport {
     renderer: GpuRenderer,
     /// An image for each view, made when the view is first drawn.
     views: Vec<Option<ViewImage>>,
+    /// Where prop browser pictures are drawn, made when first needed.
+    thumbnail_target: Option<ViewportTarget>,
 }
 
 /// One view's image and the egui texture showing it.
@@ -36,6 +38,7 @@ impl GpuViewport {
             renderer: GpuRenderer::new(&state.device, samples),
             state: state.clone(),
             views: Vec::new(),
+            thumbnail_target: None,
         }
     }
 
@@ -57,6 +60,32 @@ impl GpuViewport {
             ),
             None => self.renderer.texture_missing(&picture.name),
         }
+    }
+
+    /// Models the map's props show that should be read (each asked for
+    /// once).
+    pub(crate) fn wanted_models(&mut self) -> Vec<String> {
+        self.renderer.wanted_models()
+    }
+
+    /// A model read for the map's props (`None`: it can't be shown).
+    pub(crate) fn model_arrived(&mut self, name: &str, model: Option<PropModel>) {
+        self.renderer.add_model(name, model);
+    }
+
+    /// A picture of `model` for the prop browser: width, height and RGBA
+    /// pixels. `None` if it has nothing to draw.
+    pub(crate) fn thumbnail(&mut self, model: &PropModel) -> Option<(u32, u32, Vec<u8>)> {
+        let size = halberd_ui::THUMBNAIL_SIZE;
+        let target = self.thumbnail_target.get_or_insert_with(|| {
+            self.renderer
+                .create_target(&self.state.device, [size, size])
+        });
+        let [w, h] = target.size();
+        let pixels =
+            self.renderer
+                .render_thumbnail(&self.state.device, &self.state.queue, target, model)?;
+        Some((w, h, pixels))
     }
 
     /// A short description of the GPU, for the Console.

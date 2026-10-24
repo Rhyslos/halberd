@@ -1,6 +1,6 @@
 //! Edits to the map.
 
-use crate::{BrushObject, Object, ObjectId};
+use crate::{BrushObject, EntityObject, Object, ObjectId};
 use halberd_geom::{Brush, FaceFate};
 
 /// An edit to the map. Every change goes through one, so it can be undone.
@@ -42,7 +42,12 @@ pub enum Command {
         brushes: Vec<(ObjectId, Brush)>,
         /// Each floor-plan shape moved along with them, as it is now.
         shapes: Vec<(ObjectId, crate::ShapeObject)>,
+        /// Each point entity moved (or turned) along with them, as it is
+        /// now.
+        entities: Vec<(ObjectId, EntityObject)>,
     },
+    /// Adds a point entity, such as a prop. It becomes the selection.
+    AddEntity(EntityObject),
     /// Gives brushes new shapes after moving, rotating or scaling some of
     /// their corners, edges or faces. Each new shape comes with what became
     /// of each face ([`Brush::with_moved_points`]): a face that was split or
@@ -145,6 +150,8 @@ impl Command {
             Self::AddBrushObjects(brushes) if brushes.len() == 1 => "Create brush".into(),
             Self::AddBrushObjects(brushes) => format!("Create {} brushes", brushes.len()),
             Self::AddShape(_) => "Create floor plan shape".into(),
+            Self::AddEntity(entity) if entity.classname.starts_with("prop_") => "Place prop".into(),
+            Self::AddEntity(entity) => format!("Add {}", entity.classname),
             Self::SetMaterial { faces, .. } => {
                 let picked: Option<usize> = faces
                     .iter()
@@ -173,14 +180,17 @@ impl Command {
                 kind,
                 brushes,
                 shapes,
+                entities,
             } => {
                 let verb = kind.verb();
-                match (brushes.len(), shapes.len()) {
-                    (1, 0) => format!("{verb} brush"),
-                    (n, 0) => format!("{verb} {n} brushes"),
-                    (0, 1) => format!("{verb} shape"),
-                    (0, n) => format!("{verb} {n} shapes"),
-                    (b, s) => format!("{verb} {} objects", b + s),
+                match (brushes.len(), shapes.len(), entities.len()) {
+                    (1, 0, 0) => format!("{verb} brush"),
+                    (n, 0, 0) => format!("{verb} {n} brushes"),
+                    (0, 1, 0) => format!("{verb} shape"),
+                    (0, n, 0) => format!("{verb} {n} shapes"),
+                    (0, 0, 1) => format!("{verb} entity"),
+                    (0, 0, n) => format!("{verb} {n} entities"),
+                    (b, s, e) => format!("{verb} {} objects", b + s + e),
                 }
             }
             Self::Remove(ids) => {

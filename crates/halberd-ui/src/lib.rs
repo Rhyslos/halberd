@@ -30,16 +30,18 @@ pub use keybinds::{KEYBINDS_SEARCH_NAME, KEYBINDS_TITLE, KeybindsViewer, drawn_k
 pub use keymap::{KEYBINDS, KeyCap, KeyContext, Keybind, binds_with, mouse_binds};
 pub use layout::{default_layout, is_complete, restore_or_default};
 pub use materials::{
-    APPLY_MATERIAL_LABEL, BrowserAction, MATERIAL_SEARCH_NAME, MaterialBrowser, THUMBNAIL_SIZE,
+    APPLY_MATERIAL_LABEL, AssetBrowser, BrowserAction, MATERIAL_SEARCH_NAME, MaterialBrowser,
+    PROP_SEARCH_NAME, THUMBNAIL_SIZE,
 };
 pub use panel::Panel;
 pub use viewport::{
-    INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL, MAX_VIEWS, NoRenderer, PaneView, RenderMode,
-    SHAPE_OP_KEYS, VIEWPORT_LABEL, ViewLayout, ViewSetup, ViewportOptions, ViewportPanel,
-    ViewportRenderer, ViewportView,
+    INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL, MAX_VIEWS, NoRenderer, PLACING_LABEL, PaneView,
+    RenderMode, SHAPE_OP_KEYS, VIEWPORT_LABEL, ViewLayout, ViewSetup, ViewportOptions,
+    ViewportPanel, ViewportRenderer, ViewportView,
 };
 pub use workbench::{
     AppInfo, CANCEL_BUTTON, ContentStatus, DELETE_SHORTCUT, DONT_SAVE_BUTTON, FileIntent,
-    NEW_SHORTCUT, OPEN_SHORTCUT, PLAYER_TOGGLE_LABEL, QUIT_SHORTCUT, REDO_SHORTCUT,
-    SAVE_AS_SHORTCUT, SAVE_BUTTON, SAVE_SHORTCUT, UNDO_SHORTCUT, Workbench, WorkbenchAction,
+    MATERIALS_TAB, NEW_SHORTCUT, OPEN_SHORTCUT, PLAYER_TOGGLE_LABEL, PROPS_TAB, QUIT_SHORTCUT,
+    REDO_SHORTCUT, SAVE_AS_SHORTCUT, SAVE_BUTTON, SAVE_SHORTCUT, UNDO_SHORTCUT, Workbench,
+    WorkbenchAction,
 };
