@@ -135,15 +135,16 @@ impl Workbench {
         }
     }
 
-    /// On first launch: does the user want WASD flying? A small window in
-    /// the corner, so it never covers the map.
+    /// On first launch: does the user want WASD flying? A small window at
+    /// the bottom (over the Console), so it covers neither the map nor
+    /// Properties.
     fn wasd_question(&mut self, ui: &Ui) {
         if !self.settings.ask_wasd {
             return;
         }
         let mut answer = None;
         egui::Window::new(WASD_QUESTION_TITLE)
-            .anchor(Align2::RIGHT_BOTTOM, [-12.0, -12.0])
+            .anchor(Align2::CENTER_BOTTOM, [0.0, -12.0])
             .collapsible(false)
             .resizable(false)
             .show(ui.ctx(), |ui| {
