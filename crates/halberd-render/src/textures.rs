@@ -6,7 +6,11 @@
 //! The array is made only when the first texture arrives, so the Flat and
 //! Wireframe modes, and maps without real textures, cost nothing.
 
-use std::collections::HashMap;
+mod layers;
+
+use layers::{Layer, Layers};
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Side of every material texture layer, in pixels.
 pub const MATERIAL_TEXTURE_SIZE: u32 = 256;
@@ -15,26 +19,10 @@ pub const MAX_MATERIAL_TEXTURES: u32 = 256;
 /// Mip levels of a layer (256, 128… 1).
 const MIP_LEVELS: u32 = 9;
 
-/// What has become of a material's layer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Layer {
-    /// Its texture is wanted and not yet asked for.
-    Wanted,
-    /// Asked for; waiting.
-    Asked,
-    /// On the GPU.
-    Loaded,
-    /// It has no texture that can be shown (the pattern stays).
-    Missing,
-}
-
 /// The material textures and their table.
 #[derive(Debug)]
 pub(crate) struct MaterialTextures {
-    /// Upper-case material name to its layer.
-    layers: HashMap<String, u32>,
-    states: Vec<Layer>,
-    capacity: u32,
+    layers: Layers,
     /// The array, once a texture has arrived; until then a 1-pixel stand-in.
     array: wgpu::Texture,
     real: bool,
@@ -43,6 +31,8 @@ pub(crate) struct MaterialTextures {
     /// Per layer: real width, real height, 1 if loaded.
     pub(crate) table: wgpu::Buffer,
     table_data: Vec<[f32; 4]>,
+    /// The table changed without being written to the GPU yet.
+    table_dirty: AtomicBool,
 }
 
 impl MaterialTextures {
@@ -70,15 +60,14 @@ impl MaterialTextures {
             mapped_at_creation: false,
         });
         Self {
-            layers: HashMap::new(),
-            states: Vec::new(),
-            capacity,
+            layers: Layers::new(capacity),
             array,
             real: false,
             view,
             sampler,
             table,
             table_data: vec![[0.0; 4]; MAX_MATERIAL_TEXTURES as usize],
+            table_dirty: AtomicBool::new(false),
         }
     }
 
@@ -89,41 +78,37 @@ impl MaterialTextures {
 
     /// The layer for material `name`, giving it one if there is room.
     pub(crate) fn layer_for(&mut self, name: &str) -> Option<u32> {
-        let key = name.to_ascii_uppercase();
-        if let Some(&layer) = self.layers.get(&key) {
-            return Some(layer);
+        self.layers.layer_for(name)
+    }
+
+    /// Gives back the layers of materials not in `used` (upper case), so
+    /// the limit counts only what the map shows now.
+    pub(crate) fn keep_only(&mut self, used: &HashSet<String>) {
+        for layer in self.layers.keep_only(used) {
+            if let Some(entry) = self.table_data.get_mut(layer as usize) {
+                *entry = [0.0; 4];
+            }
+            self.table_dirty.store(true, Ordering::Relaxed);
         }
-        let layer = u32::try_from(self.states.len()).ok()?;
-        if layer >= self.capacity {
-            return None;
+    }
+
+    /// Writes the table to the GPU if it changed.
+    pub(crate) fn flush(&self, queue: &wgpu::Queue) {
+        if self.table_dirty.swap(false, Ordering::Relaxed) {
+            queue.write_buffer(&self.table, 0, bytemuck::cast_slice(&self.table_data));
         }
-        self.layers.insert(key, layer);
-        self.states.push(Layer::Wanted);
-        Some(layer)
     }
 
     /// Materials whose textures are wanted and not yet asked for; they
     /// count as asked for from now on.
     pub(crate) fn wanted(&mut self) -> Vec<String> {
-        let mut out = Vec::new();
-        for (name, &layer) in &self.layers {
-            if let Some(state) = self.states.get_mut(layer as usize)
-                && *state == Layer::Wanted
-            {
-                *state = Layer::Asked;
-                out.push(name.clone());
-            }
-        }
-        out.sort();
-        out
+        self.layers.take_wanted()
     }
 
     /// Marks material `name` as having no texture that can be shown.
     pub(crate) fn missing(&mut self, name: &str) {
-        if let Some(&layer) = self.layers.get(&name.to_ascii_uppercase())
-            && let Some(state) = self.states.get_mut(layer as usize)
-        {
-            *state = Layer::Missing;
+        if let Some(layer) = self.layers.of(name) {
+            self.layers.set(layer, Layer::Missing);
         }
     }
 
@@ -139,7 +124,7 @@ impl MaterialTextures {
         real: (u32, u32),
     ) -> bool {
         let (width, height, pixels) = image;
-        let Some(&layer) = self.layers.get(&name.to_ascii_uppercase()) else {
+        let Some(layer) = self.layers.of(name) else {
             return false;
         };
         if width == 0 || height == 0 || pixels.len() != (width as usize) * (height as usize) * 4 {
@@ -148,7 +133,12 @@ impl MaterialTextures {
         }
         let mut rebuilt = false;
         if !self.real {
-            self.array = create_array(device, MATERIAL_TEXTURE_SIZE, self.capacity, MIP_LEVELS);
+            self.array = create_array(
+                device,
+                MATERIAL_TEXTURE_SIZE,
+                self.layers.capacity(),
+                MIP_LEVELS,
+            );
             self.view = array_view(&self.array);
             self.real = true;
             rebuilt = true;
@@ -187,9 +177,8 @@ impl MaterialTextures {
         }
         self.table_data[layer as usize] = [real.0.max(1) as f32, real.1.max(1) as f32, 1.0, 0.0];
         queue.write_buffer(&self.table, 0, bytemuck::cast_slice(&self.table_data));
-        if let Some(state) = self.states.get_mut(layer as usize) {
-            *state = Layer::Loaded;
-        }
+        self.table_dirty.store(false, Ordering::Relaxed);
+        self.layers.set(layer, Layer::Loaded);
         rebuilt
     }
 }

@@ -13,6 +13,8 @@ use crate::error::VtfError;
 pub const MAX_DIMENSION: u32 = 16_384;
 /// Most frames, faces or depth slices accepted.
 const MAX_LAYERS: u64 = 4096;
+/// Largest image decoded only to be shrunk (4096 × 4096).
+const MAX_SHRINK_PIXELS: u64 = 4096 * 4096;
 /// Most bytes of image data accepted.
 const MAX_DATA: u64 = 1024 * 1024 * 1024;
 /// Resource tag of the full-size images (version 7.3 and later).
@@ -247,8 +249,10 @@ impl<'a> Vtf<'a> {
     }
 
     /// The first frame, face and slice of the largest stored size that is
-    /// at most `max_size` pixels on each side (the smallest size if none
-    /// is), as RGBA.
+    /// at most `max_size` pixels on each side, as RGBA. If every stored
+    /// size is bigger (a texture without smaller copies), the smallest is
+    /// decoded and shrunk to fit, unless it is over 4096 × 4096 pixels
+    /// ([`VtfError::TooLarge`]).
     pub fn decode(&self, max_size: u32) -> Result<RgbaImage, VtfError> {
         if !self.format.decodable() {
             return Err(VtfError::UnsupportedFormat(self.format.name()));
@@ -257,6 +261,11 @@ impl<'a> Vtf<'a> {
             .find(|&m| self.size_at(m).0 <= max_size && self.size_at(m).1 <= max_size)
             .unwrap_or(self.mip_count - 1);
         let (w, h) = self.size_at(mip);
+        let max_size = max_size.max(1);
+        let fits = w <= max_size && h <= max_size;
+        if !fits && u64::from(w) * u64::from(h) > MAX_SHRINK_PIXELS {
+            return Err(VtfError::TooLarge(w, h));
+        }
         let (start, _) = self.span(mip)?;
         let len = self.format.image_bytes(u64::from(w), u64::from(h));
         let data = usize::try_from(start)
@@ -264,10 +273,15 @@ impl<'a> Vtf<'a> {
             .zip(usize::try_from(start + len).ok())
             .and_then(|(a, b)| self.bytes.get(a..b))
             .ok_or(VtfError::Damaged("an image runs past the end of the file"))?;
-        Ok(RgbaImage {
+        let image = RgbaImage {
             width: w,
             height: h,
             pixels: to_rgba(self.format, w as usize, h as usize, data),
+        };
+        Ok(if fits {
+            image
+        } else {
+            shrink(&image, max_size)
         })
     }
 
@@ -325,4 +339,46 @@ impl Header<'_> {
     fn u32(&self, at: usize) -> Result<u32, VtfError> {
         Ok(u32::from_le_bytes(self.get(at)?))
     }
+}
+
+/// `image` shrunk to at most `max_size` pixels on each side, keeping its
+/// shape, by averaging the pixels each new pixel covers.
+fn shrink(image: &RgbaImage, max_size: u32) -> RgbaImage {
+    let (w, h) = (image.width.max(1), image.height.max(1));
+    let scale = f64::from(max_size) / f64::from(w.max(h));
+    let nw = ((f64::from(w) * scale).round() as u32).clamp(1, max_size);
+    let nh = ((f64::from(h) * scale).round() as u32).clamp(1, max_size);
+    let mut pixels = Vec::with_capacity((nw * nh * 4) as usize);
+    for y in 0..nh {
+        let (y0, y1) = span_of(y, nh, h);
+        for x in 0..nw {
+            let (x0, x1) = span_of(x, nw, w);
+            let mut sum = [0u64; 4];
+            for sy in y0..y1 {
+                for sx in x0..x1 {
+                    let at = ((sy * w + sx) * 4) as usize;
+                    if let Some(px) = image.pixels.get(at..at + 4) {
+                        for k in 0..4 {
+                            sum[k] += u64::from(px[k]);
+                        }
+                    }
+                }
+            }
+            let n = u64::from((x1 - x0) * (y1 - y0)).max(1);
+            pixels.extend(sum.iter().map(|s| (s / n) as u8));
+        }
+    }
+    RgbaImage {
+        width: nw,
+        height: nh,
+        pixels,
+    }
+}
+
+/// The old pixels (start, end) that new pixel `i` of `new` covers, out of
+/// `old`.
+fn span_of(i: u32, new: u32, old: u32) -> (u32, u32) {
+    let start = (u64::from(i) * u64::from(old) / u64::from(new)) as u32;
+    let end = (u64::from(i + 1) * u64::from(old) / u64::from(new)) as u32;
+    (start, end.max(start + 1).min(old))
 }

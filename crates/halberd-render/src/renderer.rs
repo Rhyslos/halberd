@@ -296,7 +296,12 @@ impl ViewportRenderer {
             return;
         }
         let textures = &mut self.textures;
-        let geometry = SceneGeometry::from_document_with(doc, &mut |name| textures.layer_for(name));
+        let mut used = std::collections::HashSet::new();
+        let geometry = SceneGeometry::from_document_with(doc, &mut |name| {
+            used.insert(name.to_ascii_uppercase());
+            textures.layer_for(name)
+        });
+        textures.keep_only(&used);
         self.set_scene(device, &geometry);
         self.scene.shows = Some(state);
     }
@@ -436,6 +441,7 @@ impl ViewportRenderer {
         target: &ViewportTarget,
         params: &FrameParams,
     ) {
+        self.textures.flush(queue);
         queue.write_buffer(
             &self.uniform_buffer,
             0,

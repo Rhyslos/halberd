@@ -151,3 +151,29 @@ fn the_loader_reads_in_the_background_once_per_request() {
     assert_eq!(ready[0].name, "BRICK/BRICKWALL001A");
     assert!(!loader.is_pending("BRICK/BRICKWALL001A", 32));
 }
+
+#[test]
+fn textures_and_the_newest_requests_are_read_first() {
+    let mut queue = vec![
+        ("OLD".to_string(), 128),
+        ("VIEW".to_string(), 256),
+        ("NEW".to_string(), 128),
+    ];
+    let order: Vec<String> = std::iter::from_fn(|| next_request(&mut queue))
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(order, ["VIEW", "NEW", "OLD"]);
+}
+
+#[test]
+fn an_oversized_material_file_is_refused_before_reading() {
+    let (dir, _) = content();
+    let root = dir.path().join("GarrysMod");
+    let mut huge = b"LightmappedGeneric { $basetexture brick/brickwall001a ".to_vec();
+    huge.resize(2 * 1024 * 1024, b' ');
+    huge.push(b'}');
+    write(&root.join("garrysmod/materials/big/huge.vmt"), &huge);
+    let content = GameContent::mount(&inspect_gmod_dir(&root, FoundBy::UserChoice).unwrap());
+    let why = load_material(&content, "BIG/HUGE", 32).problem.unwrap();
+    assert!(why.contains("larger than any real file"), "{why}");
+}

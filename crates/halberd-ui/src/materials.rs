@@ -20,6 +20,9 @@ pub const THUMBNAIL_SIZE: u32 = 128;
 const TILE: f32 = 72.0;
 /// Most pictures kept; the ones shown longest ago are let go first.
 const MAX_PICTURES: usize = 600;
+/// Largest picture taken, on either side (thumbnails are smaller; this
+/// keeps a mistake from making a huge texture).
+const MAX_PICTURE_SIDE: u32 = 512;
 
 /// What the user did in the browser.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,7 +51,7 @@ pub struct MaterialBrowser {
     matching: Vec<usize>,
     picked: Option<String>,
     pictures: HashMap<String, Picture>,
-    /// Pictures in the order they were added, to let the oldest go.
+    /// Pictures from shown longest ago to shown last, to let the oldest go.
     order: VecDeque<String>,
     /// Pictures needed for what is on screen, not yet asked for.
     wanted: Vec<String>,
@@ -98,6 +101,9 @@ impl MaterialBrowser {
         let name = name.to_ascii_uppercase();
         self.asked.remove(&name);
         let picture = match picture {
+            Ok((w, h, _)) if w > MAX_PICTURE_SIDE || h > MAX_PICTURE_SIDE => {
+                Picture::None("the picture is too large".into())
+            }
             Ok((w, h, pixels))
                 if pixels.len() == (w as usize) * (h as usize) * 4 && w > 0 && h > 0 =>
             {
@@ -116,6 +122,18 @@ impl MaterialBrowser {
             if let Some(old) = self.order.pop_front() {
                 self.pictures.remove(&old);
             }
+        }
+    }
+
+    /// Marks `name`'s picture as just shown, so it is let go last.
+    fn shown(&mut self, name: &str) {
+        if self.order.back().is_some_and(|last| last == name) {
+            return;
+        }
+        if let Some(at) = self.order.iter().position(|n| n == name)
+            && let Some(moved) = self.order.remove(at)
+        {
+            self.order.push_back(moved);
         }
     }
 
@@ -229,6 +247,9 @@ impl MaterialBrowser {
             );
             self.pictures
                 .insert(name.to_string(), Picture::Shown(texture));
+        }
+        if self.pictures.contains_key(name) {
+            self.shown(name);
         }
         match self.pictures.get(name) {
             Some(Picture::Shown(texture)) => {

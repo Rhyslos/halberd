@@ -204,6 +204,12 @@ impl GameContent {
     /// The bytes of `path` (`materials/brick/brickwall001a.vtf`, any case),
     /// from the first mounted place that has it.
     pub fn read(&self, path: &str) -> Result<Vec<u8>, ContentError> {
+        self.read_at_most(path, MAX_LOOSE_FILE)
+    }
+
+    /// Like [`Self::read`], but a file bigger than `limit` bytes is refused
+    /// before anything is read (for small text files such as materials).
+    pub fn read_at_most(&self, path: &str, limit: u64) -> Result<Vec<u8>, ContentError> {
         let relative =
             relative_path(path).ok_or_else(|| ContentError::BadPath(path.to_string()))?;
         let key = relative.to_string_lossy().replace('\\', "/");
@@ -212,11 +218,15 @@ impl GameContent {
         let mut problem = None;
         for source in &self.sources {
             let found = match source {
-                Source::Archive(vpk) if vpk.contains(&key) => {
-                    Some(vpk.read(&key).map_err(|e| e.to_string()))
+                Source::Archive(vpk) => vpk.entry(&key).map(|entry| {
+                    if entry.size() > limit {
+                        return Err(TOO_LARGE.to_string());
+                    }
+                    vpk.read_entry(entry).map_err(|e| e.to_string())
+                }),
+                Source::Folder(folder) => {
+                    find_in_folder(folder, &relative).map(|f| read_loose(&f, limit))
                 }
-                Source::Archive(_) => None,
-                Source::Folder(folder) => find_in_folder(folder, &relative).map(|f| read_loose(&f)),
             };
             match found {
                 Some(Ok(bytes)) => return Ok(bytes),
@@ -455,10 +465,13 @@ fn find_dir_in_folder(folder: &Path, relative: &Path) -> Option<PathBuf> {
     at.is_dir().then_some(at)
 }
 
-fn read_loose(file: &Path) -> Result<Vec<u8>, String> {
+/// Why a file over the size limit was not read.
+const TOO_LARGE: &str = "it is larger than any real file of its kind";
+
+fn read_loose(file: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let size = std::fs::metadata(file).map_err(|e| e.to_string())?.len();
-    if size > MAX_LOOSE_FILE {
-        return Err("it is larger than any real game file".into());
+    if size > limit.min(MAX_LOOSE_FILE) {
+        return Err(TOO_LARGE.into());
     }
     std::fs::read(file).map_err(|e| e.to_string())
 }
