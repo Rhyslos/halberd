@@ -33,6 +33,9 @@ impl ContentLoader {
                 let content = GameContent::mount(&install);
                 // The window may already be gone; then nobody needs it.
                 send.send(content).ok();
+                // Let go of the channel before waking the window, so a poll
+                // after the result never sees the work as still going.
+                drop(send);
                 wake();
             });
         Self {
