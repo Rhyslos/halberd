@@ -120,6 +120,7 @@ commands! {
     Delete, "edit.delete", "Delete the selection", Anywhere, NONE, Key::Delete;
     SelectTool, "tool.select", "Select tool", Viewport, NONE, Key::Q;
     DrawTool, "tool.draw", "Draw tool (again: the shape list)", Viewport, NONE, Key::B;
+    SculptTool, "tool.sculpt", "Sculpt tool (displacements)", Viewport, NONE, Key::G;
     MoveGizmo, "gizmo.move", "Move gizmo", Viewport, NONE, Key::W;
     RotateGizmo, "gizmo.rotate", "Rotate gizmo", Viewport, NONE, Key::R;
     ScaleGizmo, "gizmo.scale", "Scale gizmo", Viewport, NONE, Key::S;
@@ -355,14 +356,16 @@ impl Bindings {
 /// True if `a` and `b` can both act on one key press.
 fn work_together(a: Command, b: Command) -> bool {
     use Command::{
-        AllGizmos, DrawTool, InsideEntities, MoveGizmo, RotateGizmo, ScaleGizmo, SelectTool,
+        AllGizmos, DrawTool, InsideEntities, MoveGizmo, RotateGizmo, ScaleGizmo, SculptTool,
+        SelectTool,
     };
     let (ga, gb) = (a.group(), b.group());
     if ga.overlaps(gb) {
         return true;
     }
     // The tool keys are read while drawing too.
-    let while_drawing = |c: Command| matches!(c, SelectTool | DrawTool | InsideEntities);
+    let while_drawing =
+        |c: Command| matches!(c, SelectTool | DrawTool | SculptTool | InsideEntities);
     if (ga == BindingGroup::Drawing && while_drawing(b))
         || (gb == BindingGroup::Drawing && while_drawing(a))
     {

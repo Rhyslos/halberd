@@ -53,11 +53,15 @@ pub enum ShapeOp {
     /// Turn the selected floor plan shapes into plain brushes, one per
     /// convex piece (Ctrl+Shift+B).
     MakeBrushes,
+    /// Make the picked four-sided faces displacements.
+    MakeDisplacement,
+    /// Make the picked displacements plain faces again.
+    RemoveDisplacement,
 }
 
 impl ShapeOp {
     /// The operations in the order the Shape menu lists them.
-    pub const MENU: [ShapeOp; 15] = [
+    pub const MENU: [ShapeOp; 17] = [
         Self::Extrude,
         Self::Bevel,
         Self::Bridge,
@@ -73,6 +77,8 @@ impl ShapeOp {
         Self::Subtract,
         Self::Intersect,
         Self::MakeBrushes,
+        Self::MakeDisplacement,
+        Self::RemoveDisplacement,
     ];
 
     /// Name for the menu.
@@ -94,6 +100,8 @@ impl ShapeOp {
             Self::Intersect => "Intersect",
             Self::MakeBrushes => "Make brushes from shape",
             Self::MirrorAcrossView => "Mirror left to right",
+            Self::MakeDisplacement => "Make displacement",
+            Self::RemoveDisplacement => "Remove displacement",
         }
     }
 
@@ -137,6 +145,11 @@ impl ShapeOp {
                 "Turn the selected floor plan shapes into ordinary brushes, one for each convex \
                  piece, so each can be edited on its own"
             }
+            Self::MakeDisplacement => {
+                "Turn each picked four-sided face into a displacement: a grid you can sculpt \
+                 into terrain with the Sculpt tool, and paint a blend between two textures on"
+            }
+            Self::RemoveDisplacement => "Make each picked displacement a flat, plain face again",
         }
     }
 }
@@ -169,7 +182,7 @@ pub struct ShapeOpOutcome {
 }
 
 impl ShapeOpOutcome {
-    fn new(command: Command) -> Self {
+    pub(super) fn new(command: Command) -> Self {
         Self {
             command,
             select: SelectAfter::Unchanged,
@@ -246,6 +259,10 @@ impl ToolController {
                 !selected_shapes(doc).is_empty(),
                 "Select a floor plan shape first.",
             ),
+            ShapeOp::MakeDisplacement | ShapeOp::RemoveDisplacement => need(
+                mode == SelectMode::Face && !picks.is_empty(),
+                "Pick faces first: press 4 and click a face (the top of a box, say).",
+            ),
             ShapeOp::Join => need(
                 editable_brushes(doc).len() >= 2,
                 "Select two or more brushes to join (Ctrl+click adds to the selection).",
@@ -292,6 +309,8 @@ impl ToolController {
             ShapeOp::Subtract => boolean::subtract(doc),
             ShapeOp::Intersect => boolean::intersect(doc),
             ShapeOp::MakeBrushes => make_brushes(doc),
+            ShapeOp::MakeDisplacement => self.make_displacements(doc),
+            ShapeOp::RemoveDisplacement => self.remove_displacements(doc),
             ShapeOp::MergeCorners => self.merge_corners(doc),
             ShapeOp::DeleteParts => self.delete_parts(doc),
             ShapeOp::Mirror(axis) => mirror(doc, axis as usize),
@@ -373,7 +392,10 @@ impl ToolController {
 
     /// Picked faces, as (brush, its object, face place), skipping any that
     /// no longer resolve.
-    fn picked_faces<'d>(&self, doc: &'d Document) -> Vec<(ObjectId, &'d BrushObject, usize)> {
+    pub(super) fn picked_faces<'d>(
+        &self,
+        doc: &'d Document,
+    ) -> Vec<(ObjectId, &'d BrushObject, usize)> {
         self.elements
             .items
             .iter()

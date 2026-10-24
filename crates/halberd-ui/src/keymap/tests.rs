@@ -49,10 +49,10 @@ fn changed_keys_show_in_the_list_and_cleared_ones_go() {
         Some(KeyboardShortcut::new(Modifiers::NONE, Key::F5)),
     );
     bindings.set(Command::Quit, None);
-    // Move picked with G: no longer a flying key, so no Shift line.
+    // Move picked with H: no longer a flying key, so no Shift line.
     bindings.set(
         Command::MoveGizmo,
-        Some(KeyboardShortcut::new(Modifiers::NONE, Key::G)),
+        Some(KeyboardShortcut::new(Modifiers::NONE, Key::H)),
     );
     let binds = current_binds(&bindings);
     let save = binds
@@ -66,7 +66,7 @@ fn changed_keys_show_in_the_list_and_cleared_ones_go() {
         .filter(|b| b.context == KeyContext::RightMouse)
         .collect();
     assert_eq!(shift_lines.len(), 1, "only Scale (S) still needs Shift");
-    assert_eq!(binds_with(&binds, KeyCap::Key(Key::G)).count(), 1);
+    assert_eq!(binds_with(&binds, KeyCap::Key(Key::H)).count(), 1);
 }
 
 #[test]

@@ -31,6 +31,7 @@ mod elements;
 mod gizmo;
 mod player;
 mod scene;
+mod sculpt;
 mod side_view;
 mod tool;
 
@@ -53,6 +54,7 @@ pub use gizmo::{
 };
 pub use player::{PLAYER_EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, player_bounds};
 pub use scene::DocumentScene;
+pub use sculpt::{SculptMode, SculptSettings, pick_displacement};
 pub use side_view::{GRID_BEHIND, SIDE_VIEW_HEIGHT_RANGE, SIDE_VIEW_REACH, Side, SideCamera};
 pub use tool::{
     BOX_HEIGHT_RANGE, CLICK_SLOP, DEFAULT_BOX_HEIGHT, PlaceChoice, PlanPreview, SelectAfter,

@@ -278,6 +278,7 @@ fn broken_input_never_panics() {
             cancel: false,
             uniform: true,
             centered: true,
+            dt: f32::NAN,
         };
         tools.update(&bad, &camera, &doc);
         let no_cursor = ToolInput {
