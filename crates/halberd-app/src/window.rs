@@ -69,6 +69,8 @@ impl eframe::App for HalberdApp {
                 models,
             })) => {
                 self.loading = None;
+                self.workbench
+                    .set_sky_names(halberd_ui::sky_names(&materials));
                 self.workbench.materials_mut().set_names(materials);
                 self.workbench.props_mut().set_names(models);
                 self.workbench.push_console(content.summary());

@@ -28,7 +28,7 @@ mod texture;
 
 pub use command::{AddedBrush, Command, ElementKind, TransformKind};
 pub use document::{Document, MAX_OBJECTS};
-pub use entity::rotation_of;
+pub use entity::{class_box, rotation_of};
 pub use error::DocError;
 pub use history::MAX_UNDO_STEPS;
 pub use map_data::{MapFileData, TextEncoding};

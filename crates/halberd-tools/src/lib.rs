@@ -51,6 +51,6 @@ pub use player::{PLAYER_EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_WIDTH, player_bounds};
 pub use scene::DocumentScene;
 pub use side_view::{GRID_BEHIND, SIDE_VIEW_HEIGHT_RANGE, SIDE_VIEW_REACH, Side, SideCamera};
 pub use tool::{
-    BOX_HEIGHT_RANGE, CLICK_SLOP, DEFAULT_BOX_HEIGHT, PlanPreview, PropChoice, SelectAfter,
+    BOX_HEIGHT_RANGE, CLICK_SLOP, DEFAULT_BOX_HEIGHT, PlaceChoice, PlanPreview, SelectAfter,
     ShapeOp, ShapeOpOutcome, Tool, ToolAction, ToolController, ToolInput,
 };

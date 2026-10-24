@@ -74,6 +74,22 @@ impl EntityObject {
         rotation_of(self.angles())
     }
 
+    /// Which way it points, as the compiler reads it: like
+    /// [`Self::rotation`], but lights with a `pitch` setting use it (with
+    /// its sign turned round: `-90` points straight down, as Hammer shows).
+    pub fn facing(&self) -> Quat {
+        let mut angles = self.angles();
+        if self.classname.to_ascii_lowercase().starts_with("light")
+            && let Some(pitch) = self
+                .setting("pitch")
+                .and_then(|p| p.trim().parse::<f32>().ok())
+            && pitch.is_finite()
+        {
+            angles.x = -pitch;
+        }
+        rotation_of(angles)
+    }
+
     /// The same entity at `origin` (its setting too).
     pub fn with_origin(&self, origin: Vec3) -> Self {
         let mut moved = self.clone();
@@ -120,6 +136,18 @@ impl EntityObject {
         }
         Some(placed)
     }
+}
+
+/// The box a point entity of `classname` is shown as, around its origin:
+/// player spawns are as big as a player (their origin at the feet, as in
+/// the game); others are a small cube.
+pub fn class_box(classname: &str) -> Aabb {
+    let class = classname.to_ascii_lowercase();
+    if class.starts_with("info_player_") {
+        return Aabb::from_corners(Vec3::new(-16.0, -16.0, 0.0), Vec3::new(16.0, 16.0, 72.0));
+    }
+    let half = Vec3::splat(POINT_ENTITY_HALF_SIZE);
+    Aabb::from_corners(-half, half)
 }
 
 /// The rotation for Source `angles` (pitch, yaw, roll in degrees).

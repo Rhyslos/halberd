@@ -9,6 +9,7 @@ use crate::panels::{about_contents, placeholder, properties_contents, scene_cont
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
 use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
+pub use entity_list::{DEFAULT_SKY, ENTITIES_TAB, SKY_PICKER_NAME, sky_names};
 use halberd_config::LengthUnit;
 use halberd_doc::{Command, Document};
 use halberd_tools::SelectMode;
@@ -528,7 +529,9 @@ impl TabViewer for PanelViewer<'_> {
             }
             Panel::Library => {
                 let can_apply = !self.doc.selection().is_empty();
-                self.library.show(ui, can_apply, self.library_action);
+                let sky = self.doc.world_setting("skyname").map(str::to_string);
+                self.library
+                    .show(ui, can_apply, sky.as_deref(), self.library_action);
             }
             Panel::Scene => scene_contents(ui, self.doc),
             Panel::Layers => placeholder(
@@ -543,6 +546,7 @@ impl TabViewer for PanelViewer<'_> {
     }
 }
 
+mod entity_list;
 mod files;
 mod library;
 mod messages;
@@ -552,6 +556,8 @@ pub use files::{
     SAVE_SHORTCUT,
 };
 
+#[cfg(test)]
+mod basic_entity_tests;
 #[cfg(test)]
 mod console_tests;
 #[cfg(test)]

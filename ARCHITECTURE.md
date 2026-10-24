@@ -94,6 +94,8 @@ Materials ([decision 0023](docs/decisions/0023-materials.md)): after mounting, t
 
 Props ([decision 0024](docs/decisions/0024-props.md)): the mounting thread also lists every model (`halberd_assets::model_names`), which go to the Library's prop browser. `halberd-app`'s `PropFeed` reads models in the background (`ModelLoader`, `halberd-mdl`) when the browser wants their picture or the map's props show them; each model that arrives is drawn alone for its picture (`ViewportRenderer::render_thumbnail`), gives the document its box (`Document::set_model_box`, for picking), tells the Place tool what it is like (`PropChoice`), and, if the map shows it, goes to the renderer (`add_model`), which bakes props' triangles into the scene.
 
+Basic entities ([decision 0025](docs/decisions/0025-basic-entities.md)): the Library's Entities tab hands the Place tool a `PlaceChoice` for a spawn point, light, spotlight or sun; Properties edits a few of their settings (`SetEntitySettings`), and the sky picker sets the world's `skyname` (`SetWorldSetting`). The sky list comes from the game's material names (`halberd_ui::sky_names`).
+
 ## Viewport
 
 Coordinates follow Hammer: **Z is up**, units are Hammer units, right-handed.

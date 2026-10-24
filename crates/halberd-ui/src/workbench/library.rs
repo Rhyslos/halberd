@@ -2,10 +2,12 @@
 //! content is read, and what the workbench does when something is picked.
 
 use super::Workbench;
+use super::entity_list::{self, BASIC_ENTITIES, ENTITIES_TAB, EntityListAction};
 use crate::materials::{AssetBrowser, BrowserAction};
 use crate::panels::placeholder;
 use egui::Ui;
-use halberd_tools::PropChoice;
+use halberd_geom::Aabb;
+use halberd_tools::PlaceChoice;
 use std::collections::HashMap;
 
 /// Label of the Library's materials tab.
@@ -29,10 +31,12 @@ pub enum ContentStatus {
 pub(super) struct Library {
     pub(super) materials: AssetBrowser,
     pub(super) props: AssetBrowser,
-    /// True while the props tab is shown.
-    showing_props: bool,
+    /// The tab shown.
+    tab: Tab,
+    /// The game's skies (empty until known).
+    skies: Vec<String>,
     /// What is known of each model read (lower-case name), for placing.
-    prop_infos: HashMap<String, PropChoice>,
+    prop_infos: HashMap<String, PlaceChoice>,
     /// A prop picked before its model was read; placed once it is.
     pending_prop: Option<String>,
     pub(super) status: ContentStatus,
@@ -43,7 +47,8 @@ impl Default for Library {
         Self {
             materials: AssetBrowser::materials(),
             props: AssetBrowser::props(),
-            showing_props: false,
+            tab: Tab::Materials,
+            skies: Vec::new(),
             prop_infos: HashMap::new(),
             pending_prop: None,
             status: ContentStatus::NoGame,
@@ -51,30 +56,68 @@ impl Default for Library {
     }
 }
 
+/// The Library's tabs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Tab {
+    Materials,
+    Props,
+    Entities,
+}
+
 /// What the user did in the Library.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum LibraryAction {
     Material(BrowserAction),
     Prop(BrowserAction),
+    /// Picked basic entity `index` to place.
+    Place(usize),
+    /// Chose a sky.
+    Sky(String),
 }
 
 impl Library {
     /// Tells `doc` the box of every model read so far.
     pub(super) fn give_model_boxes(&self, doc: &mut halberd_doc::Document) {
-        for prop in self.prop_infos.values() {
-            doc.set_model_box(&prop.model, prop.local);
+        for (model, prop) in &self.prop_infos {
+            doc.set_model_box(model, prop.local);
         }
     }
 
     /// Draws the panel. What the user did is put in `action`, for the
-    /// workbench to carry out once the panels are drawn.
+    /// workbench to carry out once the panels are drawn. `sky` is the
+    /// map's sky, if set.
     pub(super) fn show(
         &mut self,
         ui: &mut Ui,
         can_apply: bool,
+        sky: Option<&str>,
         action: &mut Option<LibraryAction>,
     ) {
-        if self.materials.is_empty() && self.props.is_empty() {
+        ui.horizontal(|ui| {
+            for (tab, label) in [
+                (Tab::Materials, MATERIALS_TAB),
+                (Tab::Props, PROPS_TAB),
+                (Tab::Entities, ENTITIES_TAB),
+            ] {
+                if ui.selectable_label(self.tab == tab, label).clicked() {
+                    self.tab = tab;
+                }
+            }
+        });
+        ui.separator();
+        let browser = match self.tab {
+            Tab::Entities => {
+                *action = match entity_list::show(ui, &self.skies, sky) {
+                    Some(EntityListAction::Place(i)) => Some(LibraryAction::Place(i)),
+                    Some(EntityListAction::Sky(name)) => Some(LibraryAction::Sky(name)),
+                    None => action.take(),
+                };
+                return;
+            }
+            Tab::Materials => &mut self.materials,
+            Tab::Props => &mut self.props,
+        };
+        if browser.is_empty() {
             let content = match &self.status {
                 ContentStatus::NoGame => "Garry's Mod was not found, so its materials and models \
                      can't be shown. Start Halberd with --gmod-dir to point at it."
@@ -84,31 +127,20 @@ impl Library {
             };
             placeholder(
                 ui,
-                "Props, materials and entities",
+                "Materials and props",
                 &format!(
-                    "{content}\n\nMaterials and props appear here once the game's content is read."
+                    "{content}\n\nMaterials and props appear here once the game's content is \
+                     read. Spawn points, lights and the sky are in Entities."
                 ),
             );
             return;
         }
-        ui.horizontal(|ui| {
-            if ui
-                .selectable_label(!self.showing_props, MATERIALS_TAB)
-                .clicked()
-            {
-                self.showing_props = false;
-            }
-            if ui.selectable_label(self.showing_props, PROPS_TAB).clicked() {
-                self.showing_props = true;
-            }
-        });
-        ui.separator();
-        if self.showing_props {
-            if let Some(done) = self.props.show(ui, can_apply) {
-                *action = Some(LibraryAction::Prop(done));
-            }
-        } else if let Some(done) = self.materials.show(ui, can_apply) {
-            *action = Some(LibraryAction::Material(done));
+        let kind = self.tab;
+        if let Some(done) = browser.show(ui, can_apply) {
+            *action = Some(match kind {
+                Tab::Props => LibraryAction::Prop(done),
+                _ => LibraryAction::Material(done),
+            });
         }
     }
 }
@@ -124,15 +156,17 @@ impl Workbench {
         &mut self.library.props
     }
 
-    /// Tells the Library what a model is like once it has been read, so
-    /// it can be placed. A prop picked while it was being read is chosen
+    /// Tells the Library what model `model` is like once it has been read
+    /// (its box in its own space, and whether it was made static), so it
+    /// can be placed. A prop picked while it was being read is chosen
     /// for the Place tool now.
-    pub fn add_prop_info(&mut self, prop: PropChoice) {
-        let key = prop.model.to_ascii_lowercase();
-        self.doc.set_model_box(&prop.model, prop.local);
+    pub fn add_model_info(&mut self, model: &str, local: Aabb, static_prop: bool) {
+        let prop = PlaceChoice::prop(model, local, static_prop);
+        let key = model.to_ascii_lowercase();
+        self.doc.set_model_box(model, local);
         if self.library.pending_prop.as_deref() == Some(key.as_str()) {
             self.library.pending_prop = None;
-            self.viewport.tools_mut().set_prop(Some(prop.clone()));
+            self.viewport.tools_mut().set_placing(Some(prop.clone()));
         }
         self.library.prop_infos.insert(key, prop);
     }
@@ -157,9 +191,49 @@ impl Workbench {
         &self.library.status
     }
 
+    /// The game's skies, for the sky picker.
+    pub fn set_sky_names(&mut self, skies: Vec<String>) {
+        self.library.skies = skies;
+    }
+
     /// Carries out what the user did in the Library.
     pub(super) fn library_action(&mut self, action: LibraryAction) {
         match action {
+            LibraryAction::Place(index) => {
+                let Some(entity) = BASIC_ENTITIES.get(index) else {
+                    return;
+                };
+                // A map has one sun: picking it again selects the one there.
+                let sun = (entity.classname == "light_environment")
+                    .then(|| {
+                        self.doc.objects().find_map(|(id, o)| {
+                            o.as_entity()
+                                .is_some_and(|e| {
+                                    e.classname.eq_ignore_ascii_case("light_environment")
+                                })
+                                .then_some(id)
+                        })
+                    })
+                    .flatten();
+                if let Some(sun) = sun {
+                    self.doc.set_selection([sun]);
+                    self.push_warning(
+                        "The map already has a sun (light_environment); it is selected. A map \
+                         has only one.",
+                    );
+                    return;
+                }
+                self.library.pending_prop = None;
+                self.viewport.tools_mut().set_placing(Some(entity.choice()));
+            }
+            LibraryAction::Sky(name) => {
+                self.doc
+                    .execute(halberd_doc::Command::SetWorldSetting {
+                        key: "skyname".into(),
+                        value: name,
+                    })
+                    .ok();
+            }
             LibraryAction::Material(action) => self.browser_action(action),
             LibraryAction::Prop(BrowserAction::Pick(name) | BrowserAction::Apply(name)) => {
                 let key = name.to_ascii_lowercase();
@@ -167,7 +241,7 @@ impl Workbench {
                     Some(prop) => {
                         let prop = prop.clone();
                         self.library.pending_prop = None;
-                        self.viewport.tools_mut().set_prop(Some(prop));
+                        self.viewport.tools_mut().set_placing(Some(prop));
                     }
                     // Its model is still being read (its picture is on the
                     // way); it is chosen when it arrives.

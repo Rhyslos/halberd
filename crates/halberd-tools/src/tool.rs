@@ -159,8 +159,8 @@ pub struct ToolController {
     plan: Option<plan::PlanDraft>,
     /// The material new brushes get (`None`: the default).
     material: Option<String>,
-    /// The prop the Place tool puts down.
-    prop: Option<place::PropChoice>,
+    /// What the Place tool puts down.
+    prop: Option<place::PlaceChoice>,
     /// Where the Place tool would put it now (its origin).
     place_at: Option<glam::Vec3>,
 }
@@ -742,7 +742,7 @@ mod place;
 mod plan;
 
 pub use operations::{SelectAfter, ShapeOp, ShapeOpOutcome};
-pub use place::PropChoice;
+pub use place::PlaceChoice;
 pub use plan::PlanPreview;
 
 #[cfg(test)]
