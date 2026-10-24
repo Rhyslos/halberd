@@ -27,6 +27,8 @@ pub struct AppInfo {
 
 /// The View menu's switch for the player figure.
 pub const PLAYER_TOGGLE_LABEL: &str = "Show player for scale";
+/// The View menu's switch that makes the player figure follow the pointer.
+pub const PLAYER_FOLLOW_LABEL: &str = "Player follows the pointer";
 
 /// Keyboard shortcut for File → Quit (Ctrl+Q, or Cmd+Q on macOS).
 pub const QUIT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Q);
@@ -442,7 +444,24 @@ impl Workbench {
             }
             ui.separator();
             ui.checkbox(&mut self.show_player, PLAYER_TOGGLE_LABEL)
-                .on_hover_text("A 72-unit (1.83 m) player figure next to what you are working on");
+                .on_hover_text(
+                    "A 72-unit (1.83 m) player figure next to what you are working on. It turns \
+                     orange where a player could only crouch, red where one wouldn't fit.",
+                );
+            let mut follows = self.viewport.player_follows();
+            if ui
+                .add_enabled(
+                    self.show_player,
+                    egui::Checkbox::new(&mut follows, PLAYER_FOLLOW_LABEL),
+                )
+                .on_hover_text(
+                    "The player figure stands on whatever is under the pointer in the 3D view, \
+                     to check doorways, ceilings and gaps",
+                )
+                .changed()
+            {
+                self.viewport.set_player_follows(follows);
+            }
         });
         if ui
             .button(KEYBINDS_TITLE)

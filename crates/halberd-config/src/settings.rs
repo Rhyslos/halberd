@@ -58,7 +58,7 @@ pub struct EditorSettings {
     /// Whether WASD moves the camera while right mouse is held.
     /// `None` means the user has not been asked yet (first launch).
     pub wasd_movement: Option<bool>,
-    /// The unit lengths are shown and typed in (`"units"` or `"metres"`).
+    /// The unit lengths are shown and typed in (`"units"`, `"metres"` or `"feet"`).
     pub length_unit: LengthUnit,
     /// Whether a player-sized figure is shown in the viewport for scale.
     pub show_player_scale: bool,

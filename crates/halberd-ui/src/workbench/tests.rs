@@ -676,3 +676,22 @@ fn the_library_says_how_far_game_content_has_got() {
     harness.run();
     assert!(harness.query_by_label_contains("41,203 files").is_some());
 }
+
+#[test]
+fn view_menu_offers_feet_and_the_player_following_the_pointer() {
+    let mut harness = harness_for(Workbench::new(info(), None));
+    harness.run();
+    harness.get_by_label("View").click();
+    harness.run();
+    harness.get_by_label("Feet").click();
+    harness.run();
+    assert_eq!(
+        harness.state().length_unit(),
+        halberd_config::LengthUnit::Feet
+    );
+    harness.get_by_label("View").click();
+    harness.run();
+    harness.get_by_label(crate::PLAYER_FOLLOW_LABEL).click();
+    harness.run();
+    assert!(harness.state().viewport().player_follows());
+}

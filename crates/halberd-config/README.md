@@ -29,3 +29,4 @@ Settings file implemented: game folder, memory budget, worker threads, autosave 
 - `LengthUnit` converts and formats lengths: 1 Hammer unit = 2.54 cm (Source's character scale), so a 72-unit player is 1.83 m. Maps are always stored in Hammer units.
 - A damaged file is renamed to `settings.toml.damaged-N` and defaults are used.
 - Key bindings and camera speeds arrive with the viewport milestones.
+- **Feet** (`LengthUnit::Feet`, `UNITS_PER_FOOT`): a Hammer unit is an inch; `drag_speed` gives how much a number field moves per point dragged in each unit.

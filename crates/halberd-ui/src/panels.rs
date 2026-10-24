@@ -324,11 +324,7 @@ fn box_fields(ui: &mut Ui, doc: &mut Document, id: ObjectId, bounds: Aabb, unit:
     let corner = bounds.min;
     let mut values = [size.x, size.y, size.z, corner.x, corner.y, corner.z]
         .map(|v| unit.from_units(f64::from(v)));
-    let speed = if unit == LengthUnit::Metres {
-        0.01
-    } else {
-        1.0
-    };
+    let speed = unit.drag_speed();
     let mut changed = None;
     egui::Grid::new(("halberd_box_fields", id))
         .num_columns(2)
