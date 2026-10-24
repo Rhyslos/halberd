@@ -5,6 +5,7 @@
 //! found and exits instead, which is useful for troubleshooting and tests.
 
 mod cli;
+mod compile;
 mod content;
 mod files;
 mod gpu;

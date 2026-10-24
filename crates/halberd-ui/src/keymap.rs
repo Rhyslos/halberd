@@ -211,6 +211,11 @@ pub const KEYBINDS: &[Keybind] = &[
     bind(&[Ctrl, k(Key::S)], "Save", KeyContext::Anywhere),
     bind(&[Ctrl, Shift, k(Key::S)], "Save as…", KeyContext::Anywhere),
     bind(&[Ctrl, k(Key::Q)], "Quit", KeyContext::Anywhere),
+    bind(
+        &[k(Key::F9)],
+        "Compile and play (quick test in Garry's Mod)",
+        KeyContext::Anywhere,
+    ),
     bind(&[Ctrl, k(Key::Z)], "Undo", KeyContext::Anywhere),
     bind(&[Ctrl, k(Key::Y)], "Redo", KeyContext::Anywhere),
     bind(&[Ctrl, Shift, k(Key::Z)], "Redo", KeyContext::Anywhere),

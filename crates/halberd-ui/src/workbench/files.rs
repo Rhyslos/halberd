@@ -193,6 +193,8 @@ impl Workbench {
             actions.push(WorkbenchAction::SaveAs { then: None });
         }
         ui.separator();
+        self.compile_menu_item(ui, actions);
+        ui.separator();
         if item(ui, "Quit", &QUIT_SHORTCUT) {
             actions.extend(self.request(FileIntent::Quit));
         }
@@ -200,6 +202,7 @@ impl Workbench {
 
     /// The "save changes?" box and the message box, when showing.
     pub(super) fn dialogs(&mut self, ui: &Ui, actions: &mut Vec<WorkbenchAction>) {
+        self.compile_window(ui, actions);
         if let Some(intent) = self.asking_to_save {
             let name = self.map_name();
             let mut answer = None;
