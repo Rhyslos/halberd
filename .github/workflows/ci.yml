@@ -105,7 +105,7 @@ jobs:
         run: |
           if ! cargo deny --color never --all-features check > deny.log 2>&1; then
             cat deny.log
-            { grep -E 'error' -A3 deny.log || tail -n 20 deny.log; } | head -60 |
+            { grep -E '^(error|failed)' -A4 deny.log || tail -n 20 deny.log; } | head -60 |
               while IFS= read -r line; do
                 echo "::error title=cargo-deny::${line}"
               done
