@@ -142,3 +142,80 @@ fn a_plain_light_has_no_facing() {
     assert!(h.query_by_label(BRIGHTNESS_NAME).is_some());
     assert!(h.query_by_label(FACING_NAME).is_none());
 }
+
+#[test]
+fn selecting_an_entity_never_changes_it() {
+    // Regression: values outside the fields' ranges were clamped and saved
+    // just by drawing Properties.
+    for (class, settings) in [
+        (
+            "light_spot",
+            vec![("_cone", "180"), ("_inner_cone", "180"), ("pitch", "-90")],
+        ),
+        ("info_player_start", vec![("angles", "0 359.6 0")]),
+        ("light", vec![("_light", "255 255 255 200000")]),
+        ("info_player_start", vec![("angles", "12.5 -30 0")]),
+    ] {
+        let mut wb = Workbench::new(info(), None);
+        add(&mut wb, class, &settings);
+        wb.document_mut().mark_saved();
+        let mut h = harness_for(wb);
+        h.run();
+        h.run();
+        let now: Vec<(String, String)> = h
+            .state()
+            .document()
+            .objects()
+            .next()
+            .unwrap()
+            .1
+            .as_entity()
+            .unwrap()
+            .settings()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        assert!(
+            !h.state().document().is_modified(),
+            "{class} {settings:?} changed: {now:?} {:?}",
+            h.state().document().undo_label()
+        );
+    }
+}
+
+#[test]
+fn a_smaller_cone_takes_the_inner_cone_with_it() {
+    let mut wb = Workbench::new(info(), None);
+    add(
+        &mut wb,
+        "light_spot",
+        &[("_cone", "45"), ("_inner_cone", "30"), ("pitch", "-90")],
+    );
+    let mut h = harness_for(wb);
+    h.run();
+    super::tests::type_into(&mut h, CONE_NAME, "20");
+    let spot = h
+        .state()
+        .document()
+        .objects()
+        .next()
+        .unwrap()
+        .1
+        .as_entity()
+        .unwrap()
+        .clone();
+    assert_eq!(spot.setting("_cone"), Some("20"));
+    assert_eq!(spot.setting("_inner_cone"), Some("20"));
+    super::tests::type_into(&mut h, PITCH_NAME, "-60");
+    let spot = h
+        .state()
+        .document()
+        .objects()
+        .next()
+        .unwrap()
+        .1
+        .as_entity()
+        .unwrap()
+        .clone();
+    assert_eq!(spot.setting("pitch"), Some("-60"));
+    assert_eq!(spot.setting("angles"), Some("-60 0 0"));
+}

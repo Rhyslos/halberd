@@ -17,11 +17,11 @@ A playable blockout needs a spawn point, light and a sky. Garry's Mod reads thes
 Option 2.
 
 - **The Library's Entities tab** lists Player spawn, Light, Spotlight and Sun. A click turns on the Place tool, as for props; it works without the game.
-- **Settings they start with** are Hammer's usual ones: lights white at brightness 200, the spotlight pointing down (`pitch -90`) with a 45° cone, the sun at `pitch -50` with sky light (`_ambient`).
-- **A map has one sun:** picking Sun again selects the one already there, with a note.
-- **Shown as:** spawn points as player-sized green boxes (their origin at the feet, as in the game), lights yellow, the sun orange; spawns, spotlights and the sun with a line showing which way they face. A light's `pitch` setting is read as the compiler reads it (its sign turned round).
-- **Properties** edits a light's colour and brightness, a spotlight's cone, the pitch of spotlights and the sun, and the facing of spawns, spotlights and the sun (one undo step per drag, `SetEntitySettings`). Other settings stay read-only, listed.
-- **Sky:** a picker in the Entities tab sets the world's `skyname` (`SetWorldSetting`, undoable), from the skies in the game's materials (`skybox/<name>up`), or Half-Life 2's when the game isn't found. A new map saves Hammer's usual world settings with the chosen sky in place.
+- **Settings they start with:** lights white at brightness 200 and the spotlight pointing down (`pitch -90`) with a 45° cone, as in Hammer; the sun warmer and brighter than Hammer's, tilted down (`pitch -50`) with blue-grey sky light (`_ambient`) and soft shadows (`SunSpreadAngle 5`), so a first test looks right.
+- **A map has one sun:** placing it ends placing, and picking Sun again selects the one already there, with a note.
+- **Shown as:** spawn points as player-sized green boxes (their origin at the feet, as in the game), lights yellow, the sun orange; spawns, spotlights and the sun with a line showing which way they face. A light's pitch is read as the compiler reads it: its `pitch` setting (or the pitch in `angles` when that is missing or 0), negative pointing down. Turning a light with the gizmo writes `pitch` and `angles` together, as Hammer keeps them.
+- **Properties** edits a light's colour and brightness, a spotlight's cone, the pitch of spotlights and the sun, and the facing of spawns, spotlights and the sun (one undo step per drag, `SetEntitySettings`). Values outside a field's range are shown as they are and never changed just by selecting. Narrowing a spotlight's cone narrows its inner cone with it, since the compiler would otherwise widen the cone again. Other settings stay read-only, listed.
+- **Sky:** a picker in the Entities tab sets the world's `skyname` (`SetWorldSetting`, undoable), from the skies in the game's materials (`skybox/<name>up`), or Half-Life 2's when the game isn't found. A new map saves Hammer's usual world settings with the chosen sky in place; a map read from a file keeps its world as read (`MapFileData::from_file`).
 
 ## Consequences
 

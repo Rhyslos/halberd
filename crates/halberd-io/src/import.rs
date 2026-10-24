@@ -30,6 +30,7 @@ pub struct Imported {
 pub fn document_from_vmf(vmf: &Vmf) -> Result<Imported, halberd_doc::DocError> {
     let mut data = MapFileData {
         line_ending: vmf.line_ending,
+        from_file: true,
         ..MapFileData::default()
     };
     let mut objects = Vec::new();

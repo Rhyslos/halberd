@@ -21,6 +21,9 @@ pub struct MapFileData {
     pub line_ending: LineEnding,
     /// How the file's text was encoded.
     pub encoding: TextEncoding,
+    /// True if the map was read from a file (false for a new map, which
+    /// is saved with Hammer's usual header and world settings).
+    pub from_file: bool,
 }
 
 /// How a map file's text is encoded. Hammer writes plain bytes; files with

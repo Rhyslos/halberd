@@ -585,3 +585,15 @@ fn a_new_map_saves_the_sky_chosen_with_the_usual_settings() {
     assert_eq!(text.matches("\"skyname\"").count(), 1);
     assert!(text.contains("\"skyname\" \"sky_wasteland02\""));
 }
+
+#[test]
+fn an_opened_map_without_hammer_blocks_keeps_its_world_as_read() {
+    // Regression: such a map was taken for a new one, and the blocks in
+    // its world were dropped on saving.
+    let text = "world\n{\n\t\"id\" \"1\"\n\t\"skyname\" \"sky_x\"\n\tgroup\n\t{\n\t\t\"id\" \"5\"\n\t}\n}\n";
+    let doc = open(text);
+    let saved = saved_text(&doc);
+    assert!(saved.contains("group"), "{saved}");
+    assert!(!saved.contains("versioninfo"));
+    assert_eq!(saved, text);
+}

@@ -25,21 +25,7 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
 
     let mut world = Block::new("world");
     world.entries = if new_map {
-        // A new map gets Hammer's usual settings, with any set in the
-        // editor (such as its sky) in place of the usual values.
-        let mut settings = default_world_settings();
-        for entry in &data.world_header {
-            if let Entry::Pair(key, value) = entry {
-                match settings
-                    .iter_mut()
-                    .find(|e| matches!(e, Entry::Pair(k, _) if k.eq_ignore_ascii_case(key)))
-                {
-                    Some(Entry::Pair(_, v)) => *v = value.clone(),
-                    _ => settings.push(entry.clone()),
-                }
-            }
-        }
-        settings
+        new_world_settings(&data.world_header)
     } else {
         data.world_header.clone()
     };
@@ -307,14 +293,28 @@ fn default_header() -> Vec<Entry> {
     ]
 }
 
-/// True for a map not read from a file: it has no header blocks, and its
-/// world settings (if any were set in the editor) lack the world's class.
+/// True for a map not read from a file.
 fn is_new_map(data: &halberd_doc::MapFileData) -> bool {
-    data.header.is_empty()
-        && !data
-            .world_header
-            .iter()
-            .any(|e| matches!(e, Entry::Pair(k, _) if k.eq_ignore_ascii_case("classname")))
+    !data.from_file
+}
+
+/// A new map's world settings: Hammer's usual ones, with any set in the
+/// editor (such as its sky) in place of the usual values.
+fn new_world_settings(set: &[Entry]) -> Vec<Entry> {
+    let mut settings = default_world_settings();
+    for entry in set {
+        let slot = match entry {
+            Entry::Pair(key, _) => settings
+                .iter_mut()
+                .find(|e| matches!(e, Entry::Pair(k, _) if k.eq_ignore_ascii_case(key))),
+            Entry::Block(_) => None,
+        };
+        match (slot, entry) {
+            (Some(Entry::Pair(_, v)), Entry::Pair(_, value)) => *v = value.clone(),
+            _ => settings.push(entry.clone()),
+        }
+    }
+    settings
 }
 
 fn default_world_settings() -> Vec<Entry> {

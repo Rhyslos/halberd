@@ -122,6 +122,10 @@ impl ToolController {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         let entity = EntityObject::point(&prop.classname, origin, &settings);
+        // A map has one sun: placing it ends placing.
+        if prop.classname.eq_ignore_ascii_case("light_environment") {
+            self.set_placing(None);
+        }
         Some(ToolAction::Execute(Command::AddEntity(entity)))
     }
 }
@@ -242,5 +246,35 @@ mod entity_tests {
         assert_eq!(spawn.origin, Some(Vec3::new(48.0, 0.0, 0.0)));
         assert_eq!(spawn.setting("angles"), Some("0 90 0"));
         assert_eq!(spawn.marker().unwrap().max.z, 72.0);
+    }
+}
+
+#[cfg(test)]
+mod sun_tests {
+    use super::*;
+    use crate::Camera;
+    use glam::Vec2;
+
+    #[test]
+    fn placing_the_sun_ends_after_one() {
+        // Regression: the Place tool stayed on, so two clicks made two suns.
+        let mut tools = ToolController::new(16.0);
+        tools.set_placing(Some(PlaceChoice::entity("light_environment", &[])));
+        let camera = Camera::looking_at(Vec3::new(1.0, -400.0, 900.0), Vec3::ZERO);
+        let size = Vec2::new(1600.0, 900.0);
+        let input = ToolInput {
+            size,
+            cursor: camera.project(Vec3::ZERO, size),
+            pressed: true,
+            held: true,
+            ..ToolInput::default()
+        };
+        let first = tools.update(&input, &camera, &Document::new());
+        assert!(matches!(
+            first,
+            Some(ToolAction::Execute(Command::AddEntity(_)))
+        ));
+        assert_eq!(tools.tool(), Tool::Select);
+        assert!(tools.placing().is_none());
     }
 }

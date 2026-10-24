@@ -92,6 +92,7 @@ fn light_fields(ui: &mut Ui, entity: &EntityObject, changes: &mut Vec<(String, S
     ui.label("Brightness");
     let dragged = ui.add(
         DragValue::new(&mut brightness)
+            .clamp_existing_to_range(false)
             .range(0.0..=100_000.0)
             .speed(2.0),
     );
@@ -133,13 +134,42 @@ fn number_row(
     ui.label(name.split(" (").next().unwrap_or(name));
     let response = ui.add(
         DragValue::new(&mut value)
+            .clamp_existing_to_range(false)
             .range(range)
             .speed(1.0)
             .suffix("°"),
     );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, name));
     if response.changed() {
-        changes.push((key.to_string(), format!("{}", value.round() as i64)));
+        let value = value.round();
+        changes.push((key.to_string(), number(value)));
+        match key {
+            // The compiler raises the cone to the inner cone; keep the
+            // inner one inside, so the change shows in game.
+            "_cone" => {
+                let inner = entity
+                    .setting("_inner_cone")
+                    .and_then(|v| v.trim().parse::<f32>().ok())
+                    .unwrap_or(value);
+                if inner > value {
+                    changes.push(("_inner_cone".into(), number(value)));
+                }
+            }
+            // Hammer keeps a light's pitch in its angles too.
+            "pitch" => {
+                let angles = entity.angles();
+                changes.push((
+                    "angles".into(),
+                    format!(
+                        "{} {} {}",
+                        number(value),
+                        number(angles.y),
+                        number(angles.z)
+                    ),
+                ));
+            }
+            _ => {}
+        }
     }
     ui.end_row();
 }
@@ -151,7 +181,8 @@ fn facing_row(ui: &mut Ui, entity: &EntityObject, changes: &mut Vec<(String, Str
     ui.label("Facing");
     let response = ui.add(
         DragValue::new(&mut yaw)
-            .range(0.0..=359.0)
+            .range(0.0..=360.0)
+            .clamp_existing_to_range(false)
             .speed(1.0)
             .suffix("°"),
     );
@@ -176,6 +207,19 @@ fn facing_row(ui: &mut Ui, entity: &EntityObject, changes: &mut Vec<(String, Str
             .small(),
     );
     ui.end_row();
+}
+
+/// A number as settings write it: whole numbers plainly, others with up to
+/// three decimals.
+fn number(x: f32) -> String {
+    if (x - x.round()).abs() < 0.0005 {
+        format!("{}", x.round() as i64)
+    } else {
+        format!("{x:.3}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
+    }
 }
 
 /// "r g b brightness" (white at 200 when missing or unreadable).
