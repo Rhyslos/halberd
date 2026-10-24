@@ -338,6 +338,11 @@ pub const KEYBINDS: &[Keybind] = &[
         KeyContext::Viewport,
     ),
     bind(
+        &[Ctrl, Shift, k(Key::B)],
+        "Make ordinary brushes from the selected floor plan shapes",
+        KeyContext::Viewport,
+    ),
+    bind(
         &[k(Key::Delete)],
         "In Vertex or Face mode: delete the picked corners or faces",
         KeyContext::Viewport,
@@ -361,6 +366,16 @@ pub const KEYBINDS: &[Keybind] = &[
     bind(
         &[Alt],
         "As wide, deep and tall, around where you started",
+        KeyContext::Drawing,
+    ),
+    bind(
+        &[k(Key::Enter)],
+        "Floor plan: finish the outline",
+        KeyContext::Drawing,
+    ),
+    bind(
+        &[k(Key::Backspace)],
+        "Floor plan: take back the last corner",
         KeyContext::Drawing,
     ),
     bind(&[k(Key::Escape)], "Cancel the shape", KeyContext::Drawing),

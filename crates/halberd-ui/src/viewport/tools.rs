@@ -65,6 +65,23 @@ impl ViewportPanel {
             self.tools.set_inside_entities(on);
         }
         let mut notes = Vec::new();
+        let mut plan_action = None;
+        if !typing && self.tools.is_drawing_plan() {
+            // Drawing a floor plan: Enter finishes it, Backspace takes back
+            // the last corner.
+            let (finish, back) = ui.input(|i| {
+                (
+                    first_press(i, Key::Enter, |m| m.is_none()),
+                    first_press(i, Key::Backspace, |m| m.is_none()),
+                )
+            });
+            if finish {
+                plan_action = self.tools.finish_plan();
+            }
+            if back {
+                self.tools.undo_plan_corner();
+            }
+        }
         if !typing {
             if self.tools.is_drawing() {
                 // While drawing, R turns the shape; the gizmo keys wait.
@@ -96,7 +113,29 @@ impl ViewportPanel {
         // belongs to the camera, not the tool.
         let camera_busy = self.right_was_held || self.middle_was_held;
         let pressed_here = response.is_pointer_button_down_on() && !camera_busy;
-        let held = left_down && (pressed_here || self.left_was_held);
+        // A click so quick that it went down and up within one frame (a
+        // slow frame, or a touchpad tap) counts as held for this frame and
+        // let go in the next, so the tool still sees the press.
+        let quick_click = !left_down
+            && !self.left_was_held
+            && !camera_busy
+            && response.hovered()
+            && ui.input(|i| {
+                i.pointer.primary_released()
+                    && i.events.iter().any(|e| {
+                        matches!(e, egui::Event::PointerButton {
+                            button: egui::PointerButton::Primary,
+                            pressed: true,
+                            pos,
+                            ..
+                        } if response.rect.contains(*pos))
+                    })
+            });
+        if quick_click {
+            ui.ctx().request_repaint();
+        }
+        let left_down = left_down || quick_click;
+        let held = left_down && (pressed_here || quick_click || self.left_was_held);
         let pressed = held && !self.left_was_held;
         let released = self.left_was_held && !left_down;
         self.left_was_held = held;
@@ -122,7 +161,8 @@ impl ViewportPanel {
             centered,
         };
         let camera = *self.controller.camera();
-        match self.tools.update(&input, &camera, doc) {
+        let action = plan_action.or_else(|| self.tools.update(&input, &camera, doc));
+        match action {
             Some(ToolAction::Select(id)) => doc.set_selection(id),
             Some(ToolAction::ToggleSelected(id)) => doc.toggle_selected(id),
             Some(ToolAction::Execute(command)) => {

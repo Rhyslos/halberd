@@ -80,7 +80,7 @@ impl Document {
         let count: usize = objects
             .iter()
             .map(|o| match o {
-                MapObject::Brush(_) => 1,
+                MapObject::Brush(_) | MapObject::Shape(_) => 1,
                 MapObject::Entity(_, brushes) => 1 + brushes.len(),
             })
             .sum();
@@ -96,6 +96,10 @@ impl Document {
                 MapObject::Brush(brush) => {
                     let id = doc.new_id();
                     doc.insert(id, Object::Brush(brush));
+                }
+                MapObject::Shape(shape) => {
+                    let id = doc.new_id();
+                    doc.insert(id, Object::Shape(shape));
                 }
                 MapObject::Entity(entity, brushes) => {
                     let owner = doc.new_id();
@@ -415,7 +419,9 @@ impl Document {
                 }
                 Ok(Change::Modified(vec![(id, before.clone(), after)]))
             }
-            Command::TransformBrushes { brushes, .. } => {
+            Command::TransformBrushes {
+                brushes, shapes, ..
+            } => {
                 // Every brush is kept, changed or not, so the edits of one
                 // drag always list the same objects and merge into one step.
                 let mut seen = BTreeSet::new();
@@ -428,10 +434,27 @@ impl Document {
                     let shaped = before.as_brush().ok_or(DocError::NotABrush(id))?;
                     objects.push((id, before.clone(), Object::Brush(shaped.with_shape(brush))));
                 }
+                for (id, shape) in shapes {
+                    if !seen.insert(id) {
+                        continue;
+                    }
+                    let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
+                    before.as_shape().ok_or(DocError::NotABrush(id))?;
+                    objects.push((id, before.clone(), Object::Shape(shape)));
+                }
                 if objects.iter().all(|(_, before, after)| before == after) {
                     return Err(DocError::NothingToDo);
                 }
                 Ok(Change::Modified(objects))
+            }
+            Command::AddShape(shape) => {
+                if self.objects.len() >= MAX_OBJECTS {
+                    return Err(DocError::TooManyObjects);
+                }
+                Ok(Change::Inserted(vec![(
+                    self.new_id(),
+                    Object::Shape(shape),
+                )]))
             }
             Command::ShapeEdit {
                 changed,
@@ -554,7 +577,9 @@ impl Document {
             if let Some(entity) = entity {
                 match self.objects.get(&entity) {
                     Some(Object::Entity(_)) => {}
-                    Some(Object::Brush(_)) => return Err(DocError::NotAnEntity(entity)),
+                    Some(Object::Brush(_) | Object::Shape(_)) => {
+                        return Err(DocError::NotAnEntity(entity));
+                    }
                     None => return Err(DocError::UnknownObject(entity)),
                 }
             }
@@ -642,5 +667,7 @@ impl Document {
 
 #[cfg(test)]
 mod map_tests;
+#[cfg(test)]
+mod shape_tests;
 #[cfg(test)]
 mod tests;

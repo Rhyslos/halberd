@@ -35,6 +35,14 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
             world.push_block(solid_block(brush, &mut ids));
         }
     }
+    // Floor-plan shapes are split into convex brushes here, as Source
+    // needs, each marked so Halberd can put the shape back together.
+    let shapes = doc.objects().filter_map(|(_, o)| o.as_shape());
+    for (number, shape) in shapes.enumerate() {
+        for block in crate::shapes::shape_blocks(shape, number + 1, |b| solid_block(b, &mut ids)) {
+            world.push_block(block);
+        }
+    }
     world.entries.extend(data.world_trailer.iter().cloned());
     entries.push(Entry::Block(world));
 
@@ -148,7 +156,7 @@ fn side_block(face: &Face, info: &halberd_doc::FaceInfo, ids: &mut IdSource) -> 
 
 /// Hammer's world-aligned texture axes for a face, as `x y z` text:
 /// textures run along the two world axes the face is most nearly flat to.
-fn world_axes(face: &Face) -> (&'static str, &'static str) {
+pub(crate) fn world_axes(face: &Face) -> (&'static str, &'static str) {
     let n = face.plane().normal.abs();
     if n.z >= n.x && n.z >= n.y {
         ("1 0 0", "0 -1 0")
@@ -179,6 +187,8 @@ struct IdSource {
 impl IdSource {
     fn new(doc: &Document) -> Self {
         let mut highest = 1; // The world is id 1.
+        // Ids kept by shapes read from the file.
+        let mut shape_highest = 0;
         // Every id anywhere in what is kept: objects' own entries and every
         // block inside them (hidden brushes, `hidden` wrappers), and the
         // blocks around the world (hidden entities live in the footer).
@@ -206,6 +216,14 @@ impl IdSource {
             match object {
                 Object::Brush(b) => see_brush(b, &mut see),
                 Object::Entity(e) => see(&e.file_data),
+                Object::Shape(s) => {
+                    see(&s.look.file_data);
+                    for piece in s.file_ids() {
+                        shape_highest = shape_highest
+                            .max(usable(piece.solid))
+                            .max(piece.sides.iter().map(|&id| usable(id)).max().unwrap_or(0));
+                    }
+                }
             }
         }
         let data = doc.file_data();
@@ -218,7 +236,7 @@ impl IdSource {
             see(part);
         }
         Self {
-            next: highest.saturating_add(1),
+            next: highest.max(shape_highest).saturating_add(1),
         }
     }
 

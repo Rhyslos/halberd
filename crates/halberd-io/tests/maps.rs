@@ -36,7 +36,7 @@ fn brushes_and_entities_are_read() {
         .objects()
         .filter_map(|(_, o)| match o {
             Object::Entity(e) => Some(e.classname.as_str()),
-            Object::Brush(_) => None,
+            Object::Brush(_) | Object::Shape(_) => None,
         })
         .collect();
     assert_eq!(
@@ -86,6 +86,7 @@ fn a_moved_brush_keeps_its_ids_materials_and_editor_data() {
     doc.execute(Command::TransformBrushes {
         kind: TransformKind::Move,
         brushes: vec![(id, moved)],
+        shapes: Vec::new(),
     })
     .unwrap();
     let text = saved_text(&doc);
@@ -379,6 +380,7 @@ fn a_brush_inside_an_entity_can_be_moved_and_saved() {
     doc.execute(Command::TransformBrushes {
         kind: TransformKind::Move,
         brushes: vec![(brush, moved)],
+        shapes: Vec::new(),
     })
     .unwrap();
     let text = saved_text(&doc);

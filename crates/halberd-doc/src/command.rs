@@ -8,6 +8,8 @@ use halberd_geom::{Brush, FaceFate};
 pub enum Command {
     /// Adds brushes. They become the selection.
     AddBrushes(Vec<Brush>),
+    /// Adds a floor-plan shape. It becomes the selection.
+    AddShape(crate::ShapeObject),
     /// Removes objects. Removed objects leave the selection.
     Remove(Vec<ObjectId>),
     /// Replaces a brush's shape, for example after changing its size or
@@ -25,6 +27,8 @@ pub enum Command {
         kind: TransformKind,
         /// Each brush with its new shape.
         brushes: Vec<(ObjectId, Brush)>,
+        /// Each floor-plan shape moved along with them, as it is now.
+        shapes: Vec<(ObjectId, crate::ShapeObject)>,
     },
     /// Gives brushes new shapes after moving, rotating or scaling some of
     /// their corners, edges or faces. Each new shape comes with what became
@@ -125,6 +129,7 @@ impl Command {
         match self {
             Self::AddBrushes(brushes) if brushes.len() == 1 => "Create brush".into(),
             Self::AddBrushes(brushes) => format!("Create {} brushes", brushes.len()),
+            Self::AddShape(_) => "Create floor plan shape".into(),
             Self::ReplaceBrush { .. } => "Change brush".into(),
             Self::ShapeEdit { label, .. } => label.clone(),
             Self::EditBrushes {
@@ -138,12 +143,18 @@ impl Command {
                     format!("{} {count} {}", kind.verb(), part.name(*count))
                 }
             }
-            Self::TransformBrushes { kind, brushes } => {
+            Self::TransformBrushes {
+                kind,
+                brushes,
+                shapes,
+            } => {
                 let verb = kind.verb();
-                if brushes.len() == 1 {
-                    format!("{verb} brush")
-                } else {
-                    format!("{verb} {} brushes", brushes.len())
+                match (brushes.len(), shapes.len()) {
+                    (1, 0) => format!("{verb} brush"),
+                    (n, 0) => format!("{verb} {n} brushes"),
+                    (0, 1) => format!("{verb} shape"),
+                    (0, n) => format!("{verb} {n} shapes"),
+                    (b, s) => format!("{verb} {} objects", b + s),
                 }
             }
             Self::Remove(ids) => {

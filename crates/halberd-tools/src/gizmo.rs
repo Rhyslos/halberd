@@ -519,7 +519,13 @@ impl Gizmo {
 pub(crate) fn selected_brush_bounds(doc: &Document) -> Option<Aabb> {
     doc.selection()
         .iter()
-        .filter_map(|id| Some(doc.get(*id)?.as_brush()?.brush().bounds()))
+        .filter_map(|id| {
+            let object = doc.get(*id)?;
+            match object.as_shape() {
+                Some(shape) => Some(shape.bounds()),
+                None => Some(object.as_brush()?.brush().bounds()),
+            }
+        })
         .reduce(Aabb::union)
 }
 

@@ -337,7 +337,10 @@ fn b_picks_draw_then_opens_the_shape_list_and_q_goes_back_to_select() {
     }
     h.key_press(Key::Space);
     h.run();
-    assert_eq!(h.state().panel.tools().shape(), halberd_geom::Shape::Stairs);
+    assert_eq!(
+        h.state().panel.tools().shape(),
+        halberd_geom::Shape::FloorPlan
+    );
     // Q is Select.
     h.key_press(Key::Q);
     h.run();
@@ -982,3 +985,5 @@ fn a_shape_key_that_cannot_run_says_why() {
         h.state().notes
     );
 }
+
+mod plan;
