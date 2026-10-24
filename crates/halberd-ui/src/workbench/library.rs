@@ -44,6 +44,8 @@ pub(super) struct Library {
     pub(super) defs: Option<std::sync::Arc<halberd_fgd::Fgd>>,
     /// The entity search box's text.
     entity_search: String,
+    /// Brushes are selected (brush entities can be made from them).
+    pub(super) can_tie: bool,
 }
 
 impl Default for Library {
@@ -58,6 +60,7 @@ impl Default for Library {
             status: ContentStatus::NoGame,
             defs: None,
             entity_search: String::new(),
+            can_tie: false,
         }
     }
 }
@@ -130,7 +133,7 @@ impl Library {
                             ui,
                             defs.as_deref(),
                             &mut self.entity_search,
-                            can_apply,
+                            self.can_tie,
                         );
                         if let Some(picked) = picked {
                             *action = Some(LibraryAction::Catalog(picked));

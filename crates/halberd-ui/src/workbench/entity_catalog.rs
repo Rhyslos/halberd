@@ -6,7 +6,7 @@
 use super::Workbench;
 use egui::{RichText, Ui};
 use halberd_doc::{Command, EntityObject};
-use halberd_fgd::{ClassKind, Fgd, ResolvedClass};
+use halberd_fgd::{ClassKind, EntityClass, Fgd, ResolvedClass};
 use halberd_geom::Aabb;
 use halberd_kv::Entry;
 use halberd_tools::PlaceChoice;
@@ -71,27 +71,8 @@ pub(super) fn show(
         .auto_shrink([false, true])
         .show(ui, |ui| {
             for class in found.iter().take(MAX_LISTED) {
-                let solid = class.kind == ClassKind::Solid;
-                let text = if solid {
-                    format!("{}  (brush)", class.name)
-                } else {
-                    class.name.clone()
-                };
-                let enabled = !solid || can_tie;
-                let row = ui
-                    .add_enabled(enabled, egui::Button::new(text).frame(false))
-                    .on_hover_text(first_sentence(&class.description))
-                    .on_disabled_hover_text(format!(
-                        "{} Select brushes first, then click to tie them to a {}.",
-                        first_sentence(&class.description),
-                        class.name
-                    ));
-                if row.clicked() {
-                    action = Some(if solid {
-                        CatalogAction::Tie(class.name.clone())
-                    } else {
-                        CatalogAction::Place(class.name.clone())
-                    });
+                if let Some(picked) = class_row(ui, class, can_tie) {
+                    action = Some(picked);
                 }
             }
             if found.len() > MAX_LISTED {
@@ -99,6 +80,32 @@ pub(super) fn show(
             }
         });
     action
+}
+
+/// One class in the list; what clicking it asks for.
+fn class_row(ui: &mut Ui, class: &EntityClass, can_tie: bool) -> Option<CatalogAction> {
+    let solid = class.kind == ClassKind::Solid;
+    let text = if solid {
+        format!("{}  (brush)", class.name)
+    } else {
+        class.name.clone()
+    };
+    let enabled = !solid || can_tie;
+    let row = ui
+        .add_enabled(enabled, egui::Button::new(text).frame(false))
+        .on_hover_text(first_sentence(&class.description))
+        .on_disabled_hover_text(format!(
+            "{} Select brushes first, then click to tie them to a {}.",
+            first_sentence(&class.description),
+            class.name
+        ));
+    row.clicked().then(|| {
+        if solid {
+            CatalogAction::Tie(class.name.clone())
+        } else {
+            CatalogAction::Place(class.name.clone())
+        }
+    })
 }
 
 /// The first sentence of a description, for a tooltip.
@@ -179,7 +186,7 @@ impl Workbench {
             if class.kind != ClassKind::Point {
                 continue;
             }
-            if let Some((min, max)) = defs.resolved(&class.name).and_then(|c| c.size()) {
+            if let Some((min, max)) = defs.size_of(&class.name) {
                 self.doc
                     .set_class_box(&class.name, Aabb::from_corners(min.into(), max.into()));
             }
@@ -212,6 +219,12 @@ impl Workbench {
     /// selects it.
     fn tie_selection(&mut self, class: &ResolvedClass) {
         let selection: Vec<_> = self.doc.selection().iter().copied().collect();
+        // A brush to find the new entity by afterwards (the old entity may
+        // be gone: retying a whole brush entity replaces it).
+        let brush = selection.iter().find_map(|id| match self.doc.get(*id) {
+            Some(halberd_doc::Object::Brush(_)) => Some(*id),
+            _ => self.doc.brushes_of(*id).next(),
+        });
         let mut file_data = vec![Entry::Pair("classname".into(), class.class.name.clone())];
         file_data.extend(
             default_settings(class)
@@ -228,18 +241,7 @@ impl Workbench {
             entity,
         }) {
             Ok(()) => {
-                // Select the new entity, through one of its brushes.
-                let owner = selection.iter().find_map(|id| {
-                    let object = self.doc.get(*id)?;
-                    match object.as_brush() {
-                        Some(brush) => brush.entity(),
-                        None => self
-                            .doc
-                            .brushes_of(*id)
-                            .next()
-                            .and_then(|b| self.doc.get(b)?.as_brush()?.entity()),
-                    }
-                });
+                let owner = brush.and_then(|b| self.doc.get(b)?.as_brush()?.entity());
                 if let Some(owner) = owner {
                     self.doc.set_selection([owner]);
                 }

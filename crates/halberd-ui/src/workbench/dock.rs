@@ -73,6 +73,11 @@ impl TabViewer for PanelViewer<'_> {
             }
             Panel::Library => {
                 let can_apply = !self.doc.selection().is_empty();
+                // Brushes, or brush entities standing for theirs.
+                self.library.can_tie = self.doc.selection().iter().any(|id| {
+                    matches!(self.doc.get(*id), Some(halberd_doc::Object::Brush(_)))
+                        || self.doc.has_brushes(*id)
+                });
                 let sky = self.doc.world_setting("skyname").map(str::to_string);
                 self.library
                     .show(ui, can_apply, sky.as_deref(), self.library_action);

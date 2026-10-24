@@ -170,9 +170,11 @@ impl Document {
     }
 }
 
-/// A class name a map file can hold: letters, digits and `_`, not too long.
+/// A class name a map file can hold: letters, digits and `_`, not too
+/// long, and not `worldspawn` (a map has one world, which the editor makes).
 fn valid_classname(name: &str) -> bool {
     !name.is_empty()
+        && !name.eq_ignore_ascii_case("worldspawn")
         && name.len() <= MAX_CLASSNAME
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
@@ -300,13 +302,15 @@ mod tests {
         let e = doc.get(id).unwrap().as_entity().unwrap();
         assert_eq!(e.setting("spawnflags"), None);
         assert!(e.setting("origin").is_some() && e.setting("classname").is_some());
-        assert!(
-            doc.execute(Command::SetEntityClass {
-                id,
-                classname: "bad name; drop".into()
-            })
-            .is_err()
-        );
+        for bad in ["bad name; drop", "worldspawn"] {
+            assert!(
+                doc.execute(Command::SetEntityClass {
+                    id,
+                    classname: bad.into()
+                })
+                .is_err()
+            );
+        }
     }
 
     #[test]

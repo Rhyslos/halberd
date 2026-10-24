@@ -28,9 +28,23 @@ const DEFAULT_COLOR: Color32 = Color32::from_gray(130);
 #[derive(Default)]
 struct Edits {
     set: Vec<(String, String)>,
+    /// Changes from a drag (colour, brightness): one undo step per drag.
+    dragged: Vec<(String, String)>,
     remove: Vec<String>,
     class: Option<String>,
     to_world: bool,
+    /// Why something asked for couldn't be done.
+    notes: Vec<String>,
+}
+
+/// Keys with their own fields (class, origin) or that aren't settings
+/// (Hammer's `id` numbers objects in the file): never edited as keys.
+const FIXED_KEYS: [&str; 3] = ["classname", "origin", "id"];
+
+fn is_fixed(key: &str) -> bool {
+    FIXED_KEYS
+        .iter()
+        .any(|f| key.trim().eq_ignore_ascii_case(f))
 }
 
 /// The accessible name of key `key`'s value field.
@@ -63,11 +77,7 @@ pub(crate) fn keyvalue_editor(
                 }
             }
             for (key, value) in entity.settings() {
-                // The class and origin have their own fields; "id" is the
-                // editor's own number for the entity, not a setting.
-                let fixed = ["classname", "origin", "id"]
-                    .iter()
-                    .any(|f| key.eq_ignore_ascii_case(f));
+                let fixed = is_fixed(key);
                 let known = class.as_ref().is_some_and(|c| c.key(key).is_some());
                 if !fixed && !known {
                     plain_row(ui, id, key, value, &mut edits);
@@ -75,6 +85,7 @@ pub(crate) fn keyvalue_editor(
             }
         });
     add_row(ui, id, &mut edits);
+    check_class_kind(doc, id, defs, &mut edits);
     if brushes > 0 {
         ui.label(format!(
             "{brushes} brush{}",
@@ -96,7 +107,48 @@ pub(crate) fn keyvalue_editor(
     notes
 }
 
+/// Refuses a class change between point and brush entities (a point
+/// entity has no brushes to be a door with; a brush entity's brushes
+/// would be lost to a light).
+fn check_class_kind(doc: &Document, id: ObjectId, defs: Option<&Fgd>, edits: &mut Edits) {
+    let (Some(new), Some(defs)) = (&edits.class, defs) else {
+        return;
+    };
+    let Some(class) = defs.class(new) else {
+        return;
+    };
+    let has_brushes = doc.has_brushes(id);
+    let fits = match class.kind {
+        halberd_fgd::ClassKind::Solid => has_brushes,
+        halberd_fgd::ClassKind::Point => !has_brushes,
+        halberd_fgd::ClassKind::Base => false,
+    };
+    if !fits {
+        let why = if has_brushes {
+            "it is a point entity, and this one is made of brushes"
+        } else {
+            "it is made of brushes, and this one is a point entity"
+        };
+        edits
+            .notes
+            .push(format!("The class can't be changed to {new}: {why}."));
+        edits.class = None;
+    }
+}
+
 fn carry_out(doc: &mut Document, id: ObjectId, edits: Edits) -> Vec<String> {
+    let mut notes = edits.notes;
+    if !edits.dragged.is_empty() {
+        // One undo step for the whole drag of each field.
+        let key = id.get().wrapping_mul(31).wrapping_add(0x6B7);
+        let settings = edits.dragged;
+        if let Err(e) = doc.execute_merging(Command::SetEntitySettings { id, settings }, key)
+            && e != halberd_doc::DocError::NothingToDo
+        {
+            notes.push(format!("The setting could not be changed: {e}."));
+        }
+    }
+    let brushes: Vec<ObjectId> = doc.brushes_of(id).collect();
     let mut commands = Vec::new();
     if let Some(classname) = edits.class {
         commands.push(Command::SetEntityClass { id, classname });
@@ -116,10 +168,12 @@ fn carry_out(doc: &mut Document, id: ObjectId, edits: Edits) -> Vec<String> {
     if edits.to_world {
         commands.push(Command::MoveToWorld(vec![id]));
     }
-    let mut notes = Vec::new();
     for command in commands {
         let what = command.describe();
+        let to_world = matches!(command, Command::MoveToWorld(_));
         match doc.execute(command) {
+            // The brushes stay selected, as in Hammer.
+            Ok(()) if to_world => doc.set_selection(brushes.iter().copied()),
             Ok(()) | Err(halberd_doc::DocError::NothingToDo) => {}
             Err(e) => notes.push(format!("{what} could not be done: {e}.")),
         }
@@ -137,8 +191,13 @@ fn class_row(
 ) {
     ui.horizontal(|ui| {
         ui.label("Class");
-        if let Some(new) = commit_text(ui, ("class", id), &entity.classname, CLASS_FIELD_NAME, None)
-        {
+        if let Some(new) = commit_text(
+            ui,
+            ("class", "", id),
+            &entity.classname,
+            CLASS_FIELD_NAME,
+            None,
+        ) {
             edits.class = Some(new.trim().to_string());
         }
     });
@@ -169,17 +228,23 @@ fn known_row(ui: &mut Ui, id: ObjectId, entity: &EntityObject, def: &KeyDef, edi
     };
     label.on_hover_text(tip);
     let value = set.or(def.default.as_deref()).unwrap_or("");
-    let changed = if def.read_only {
+    let fixed = is_fixed(&def.name);
+    let changed = if def.read_only || fixed {
         ui.label(RichText::new(value).monospace());
         None
     } else {
         match def.kind {
             KeyType::Choices if !def.choices.is_empty() => choices(ui, id, def, value),
             KeyType::Flags if !def.choices.is_empty() => flags(ui, def, value),
-            KeyType::Color255 => color(ui, value),
+            KeyType::Color255 => {
+                if let Some(new) = color(ui, id, &def.name, value) {
+                    edits.dragged.push((def.name.clone(), new));
+                }
+                None
+            }
             _ => commit_text(
                 ui,
-                (def.name.as_str(), id),
+                ("kv", def.name.as_str(), id),
                 set.unwrap_or(""),
                 &value_field_name(&def.name),
                 def.default.as_deref(),
@@ -189,14 +254,14 @@ fn known_row(ui: &mut Ui, id: ObjectId, entity: &EntityObject, def: &KeyDef, edi
     if let Some(new) = changed {
         edits.set.push((def.name.clone(), new));
     }
-    remove_button(ui, &def.name, set.is_some(), edits);
+    remove_button(ui, &def.name, set.is_some() && !fixed, edits);
     ui.end_row();
 }
 
 /// A key the definitions don't describe: plain text.
 fn plain_row(ui: &mut Ui, id: ObjectId, key: &str, value: &str, edits: &mut Edits) {
     ui.label(RichText::new(key).monospace());
-    if let Some(new) = commit_text(ui, (key, id), value, &value_field_name(key), None) {
+    if let Some(new) = commit_text(ui, ("kv", key, id), value, &value_field_name(key), None) {
         edits.set.push((key.to_string(), new));
     }
     remove_button(ui, key, true, edits);
@@ -288,14 +353,21 @@ fn flags(ui: &mut Ui, def: &KeyDef, value: &str) -> Option<String> {
 }
 
 /// A colour button, and a brightness field when the value has one
-/// ("255 255 255 200").
-fn color(ui: &mut Ui, value: &str) -> Option<String> {
-    let parts: Vec<f32> = value
+/// ("255 255 255 200"). A value that isn't a plain colour (such as HDR's
+/// "-1 -1 -1 1", "same as the normal colour") is edited as text, so it
+/// isn't turned into black.
+fn color(ui: &mut Ui, id: ObjectId, key: &str, value: &str) -> Option<String> {
+    let parts: Option<Vec<f32>> = value
         .split_whitespace()
-        .filter_map(|p| p.parse().ok())
+        .map(|p| p.parse::<f32>().ok().filter(|v| v.is_finite()))
         .collect();
-    let channel = |i: usize| parts.get(i).map_or(255, |v| v.clamp(0.0, 255.0) as u8);
-    let mut rgb = [channel(0), channel(1), channel(2)];
+    let plain = parts
+        .as_ref()
+        .filter(|p| (3..=4).contains(&p.len()) && p[..3].iter().all(|v| (0.0..=255.0).contains(v)));
+    let Some(parts) = plain else {
+        return commit_text(ui, ("kv", key, id), value, &value_field_name(key), None);
+    };
+    let mut rgb = [parts[0] as u8, parts[1] as u8, parts[2] as u8];
     let mut brightness = parts.get(3).copied();
     let mut changed = false;
     ui.horizontal(|ui| {
@@ -308,9 +380,19 @@ fn color(ui: &mut Ui, value: &str) -> Option<String> {
         }
     });
     changed.then(|| match brightness {
-        Some(b) => format!("{} {} {} {}", rgb[0], rgb[1], rgb[2], b.round()),
+        Some(b) => format!("{} {} {} {}", rgb[0], rgb[1], rgb[2], trim_number(b)),
         None => format!("{} {} {}", rgb[0], rgb[1], rgb[2]),
     })
+}
+
+/// A number as Hammer writes it: whole numbers plainly, else up to two
+/// decimals.
+fn trim_number(v: f32) -> String {
+    if (v - v.round()).abs() < 0.005 {
+        format!("{}", v.round() as i64)
+    } else {
+        format!("{v:.2}").trim_end_matches('0').to_string()
+    }
 }
 
 fn add_row(ui: &mut Ui, id: ObjectId, edits: &mut Edits) {
@@ -334,11 +416,20 @@ fn add_row(ui: &mut Ui, id: ObjectId, edits: &mut Edits) {
             egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, NEW_VALUE_NAME)
         });
         let ready = !key.trim().is_empty();
-        if ui
+        let entered = v.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
+        let clicked = ui
             .add_enabled(ready, egui::Button::new(ADD_KEY_LABEL))
-            .clicked()
-        {
-            edits.set.push((key.trim().to_string(), value.clone()));
+            .clicked();
+        if ready && (clicked || entered) {
+            if is_fixed(&key) {
+                edits.notes.push(format!(
+                    "\"{}\" can't be added as a key: the class and position have their own \
+                     fields, and \"id\" is the editor's own number.",
+                    key.trim()
+                ));
+            } else {
+                edits.set.push((key.trim().to_string(), value.clone()));
+            }
             key.clear();
             value.clear();
         }

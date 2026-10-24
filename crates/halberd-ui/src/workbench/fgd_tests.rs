@@ -27,6 +27,8 @@ const DEFS: &str = r#"
     output OnBreak(void) : "When it breaks."
 ]
 @SolidClass base(Targetname) = func_wall : "A wall that can be named." []
+@SolidClass base(Targetname) = func_brush : "A brush." [ _lightHDR(color255) : "HDR colour" : "-1 -1 -1 1" ]
+@SolidClass = worldspawn : "The world." []
 "#;
 
 fn with_defs() -> Workbench {
@@ -58,7 +60,7 @@ fn the_list_searches_and_places_with_defaults_and_size() {
         h.state()
             .console()
             .entries()
-            .any(|e| e.message.starts_with("Entity definitions: 2 entities"))
+            .any(|e| e.message.starts_with("Entity definitions: 3 entities"))
     );
     h.get_by_label(ENTITIES_TAB).click();
     h.run();
@@ -118,11 +120,34 @@ fn brushes_are_tied_to_a_brush_entity_and_moved_back() {
         .expect("tied");
     assert!(h.state().document().selection().contains(&owner));
     assert_eq!(entity(h.state(), owner).classname, "func_wall");
+    // Clicking another brush class turns it into that and keeps it
+    // selected (regression: the selection emptied).
+    h.get_by_label("func_brush  (brush)").click();
+    h.run();
+    let new_owner = h
+        .state()
+        .document()
+        .get(brush)
+        .unwrap()
+        .as_brush()
+        .unwrap()
+        .entity()
+        .unwrap();
+    assert!(h.state().document().selection().contains(&new_owner));
+    assert!(h.state().document().get(owner).is_none(), "replaced");
+    // An HDR colour of -1s is text, not a black colour button.
+    assert!(h.query_by_label(&value_field_name("_lightHDR")).is_some());
     h.get_by_label(MOVE_TO_WORLD_LABEL).click();
     h.run();
-    assert!(h.state().document().get(owner).is_none());
+    assert!(h.state().document().get(new_owner).is_none());
+    assert!(
+        h.state().document().selection().contains(&brush),
+        "the brushes stay selected"
+    );
     let brush = h.state().document().get(brush).unwrap().as_brush().unwrap();
     assert_eq!(brush.entity(), None);
+    // The world itself is never offered.
+    assert!(h.query_by_label("worldspawn  (brush)").is_none());
 }
 
 #[test]
@@ -193,6 +218,30 @@ fn keys_are_added_removed_and_the_class_changed() {
     h.key_press(egui::Key::Enter);
     h.run();
     assert_eq!(entity(h.state(), id).classname, "item_box");
+    // A point entity can't become a brush entity.
+    h.get_by_label(CLASS_FIELD_NAME).click();
+    h.run();
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("func_wall".into()));
+    h.key_press(egui::Key::Enter);
+    h.run();
+    assert_eq!(entity(h.state(), id).classname, "item_box");
+    assert!(h.state().console().entries().any(|e| {
+        e.message
+            .starts_with("The class can't be changed to func_wall")
+    }));
+    // The class and position can't be added as keys.
+    h.get_by_label(NEW_KEY_NAME).click();
+    h.run();
+    h.event(egui::Event::Text("origin".into()));
+    h.get_by_label(ADD_KEY_LABEL).click();
+    h.run();
+    assert!(
+        h.state()
+            .console()
+            .entries()
+            .any(|e| e.message.contains("can't be added as a key"))
+    );
     assert!(
         h.query_by_label_contains("doesn't have this class")
             .is_some()
