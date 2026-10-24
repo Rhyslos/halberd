@@ -554,3 +554,46 @@ fn a_placed_and_moved_prop_saves_as_hammer_writes_it_and_reads_back() {
     assert_eq!(prop.setting("angles"), Some("0 90 0"));
     assert!(prop.setting("id").is_some(), "given an id");
 }
+
+#[test]
+fn a_new_map_saves_the_sky_chosen_with_the_usual_settings() {
+    let mut doc = Document::new();
+    doc.execute(Command::SetWorldSetting {
+        key: "skyname".into(),
+        value: "sky_borealis01".into(),
+    })
+    .unwrap();
+    let text = saved_text(&doc);
+    assert!(text.contains("\"skyname\" \"sky_borealis01\""), "{text}");
+    assert!(!text.contains("sky_day01_01"));
+    assert!(text.contains("\"classname\" \"worldspawn\""));
+    assert!(
+        text.contains("versioninfo"),
+        "Hammer's header is still written"
+    );
+    let reopened = open(&text);
+    assert_eq!(reopened.world_setting("skyname"), Some("sky_borealis01"));
+    // An opened map changes its own setting in place.
+    let mut opened = open(SAMPLE);
+    opened
+        .execute(Command::SetWorldSetting {
+            key: "skyname".into(),
+            value: "sky_wasteland02".into(),
+        })
+        .unwrap();
+    let text = saved_text(&opened);
+    assert_eq!(text.matches("\"skyname\"").count(), 1);
+    assert!(text.contains("\"skyname\" \"sky_wasteland02\""));
+}
+
+#[test]
+fn an_opened_map_without_hammer_blocks_keeps_its_world_as_read() {
+    // Regression: such a map was taken for a new one, and the blocks in
+    // its world were dropped on saving.
+    let text = "world\n{\n\t\"id\" \"1\"\n\t\"skyname\" \"sky_x\"\n\tgroup\n\t{\n\t\t\"id\" \"5\"\n\t}\n}\n";
+    let doc = open(text);
+    let saved = saved_text(&doc);
+    assert!(saved.contains("group"), "{saved}");
+    assert!(!saved.contains("versioninfo"));
+    assert_eq!(saved, text);
+}

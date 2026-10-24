@@ -170,10 +170,9 @@ fn entities_are_listed_and_their_settings_shown() {
     let light = h.state().document().objects().next().unwrap().0;
     h.get_by_label(&format!("light {light}")).click();
     h.run();
-    assert!(
-        h.query_by_label("Editing entities comes in Phase 2.")
-            .is_some()
-    );
+    // A light's colour and brightness can be edited; all its settings are
+    // listed too.
+    assert!(h.query_by_label(crate::panels::BRIGHTNESS_NAME).is_some());
     assert!(h.query_by_label("255 240 200 300").is_some());
     assert!(
         h.query_by_label("Box width").is_none(),

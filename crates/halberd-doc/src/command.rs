@@ -48,6 +48,22 @@ pub enum Command {
     },
     /// Adds a point entity, such as a prop. It becomes the selection.
     AddEntity(EntityObject),
+    /// Changes an entity's settings (key and value pairs), adding those it
+    /// lacks. The selection does not change.
+    SetEntitySettings {
+        /// The entity.
+        id: ObjectId,
+        /// The settings to change.
+        settings: Vec<(String, String)>,
+    },
+    /// Changes one of the map's own settings (the world's, such as its
+    /// sky, `skyname`).
+    SetWorldSetting {
+        /// The setting.
+        key: String,
+        /// Its new value.
+        value: String,
+    },
     /// Gives brushes new shapes after moving, rotating or scaling some of
     /// their corners, edges or faces. Each new shape comes with what became
     /// of each face ([`Brush::with_moved_points`]): a face that was split or
@@ -152,6 +168,11 @@ impl Command {
             Self::AddShape(_) => "Create floor plan shape".into(),
             Self::AddEntity(entity) if entity.classname.starts_with("prop_") => "Place prop".into(),
             Self::AddEntity(entity) => format!("Add {}", entity.classname),
+            Self::SetEntitySettings { .. } => "Change entity settings".into(),
+            Self::SetWorldSetting { key, .. } if key.eq_ignore_ascii_case("skyname") => {
+                "Change sky".into()
+            }
+            Self::SetWorldSetting { key, .. } => format!("Change map setting {key}"),
             Self::SetMaterial { faces, .. } => {
                 let picked: Option<usize> = faces
                     .iter()
@@ -216,6 +237,16 @@ pub(crate) enum Change {
     Removed(Vec<(ObjectId, Object)>),
     /// These objects changed: each with how it was before and after.
     Modified(Vec<(ObjectId, Object, Object)>),
+    /// A world setting changed: its value before and after (`None`: not
+    /// set).
+    World {
+        /// The setting.
+        key: String,
+        /// Its value before.
+        before: Option<String>,
+        /// Its value after.
+        after: Option<String>,
+    },
     /// Several changes, in order. Objects they insert join the selection
     /// if `select_added`, else the selection is left alone.
     Several {
@@ -245,6 +276,11 @@ impl Change {
                 parts: parts.into_iter().rev().map(Self::inverse).collect(),
                 select_added,
             },
+            Self::World { key, before, after } => Self::World {
+                key,
+                before: after,
+                after: before,
+            },
         }
     }
 
@@ -255,12 +291,30 @@ impl Change {
             Self::Modified(objects) => objects.iter().all(|(_, before, after)| before == after),
             Self::Inserted(objects) | Self::Removed(objects) => objects.is_empty(),
             Self::Several { parts, .. } => parts.iter().all(Self::is_noop),
+            Self::World { before, after, .. } => before == after,
         }
     }
 
     /// This change followed by `later`, as one change, when both modify the
     /// same objects. Used to make a whole drag one undo step.
     pub(crate) fn merged_with(&self, later: &Change) -> Option<Change> {
+        if let (
+            Self::World {
+                key, before: first, ..
+            },
+            Self::World {
+                key: later_key,
+                after: last,
+                ..
+            },
+        ) = (self, later)
+        {
+            return (key == later_key).then(|| Self::World {
+                key: key.clone(),
+                before: first.clone(),
+                after: last.clone(),
+            });
+        }
         let (Self::Modified(first), Self::Modified(second)) = (self, later) else {
             return None;
         };

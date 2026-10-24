@@ -236,8 +236,8 @@ impl EntityObject {
     /// origin; the document knows which entities have brushes.)
     pub fn marker(&self) -> Option<Aabb> {
         let origin = self.origin?;
-        let half = Vec3::splat(POINT_ENTITY_HALF_SIZE);
-        Some(Aabb::from_corners(origin - half, origin + half))
+        let local = crate::entity::class_box(&self.classname);
+        Some(Aabb::from_corners(origin + local.min, origin + local.max))
     }
 
     /// True if the entity's file data holds brushes Halberd could not show

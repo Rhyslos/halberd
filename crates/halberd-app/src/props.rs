@@ -8,7 +8,6 @@ use crate::gpu::GpuViewport;
 use halberd_assets::{GameContent, LoadedModel, ModelLoader};
 use halberd_geom::Aabb;
 use halberd_render::PropModel;
-use halberd_tools::PropChoice;
 use halberd_ui::Workbench;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -87,11 +86,7 @@ fn deliver_one(loaded: LoadedModel, workbench: &mut Workbench, gpu: Option<&mut 
     };
     let (min, max) = model.bounds;
     let local = Aabb::from_corners(min.into(), max.into());
-    workbench.add_prop_info(PropChoice {
-        model: name.clone(),
-        local,
-        static_prop: model.static_prop,
-    });
+    workbench.add_model_info(&name, local, model.static_prop);
     let prop = PropModel::new(&model, &materials);
     let picture = match gpu {
         Some(gpu) => {

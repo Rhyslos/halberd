@@ -9,6 +9,12 @@ use halberd_doc::{Command, Document, Object, ObjectId};
 use halberd_geom::{Aabb, Brush, MIN_SIZE, Plane};
 use std::collections::BTreeSet;
 
+mod entity_settings;
+#[cfg(test)]
+pub(crate) use entity_settings::{
+    BRIGHTNESS_NAME, COLOUR_NAME, CONE_NAME, FACING_NAME, PITCH_NAME,
+};
+
 /// One line of the Scene list.
 struct SceneRow {
     id: ObjectId,
@@ -170,7 +176,11 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthU
     {
         ui.add_space(8.0);
         ui.label(RichText::new("1 object selected").strong());
-        entity_details(ui, entity, doc.brushes_of(id).count());
+        let entity = entity.clone();
+        let brushes = doc.brushes_of(id).count();
+        ui.label(RichText::new(&entity.classname).strong().size(15.0));
+        let editable = entity_settings::basic_entity_editor(ui, doc, id, &entity);
+        entity_details(ui, &entity, brushes, editable);
         return;
     }
     let Some(bounds) = doc.selection_bounds() else {
@@ -258,10 +268,14 @@ fn materials_summary(brush: &halberd_doc::BrushObject) -> String {
     }
 }
 
-/// An entity's class and settings, read-only for now.
-fn entity_details(ui: &mut Ui, entity: &halberd_doc::EntityObject, brushes: usize) {
-    ui.label(RichText::new(&entity.classname).strong().size(15.0));
-    ui.label(RichText::new("Editing entities comes in Phase 2.").weak());
+/// An entity's settings, read-only (`editable`: some were editable above).
+fn entity_details(ui: &mut Ui, entity: &halberd_doc::EntityObject, brushes: usize, editable: bool) {
+    let note = if editable {
+        "All settings (editing the rest comes in Phase 2):"
+    } else {
+        "Editing entities comes in Phase 2."
+    };
+    ui.label(RichText::new(note).weak());
     ui.add_space(4.0);
     egui::Grid::new("halberd_entity_settings")
         .num_columns(2)

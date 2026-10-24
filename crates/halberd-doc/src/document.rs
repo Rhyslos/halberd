@@ -491,6 +491,10 @@ impl Document {
                     Object::Entity(entity),
                 )]))
             }
+            Command::SetEntitySettings { id, settings } => {
+                self.prepare_entity_settings(id, &settings)
+            }
+            Command::SetWorldSetting { key, value } => self.prepare_world_setting(&key, &value),
             Command::AddShape(shape) => {
                 if self.objects.len() >= MAX_OBJECTS {
                     return Err(DocError::TooManyObjects);
@@ -574,6 +578,7 @@ impl Document {
                     self.objects.insert(*id, after.clone());
                 }
             }
+            Change::World { key, after, .. } => self.set_world_value(key, after.as_deref()),
             Change::Several {
                 parts,
                 select_added,
@@ -717,3 +722,4 @@ mod materials;
 mod shape_tests;
 #[cfg(test)]
 mod tests;
+mod world;

@@ -30,10 +30,11 @@ pub use renderer::{
     ViewportTarget, best_sample_count,
 };
 pub use scene::{
-    BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, ENTITY_EDGE_COLOR, FaceVertex, NORMALIZED_UV_FLAG,
-    PLAYER_COLOR, PLAYER_OUTLINE_VERTICES, POINT_ENTITY_COLOR, POINT_ENTITY_EDGE_COLOR,
-    PREVIEW_COLOR, PROP_COLOR, PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR, SceneGeometry,
-    TEXTURE_SIZE, box_outline, material_hue, player_outline, shape_outline, texture_flag,
+    BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, ENTITY_EDGE_COLOR, FaceVertex, LIGHT_COLOR,
+    NORMALIZED_UV_FLAG, PLAYER_COLOR, PLAYER_OUTLINE_VERTICES, POINT_ENTITY_COLOR,
+    POINT_ENTITY_EDGE_COLOR, PREVIEW_COLOR, PROP_COLOR, PlayerOutline, SELECTED_COLOR,
+    SELECTED_EDGE_COLOR, SPAWN_COLOR, SUN_COLOR, SceneGeometry, TEXTURE_SIZE, box_outline,
+    entity_color, material_hue, player_outline, shape_outline, texture_flag,
 };
 pub use textures::{MATERIAL_TEXTURE_SIZE, MAX_MATERIAL_TEXTURES};
 

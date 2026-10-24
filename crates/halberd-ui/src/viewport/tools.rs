@@ -325,16 +325,11 @@ impl ViewportPanel {
 
     /// The Place tool's second toolbar row: what is being placed.
     fn place_options(&mut self, ui: &mut Ui, rect: Rect) {
-        let Some(prop) = self.tools.prop() else {
+        let Some(placing) = self.tools.placing() else {
             return;
         };
-        let name = prop
-            .model
-            .rsplit('/')
-            .next()
-            .unwrap_or(&prop.model)
-            .to_string();
-        let class = prop.classname();
+        let name = placing.name().to_string();
+        let class = placing.classname.clone();
         let area = Rect::from_min_size(
             rect.left_top() + vec2(8.0, 60.0),
             vec2((rect.width() - 16.0).max(0.0), 30.0),
@@ -356,7 +351,7 @@ impl ViewportPanel {
                 stop = ui.button("Stop").clicked();
             });
         if stop {
-            self.tools.set_prop(None);
+            self.tools.set_placing(None);
         }
     }
 

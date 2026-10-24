@@ -70,8 +70,36 @@ impl EntityObject {
 
     /// Its turn as a rotation, as Source applies `angles`: roll about X,
     /// then pitch about Y (positive tips the front down), then yaw about Z.
+    /// Lights turn the way they shine ([`Self::facing`]).
     pub fn rotation(&self) -> Quat {
+        if self.is_light() {
+            return self.facing();
+        }
         rotation_of(self.angles())
+    }
+
+    /// True for lights (`light`, `light_spot`, `light_environment`…), whose
+    /// pitch the compiler reads its own way.
+    pub fn is_light(&self) -> bool {
+        self.classname.to_ascii_lowercase().starts_with("light")
+    }
+
+    /// Which way it points, as the compiler reads it. For lights, the
+    /// pitch is the `pitch` setting (or, when it is missing or 0, the pitch
+    /// in `angles`), with negative pitching down (`-90` points straight
+    /// down, as Hammer shows). Others: [`Self::rotation`].
+    pub fn facing(&self) -> Quat {
+        let mut angles = self.angles();
+        if !self.is_light() {
+            return rotation_of(angles);
+        }
+        let pitch = self
+            .setting("pitch")
+            .and_then(|p| p.trim().parse::<f32>().ok())
+            .filter(|p| p.is_finite() && *p != 0.0)
+            .unwrap_or(angles.x);
+        angles.x = -pitch;
+        rotation_of(angles)
     }
 
     /// The same entity at `origin` (its setting too).
@@ -82,11 +110,19 @@ impl EntityObject {
         moved
     }
 
-    /// The same entity turned to face `rotation`.
+    /// The same entity turned to face `rotation`. A light's pitch is
+    /// written the way the compiler reads it, in both `pitch` and
+    /// `angles`, as Hammer keeps them.
     pub fn with_rotation(&self, rotation: Quat) -> Self {
         let mut turned = self.clone();
         let (yaw, pitch, roll) = rotation.to_euler(EulerRot::ZYX);
-        let degrees = Vec3::new(pitch, yaw, roll).map(f32::to_degrees);
+        let mut degrees = Vec3::new(pitch, yaw, roll).map(f32::to_degrees);
+        if self.is_light() {
+            degrees.x = -degrees.x;
+            let light_pitch = format_vec3(Vec3::new(degrees.x, 0.0, 0.0));
+            let light_pitch = light_pitch.split(' ').next().unwrap_or("0").to_string();
+            turned.set_setting("pitch", &light_pitch);
+        }
         turned.set_setting("angles", &format_vec3(degrees));
         turned
     }
@@ -120,6 +156,18 @@ impl EntityObject {
         }
         Some(placed)
     }
+}
+
+/// The box a point entity of `classname` is shown as, around its origin:
+/// player spawns are as big as a player (their origin at the feet, as in
+/// the game); others are a small cube.
+pub fn class_box(classname: &str) -> Aabb {
+    let class = classname.to_ascii_lowercase();
+    if class.starts_with("info_player_") {
+        return Aabb::from_corners(Vec3::new(-16.0, -16.0, 0.0), Vec3::new(16.0, 16.0, 72.0));
+    }
+    let half = Vec3::splat(POINT_ENTITY_HALF_SIZE);
+    Aabb::from_corners(-half, half)
 }
 
 /// The rotation for Source `angles` (pitch, yaw, roll in degrees).
@@ -221,5 +269,49 @@ mod tests {
         let mut bad = prop.clone();
         bad.set_setting("angles", "nonsense");
         assert_eq!(bad.angles(), Vec3::ZERO);
+    }
+}
+
+#[cfg(test)]
+mod light_tests {
+    use super::*;
+
+    fn points(entity: &EntityObject) -> Vec3 {
+        entity.facing() * Vec3::X
+    }
+
+    #[test]
+    fn lights_point_the_way_the_compiler_reads_them() {
+        let spot = EntityObject::point("light_spot", Vec3::ZERO, &[("pitch", "-90")]);
+        assert!((points(&spot) - Vec3::NEG_Z).length() < 1e-5, "down");
+        // No pitch (or 0): the pitch in angles, read the same way round.
+        let old = EntityObject::point("light_spot", Vec3::ZERO, &[("angles", "-45 0 0")]);
+        assert!(points(&old).z < -0.7, "{}", points(&old));
+        let zero = EntityObject::point(
+            "light_spot",
+            Vec3::ZERO,
+            &[("pitch", "0"), ("angles", "-45 0 0")],
+        );
+        assert!(points(&zero).z < -0.7);
+        // Not lights: angles as the engine reads them (positive pitch down).
+        let spawn = EntityObject::point("info_player_start", Vec3::ZERO, &[("angles", "45 0 0")]);
+        assert!(points(&spawn).z < -0.7);
+    }
+
+    #[test]
+    fn turning_a_light_writes_its_pitch_in_both_places() {
+        let spot = EntityObject::point(
+            "light_spot",
+            Vec3::ZERO,
+            &[("pitch", "-90"), ("angles", "0 0 0")],
+        );
+        // The gizmo tilts it to point 45 degrees down towards +X.
+        let tilted = spot.with_rotation(rotation_of(Vec3::new(45.0, 0.0, 0.0)));
+        assert_eq!(tilted.setting("pitch"), Some("-45"));
+        assert_eq!(tilted.setting("angles"), Some("-45 0 0"));
+        let p = points(&tilted);
+        assert!(p.z < -0.7 && p.x > 0.7, "{p}");
+        // Its rotation (for the gizmo) is the way it shines.
+        assert!((tilted.rotation() * Vec3::X - p).length() < 1e-5);
     }
 }
