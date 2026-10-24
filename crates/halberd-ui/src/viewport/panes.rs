@@ -4,12 +4,12 @@
 use super::layout::{MAX_VIEWS, PaneView, ViewLayout, ViewSetup};
 use super::{
     PIVOT_COLOR, PLAYER_LABEL_COLOR, ViewportPanel, ViewportRenderer, ViewportView, elements,
-    gizmo, plan, player_feet,
+    gizmo, plan,
 };
 use egui::{Align, Align2, Color32, FontId, Layout, Rect, Stroke, Ui, UiBuilder, pos2, vec2};
 use glam::Vec2;
 use halberd_doc::Document;
-use halberd_tools::{PLAYER_HEIGHT, Tool, player_bounds};
+use halberd_tools::{PLAYER_HEIGHT, Tool};
 
 /// Accessible name of the layout picker in the viewport's top-right corner.
 pub const LAYOUT_PICKER_LABEL: &str = "Views";
@@ -26,6 +26,9 @@ impl ViewportPanel {
         self.layout = layout;
         if self.active >= layout.count() {
             self.active = 0;
+        }
+        if self.camera_view >= layout.count() {
+            self.camera_view = 0;
         }
     }
 
@@ -100,9 +103,7 @@ impl ViewportPanel {
             grid_size: self.grid_size,
             preview: self.tools.preview(),
             preview_shape: self.tools.preview_brushes(),
-            player: self
-                .show_player
-                .then(|| player_bounds(player_feet(self.tools.preview(), doc, camera.position))),
+            player: self.player_at,
             id: index,
             grid_axis,
             grid_offset,

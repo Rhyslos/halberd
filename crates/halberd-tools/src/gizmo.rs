@@ -197,7 +197,12 @@ impl Frame {
 
     /// How directly the camera looks along `dir` (0: across, 1: along).
     fn facing(&self, dir: Vec3) -> f32 {
-        let view = (self.pivot - self.camera.position).normalize_or_zero();
+        // A flat view looks the same way everywhere.
+        let view = if self.camera.ortho.is_some() {
+            self.camera.forward()
+        } else {
+            (self.pivot - self.camera.position).normalize_or_zero()
+        };
         dir.dot(view).abs()
     }
 }

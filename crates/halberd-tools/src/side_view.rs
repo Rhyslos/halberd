@@ -3,7 +3,7 @@
 //! Either mouse button that moves the camera (right or middle) drags the
 //! view along; scrolling zooms in and out around the pointer.
 
-use crate::camera::{Camera, DEFAULT_FOV_Y, Ray, WORLD_LIMIT};
+use crate::camera::{Camera, DEFAULT_FOV_Y, Ray};
 use crate::controller::ViewportInput;
 use glam::{Vec2, Vec3};
 use halberd_geom::Aabb;
@@ -11,11 +11,15 @@ use serde::{Deserialize, Serialize};
 use std::f32::consts::{FRAC_PI_2, PI};
 
 /// How far behind what it shows a side view's camera stands, so the whole
-/// map is in front of it.
-const BACK_OFF: f32 = 200_000.0;
+/// map is in front of it (and, with the centre kept within
+/// [`SIDE_VIEW_REACH`], inside the far plane).
+const BACK_OFF: f32 = 100_000.0;
+/// How far from the origin a side view's centre may go, on every axis: past
+/// the edge of the largest Source maps (±32768).
+pub const SIDE_VIEW_REACH: f32 = 32_768.0;
 /// How far beyond the view's centre its grid is drawn, so it lies behind
-/// everything in the map.
-pub const GRID_BEHIND: f32 = 50_000.0;
+/// everything in the map (twice [`SIDE_VIEW_REACH`], and a little more).
+pub const GRID_BEHIND: f32 = 70_000.0;
 /// Least and most a side view can show from top to bottom, in units.
 pub const SIDE_VIEW_HEIGHT_RANGE: (f32, f32) = (16.0, 131_072.0);
 /// How strongly scrolling zooms: fraction per point scrolled.
@@ -193,7 +197,7 @@ impl SideCamera {
             side: self.side,
             center: if self.center.is_finite() {
                 self.center
-                    .clamp(Vec3::splat(-WORLD_LIMIT), Vec3::splat(WORLD_LIMIT))
+                    .clamp(Vec3::splat(-SIDE_VIEW_REACH), Vec3::splat(SIDE_VIEW_REACH))
             } else {
                 Vec3::ZERO
             },

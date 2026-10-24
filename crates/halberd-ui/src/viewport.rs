@@ -17,7 +17,7 @@ use halberd_doc::Document;
 use halberd_geom::Aabb;
 use halberd_tools::{
     CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, Tool, ToolController,
-    ViewportInput,
+    ViewportInput, player_bounds,
 };
 
 mod draw_options;
@@ -69,6 +69,12 @@ pub trait ViewportRenderer {
     /// Draws a frame of `doc` and returns the egui texture showing it, or a
     /// plain-language reason why it could not.
     fn render(&mut self, view: &ViewportView, doc: &Document) -> Result<egui::TextureId, String>;
+
+    /// Only views `0..shown` are shown now: images kept for the others can
+    /// be let go. Called once a frame, after the views are drawn.
+    fn release_unused(&mut self, shown: usize) {
+        let _ = shown;
+    }
 }
 
 /// A renderer that never draws, with a reason to show instead.
@@ -126,8 +132,14 @@ pub struct ViewportPanel {
     /// the rest as they were).
     panes: Vec<layout::Pane>,
     layout: ViewLayout,
-    /// The view that gets the mouse and keys.
+    /// The view the tools work in (left mouse, tool keys).
     active: usize,
+    /// The view whose camera gets the right and middle buttons, the wheel
+    /// and the flying keys: the one under the pointer, kept while one of
+    /// those buttons is held.
+    camera_view: usize,
+    /// Where the player figure stands this frame, the same in every view.
+    player_at: Option<Aabb>,
     tools: ToolController,
     grid_size: f32,
     left_was_held: bool,
@@ -162,6 +174,8 @@ impl ViewportPanel {
             panes,
             layout: ViewLayout::Single,
             active: 0,
+            camera_view: 0,
+            player_at: None,
             tools: ToolController::new(options.grid_size),
             grid_size: options.grid_size,
             left_was_held: false,
@@ -293,6 +307,10 @@ impl ViewportPanel {
         }
         let active = self.active;
         let notes = self.update_tools(ui, &responses[active], rects[active], doc);
+        self.player_at = self.show_player.then(|| {
+            let camera = self.reference_camera();
+            player_bounds(player_feet(self.tools.preview(), doc, camera.position))
+        });
         // Pointer movement already triggers redraws; only flying with a key
         // held needs frames without new input.
         if animating {
@@ -301,6 +319,7 @@ impl ViewportPanel {
         for (i, rect) in rects.iter().enumerate() {
             self.draw_pane(ui, renderer, doc, i, *rect);
         }
+        renderer.release_unused(rects.len());
         if rects.len() > 1 {
             let painter = ui.painter_at(full);
             painter.rect_stroke(
@@ -315,21 +334,49 @@ impl ViewportPanel {
         notes
     }
 
-    /// Picks the view that gets this frame's input: the one under the
-    /// pointer, unless a button is held or a tool is busy in the current one.
+    /// Picks the views that get this frame's input. The camera's: the one
+    /// under the pointer, unless the right or middle button is held in the
+    /// current one. The tools': the one under the pointer, unless the left
+    /// button is held or a tool is busy there; a floor plan being drawn
+    /// moves to any view it can be drawn in, so corners can be placed in
+    /// one view and the next in another.
     fn choose_active(&mut self, responses: &[egui::Response]) {
         let count = responses.len();
         if self.active >= count {
             self.active = 0;
         }
-        let pane = &self.panes[self.active];
-        let held = self.left_was_held || pane.right_was_held || pane.middle_was_held;
-        if held || self.tools.is_busy() {
-            return;
+        if self.camera_view >= count {
+            self.camera_view = 0;
         }
-        if let Some(i) = responses.iter().position(egui::Response::hovered) {
+        let hovered = responses.iter().position(egui::Response::hovered);
+        let camera = &self.panes[self.camera_view];
+        if !(camera.right_was_held || camera.middle_was_held)
+            && let Some(i) = hovered
+        {
+            self.camera_view = i;
+        }
+        let plan = self.tools.is_drawing_plan();
+        let sticky = self.left_was_held || (self.tools.is_busy() && !plan);
+        if let Some(i) = hovered
+            && !sticky
+            && (!plan || self.panes[i].can_draw())
+        {
             self.active = i;
         }
+    }
+
+    /// The camera the player figure is placed for: the tools' view if it is
+    /// a 3D view, else the first 3D view shown, else the first view's 3D
+    /// camera. (A side view's camera stands far away, which would put the
+    /// figure in front of the selection.)
+    fn reference_camera(&self) -> halberd_tools::Camera {
+        let shown = self.layout.count();
+        let pane = std::iter::once(self.active)
+            .chain(0..shown)
+            .map(|i| &self.panes[i])
+            .find(|p| p.view == PaneView::Perspective)
+            .unwrap_or(&self.panes[0]);
+        *pane.perspective.camera()
     }
 
     /// Reads this frame's mouse and keyboard input for the viewport.
@@ -340,7 +387,7 @@ impl ViewportPanel {
         rect: Rect,
         index: usize,
     ) -> ViewportInput {
-        if index != self.active {
+        if index != self.camera_view {
             let pane = &mut self.panes[index];
             pane.right_was_held = false;
             pane.middle_was_held = false;

@@ -460,6 +460,14 @@ fn clean_input(input: &ViewportInput) -> ViewportInput {
     }
 }
 
+/// `camera` as a perspective camera.
+fn perspective(camera: Camera) -> Camera {
+    Camera {
+        ortho: None,
+        ..camera
+    }
+}
+
 fn sanitize_state(state: CameraState) -> CameraState {
     let (low, high) = FLY_SPEED_RANGE;
     let fly_speed = if state.fly_speed.is_finite() {
@@ -472,8 +480,11 @@ fn sanitize_state(state: CameraState) -> CameraState {
     } else {
         Vec3::ZERO
     };
+    // The controller moves a perspective camera; a flat one (from a damaged
+    // settings file) would draw flat while moving in perspective.
+    let camera = perspective(state.camera.sanitized());
     CameraState {
-        camera: state.camera.sanitized(),
+        camera,
         pivot,
         fly_speed,
         ..state

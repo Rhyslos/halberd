@@ -140,7 +140,7 @@ fn grid_for(camera: &Camera) -> GridPlane {
         .find(|s| SideCamera::new(*s).camera().forward().dot(camera.forward()) > 0.999)
         .unwrap();
     let mut view = SideCamera::new(side);
-    view.center = camera.position + camera.forward() * 200_000.0;
+    view.center = camera.position + camera.forward() * 100_000.0;
     let (axis, offset) = view.grid_plane();
     GridPlane {
         axis,

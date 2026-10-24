@@ -162,6 +162,15 @@ impl Pane {
         }
     }
 
+    /// True if shapes can be drawn in it: a 3D view, or the Top or Bottom
+    /// view (they need a floor to stand on).
+    pub(super) fn can_draw(&self) -> bool {
+        match self.view {
+            PaneView::Perspective => true,
+            PaneView::Side(side) => side.is_horizontal(),
+        }
+    }
+
     /// The camera it draws and picks with.
     pub(super) fn camera(&self) -> halberd_tools::Camera {
         match self.view {

@@ -121,4 +121,14 @@ impl ViewportRenderer for GpuViewport {
         );
         Ok(image.texture)
     }
+
+    fn release_unused(&mut self, shown: usize) {
+        if self.views.len() <= shown {
+            return;
+        }
+        let mut egui_renderer = self.state.renderer.write();
+        for image in self.views.drain(shown..).flatten() {
+            egui_renderer.free_texture(&image.texture);
+        }
+    }
 }

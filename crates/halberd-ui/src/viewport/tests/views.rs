@@ -194,3 +194,83 @@ fn a_click_in_a_side_view_selects_what_is_under_it() {
     left_click(&mut h, QUARTERS[3]);
     assert_eq!(h.state().doc.selection().len(), 1, "picked in Right");
 }
+
+#[test]
+fn the_player_figure_stands_in_one_place_beside_the_selection_in_every_view() {
+    let mut h = four_views();
+    let cube = halberd_geom::Brush::cuboid(halberd_geom::Aabb::from_corners(
+        glam::Vec3::splat(-64.0),
+        glam::Vec3::splat(64.0),
+    ))
+    .unwrap();
+    h.state_mut()
+        .doc
+        .execute(halberd_doc::Command::AddBrushes(vec![cube]))
+        .unwrap();
+    h.run();
+    let views = last_views(&h, 4);
+    let player = views[0].player.unwrap();
+    assert!(
+        views.iter().all(|v| v.player == Some(player)),
+        "the same everywhere"
+    );
+    let selection = h.state().doc.selection_bounds().unwrap();
+    let apart = player.max.x <= selection.min.x
+        || player.min.x >= selection.max.x
+        || player.max.y <= selection.min.y
+        || player.min.y >= selection.max.y;
+    assert!(apart, "beside the box, not inside it: {player:?}");
+    assert_eq!(h.state().renderer.shown, Some(4));
+}
+
+#[test]
+fn a_flat_camera_in_saved_settings_still_gives_a_3d_view() {
+    let mut state = halberd_tools::CameraState::default();
+    state.camera.ortho = Some(300.0);
+    let panel = ViewportPanel::new(Some(state), ViewportOptions::default());
+    assert_eq!(panel.controller().camera().ortho, None);
+}
+
+#[test]
+fn while_a_floor_plan_is_drawn_other_views_still_zoom_and_take_corners() {
+    let mut h = four_views();
+    h.state_mut().panel.set_tool(Tool::Box);
+    h.state_mut()
+        .panel
+        .tools_mut()
+        .set_shape(halberd_geom::Shape::FloorPlan);
+    h.run();
+    // First corner in the Top view.
+    left_click(&mut h, QUARTERS[1]);
+    assert!(h.state().panel.tools().is_drawing_plan());
+    // Scrolling over the Front view zooms it, plan or not.
+    let before = h.state().panel.view_setup().sides[2].height;
+    h.hover_at(QUARTERS[2]);
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, 120.0),
+        modifiers: Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+    });
+    h.run();
+    h.run();
+    assert!(
+        h.state().panel.view_setup().sides[2].height < before,
+        "Front zoomed"
+    );
+    // The tools stay in a view that can take corners.
+    assert_ne!(h.state().panel.active_view(), 2, "not moved to Front");
+    // The next corners can come from the 3D view.
+    left_click(&mut h, egui::pos2(260.0, 220.0));
+    assert_eq!(
+        h.state()
+            .panel
+            .tools()
+            .plan_preview()
+            .unwrap()
+            .corners
+            .len(),
+        2
+    );
+    assert_eq!(h.state().panel.active_view(), 0);
+}

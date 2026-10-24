@@ -111,7 +111,7 @@ impl ViewportPanel {
         }
         // A left press while the right or middle button is moving the camera
         // belongs to the camera, not the tool.
-        let pane = &self.panes[self.active];
+        let pane = &self.panes[self.camera_view];
         let camera_busy = pane.right_was_held || pane.middle_was_held;
         let pressed_here = response.is_pointer_button_down_on() && !camera_busy;
         // A click so quick that it went down and up within one frame (a
@@ -168,7 +168,7 @@ impl ViewportPanel {
         if let layout::PaneView::Side(side) = self.panes[self.active].view
             && !side.is_horizontal()
             && self.tools.tool() == Tool::Box
-            && !self.tools.is_drawing()
+            && (!self.tools.is_drawing() || self.tools.is_drawing_plan())
             && input.pressed
         {
             notes.push(format!(
@@ -207,7 +207,7 @@ impl ViewportPanel {
     /// right button is held (flying uses W and S), Shift+W and Shift+S pick
     /// Move and Scale instead; R and T work either way.
     fn gizmo_keys(&mut self, ui: &Ui) {
-        let pane = &self.panes[self.active];
+        let pane = &self.panes[self.camera_view];
         let flying = pane.view == layout::PaneView::Perspective && pane.right_was_held;
         let move_or_scale_ok = move |m: Modifiers| {
             if flying { m.shift_only() } else { m.is_none() }

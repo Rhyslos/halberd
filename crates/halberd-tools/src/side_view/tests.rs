@@ -50,14 +50,22 @@ fn points_project_flat_and_rays_come_back_to_them() {
 #[test]
 fn everything_in_the_world_is_in_front_and_drawn() {
     let camera = SideCamera::new(Side::Front).camera();
-    for x in [-WORLD_LIMIT * 0.25, 0.0, WORLD_LIMIT * 0.25] {
+    for x in [-SIDE_VIEW_REACH, 0.0, SIDE_VIEW_REACH] {
         let clip = camera.view_projection(SIZE) * Vec3::new(x, 0.0, 0.0).extend(1.0);
         let depth = clip.z / clip.w;
         assert!((0.0..=1.0).contains(&depth), "{x}: {depth}");
     }
     let (axis, at) = SideCamera::new(Side::Front).grid_plane();
     assert_eq!(axis, 0);
-    assert!(at < -WORLD_LIMIT * 0.25, "the grid is behind the map: {at}");
+    assert!(at < -SIDE_VIEW_REACH, "the grid is behind the map: {at}");
+    // Even with the view's centre as far off as it can go, the far side of
+    // the largest maps is drawn.
+    let mut far = SideCamera::new(Side::Front);
+    far.center = glam::Vec3::splat(1e9);
+    let far = far.sanitized();
+    let camera = far.camera();
+    let clip = camera.view_projection(SIZE) * Vec3::new(-SIDE_VIEW_REACH, 0.0, 0.0).extend(1.0);
+    assert!((0.0..=1.0).contains(&(clip.z / clip.w)));
 }
 
 #[test]

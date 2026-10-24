@@ -7,12 +7,18 @@ use egui_kittest::kittest::Queryable;
 
 struct Recording {
     views: Vec<ViewportView>,
+    /// What `release_unused` was last told.
+    shown: Option<usize>,
 }
 
 impl ViewportRenderer for Recording {
     fn render(&mut self, view: &ViewportView, _doc: &Document) -> Result<egui::TextureId, String> {
         self.views.push(view.clone());
         Err("recording only".into())
+    }
+
+    fn release_unused(&mut self, shown: usize) {
+        self.shown = Some(shown);
     }
 }
 
@@ -31,7 +37,10 @@ fn harness(options: ViewportOptions) -> Harness<'static, State> {
         },
         State {
             panel: ViewportPanel::new(None, options),
-            renderer: Recording { views: Vec::new() },
+            renderer: Recording {
+                views: Vec::new(),
+                shown: None,
+            },
             doc: Document::new(),
             notes: Vec::new(),
         },
