@@ -188,6 +188,8 @@ impl ViewportPanel {
             self.length_unit,
         );
 
+        self.draw_leak(&painter, rect, &camera, size);
+
         let first = index == 0;
         if let Some(overlay) = self.tools.element_overlay(&camera, size, doc) {
             elements::draw(&painter, rect, &overlay);

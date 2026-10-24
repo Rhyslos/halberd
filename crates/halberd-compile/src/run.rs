@@ -32,6 +32,10 @@ pub enum CompileEvent {
     },
     /// A line of the tool's output.
     Line(String, LineKind),
+    /// The map leaks; this is the path vbsp found from an entity inside
+    /// the map out to the void (the gap is where it crosses the map's
+    /// outer wall).
+    LeakPath(Vec<[f32; 3]>),
     /// The compile is over.
     Finished(Result<Compiled, CompileError>),
 }
@@ -41,8 +45,8 @@ pub enum CompileEvent {
 pub struct Compiled {
     /// The map's name, for loading it in the game.
     pub map_name: String,
-    /// Where the map was put for the game.
-    pub installed: PathBuf,
+    /// Where the map was put for the game (`None` for a leak check).
+    pub installed: Option<PathBuf>,
     /// How long it took.
     pub took: Duration,
 }
@@ -139,6 +143,8 @@ fn run(
 ) -> Result<Compiled, CompileError> {
     let started = Instant::now();
     let steps = job.steps()?;
+    // An old leak path must not be taken for this compile's.
+    std::fs::remove_file(job.vmf.with_extension("lin")).ok();
     let total = steps.len();
     for (index, step) in steps.iter().enumerate() {
         report(CompileEvent::Step {
@@ -147,7 +153,21 @@ fn run(
             tool: step.tool,
             label: step.label,
         });
-        run_step(job, step, stop, report)?;
+        if let Err(e) = run_step(job, step, stop, report) {
+            if e == CompileError::Leaked
+                && let Some(points) = crate::read_pointfile(&job.vmf)
+            {
+                report(CompileEvent::LeakPath(points));
+            }
+            return Err(e);
+        }
+    }
+    if job.profile == crate::Profile::LeakCheck {
+        return Ok(Compiled {
+            map_name: job.map_name(),
+            installed: None,
+            took: started.elapsed(),
+        });
     }
     let installed = job.installed_bsp();
     // Never replace a map Halberd didn't put there (a stock map, say).
@@ -165,7 +185,7 @@ fn run(
     copy().map_err(|e| CompileError::CouldNotCopy(e.to_string()))?;
     Ok(Compiled {
         map_name: job.map_name(),
-        installed,
+        installed: Some(installed),
         took: started.elapsed(),
     })
 }

@@ -221,3 +221,45 @@ fn dropping_the_runner_ends_the_running_tool() {
         "the slow tool was ended, not waited for"
     );
 }
+
+#[test]
+fn a_leak_hands_over_the_path_to_the_gap() {
+    let (_dir, job) = setup("world { LEAK }");
+    let events = run(job, None);
+    let path = events.iter().find_map(|e| match e {
+        CompileEvent::LeakPath(points) => Some(points.clone()),
+        _ => None,
+    });
+    assert_eq!(
+        path,
+        Some(vec![
+            [-512.0, 0.0, 64.0],
+            [0.0, 0.0, 64.0],
+            [0.0, 128.0, 64.0]
+        ])
+    );
+    assert_eq!(result(&events), &Err(CompileError::Leaked));
+}
+
+#[test]
+fn a_leak_check_runs_vbsp_alone_and_installs_nothing() {
+    let (_dir, mut job) = setup("world {}");
+    job.profile = Profile::LeakCheck;
+    let installed = job.installed_bsp();
+    let events = run(job, None);
+    let steps: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            CompileEvent::Step { tool, .. } => Some(*tool),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, ["vbsp"]);
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, CompileEvent::Line(t, _) if t.contains("-leaktest")))
+    );
+    assert_eq!(result(&events).as_ref().unwrap().installed, None);
+    assert!(!installed.exists());
+}

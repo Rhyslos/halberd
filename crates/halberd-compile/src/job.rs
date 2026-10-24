@@ -10,6 +10,9 @@ pub enum Profile {
     /// Quick test: full geometry, fast visibility and fast lighting.
     #[default]
     Quick,
+    /// Only look for leaks: vbsp alone, stopping at a leak. The map isn't
+    /// put in the game.
+    LeakCheck,
 }
 
 /// One compile tool run.
@@ -104,6 +107,12 @@ impl CompileJob {
                 )?,
                 step("vrad", "Lighting (fast)", &self.vrad, &["-fast", "-ldr"])?,
             ]),
+            Profile::LeakCheck => Ok(vec![step(
+                "vbsp",
+                "Looking for leaks",
+                &self.vbsp,
+                &["-leaktest"],
+            )?]),
         }
     }
 }

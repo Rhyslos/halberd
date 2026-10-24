@@ -1,7 +1,8 @@
 //! Compile and play: writes the map as it is now to a work folder,
 //! compiles it with Garry's Mod's tools in the background
 //! (`halberd-compile`), reports progress to the workbench, and starts the
-//! game on the map when it's done.
+//! game on the map when it's done. A leak check runs the same way with
+//! only the first compiler, and installs nothing.
 
 use eframe::egui;
 use halberd_assets::{FoundBy, GmodInstall};
@@ -74,12 +75,19 @@ fn tidy_old_work(game_dir: &Path, ours: &Path) {
     }
 }
 
-/// Starts compiling the workbench's map, or says why it can't.
+/// Starts compiling the workbench's map (`Profile::Quick`) or checking it
+/// for leaks (`Profile::LeakCheck`), or says why it can't.
 pub(crate) fn start(
     workbench: &mut Workbench,
     install: Option<&GmodInstall>,
+    profile: Profile,
     ctx: &egui::Context,
 ) -> Option<CompileSession> {
+    let name = compile_name(workbench.file_path());
+    match profile {
+        Profile::LeakCheck => workbench.leak_check_started(&name),
+        _ => workbench.compile_started(&name),
+    }
     let Some(install) = install else {
         workbench.compile_finished(Err(
             "Garry's Mod wasn't found, so its compile tools can't be used. Start Halberd \
@@ -88,7 +96,6 @@ pub(crate) fn start(
         ));
         return None;
     };
-    let name = compile_name(workbench.file_path());
     let dir = work_dir(&install.game_dir);
     let vmf = dir.join(format!("{name}.vmf"));
     let job = CompileJob {
@@ -98,9 +105,8 @@ pub(crate) fn start(
         vbsp: install.tools.vbsp.clone(),
         vvis: install.tools.vvis.clone(),
         vrad: install.tools.vrad.clone(),
-        profile: Profile::Quick,
+        profile,
     };
-    workbench.compile_started(&name);
     // Check the tools before writing anything.
     if let Err(why) = job.steps() {
         workbench.compile_finished(Err(why.to_string()));
@@ -153,6 +159,10 @@ impl CompileSession {
                         LineKind::Error => CompileLine::Error,
                     };
                     workbench.compile_line(&text, kind);
+                }
+                CompileEvent::LeakPath(points) => workbench.set_leak_path(&points),
+                CompileEvent::Finished(Ok(compiled)) if compiled.installed.is_none() => {
+                    workbench.compile_finished(Ok("No leaks found: the map is sealed.".into()));
                 }
                 CompileEvent::Finished(Ok(compiled)) => {
                     let note = match &self.launcher {

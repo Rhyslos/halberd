@@ -117,7 +117,7 @@ The player figure's place and clearance are worked out by the viewport panel eac
 
 ## Compiling
 
-**Compile and play** (F9; [decision 0028](docs/decisions/0028-quick-compile.md)): the workbench asks for a compile; `halberd-app` writes the map as it is now to a work folder in Garry's Mod's game folder (`halberd-io`), and `halberd-compile` runs Garry's Mod's vbsp, vvis and vrad on their own thread, one process at a time, never through a shell. Their output reaches the Console line by line; the compiled map is copied into `garrysmod/maps` and the game is started on it through Steam.
+**Compile and play** (F9; [decision 0028](docs/decisions/0028-quick-compile.md)): the workbench asks for a compile; `halberd-app` writes the map as it is now to a work folder in Garry's Mod's game folder (`halberd-io`), and `halberd-compile` runs Garry's Mod's vbsp, vvis and vrad on their own thread, one process at a time, never through a shell. Their output reaches the Console line by line; the compiled map is copied into `garrysmod/maps` and the game is started on it through Steam. On a leak, vbsp's pointfile (`.lin`) is read and passed on as `CompileEvent::LeakPath`; the viewport draws it in every view until a compile succeeds ([decision 0029](docs/decisions/0029-leak-path.md)). **Check for leaks** runs the `LeakCheck` profile (vbsp `-leaktest` alone; nothing installed).
 
 ## Opening and saving maps
 

@@ -35,3 +35,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0026](0026-scale-tools.md) | GMod scale tools: player clearance and size readouts | Accepted |
 | [0027](0027-map-limits.md) | Map size and engine limit meters | Accepted |
 | [0028](0028-quick-compile.md) | Compile and play | Accepted |
+| [0029](0029-leak-path.md) | Showing where a map leaks | Accepted |
