@@ -1,15 +1,17 @@
 //! The editor window: opens it with eframe (winit + wgpu) and hands each
 //! frame to the workbench from `halberd-ui`.
 
+use crate::content::ContentLoader;
 use crate::files;
 use crate::gpu::GpuViewport;
 use crate::logging::LogBook;
 use crate::preferences::PreferenceSaver;
 use eframe::egui;
+use halberd_assets::{GameContent, GmodInstall};
 use halberd_config::{Settings, SettingsStore};
 use halberd_ui::{
-    AppInfo, FileIntent, LogEntry, NoRenderer, ViewSetup, ViewportOptions, ViewportPanel,
-    ViewportRenderer, Workbench,
+    AppInfo, ContentStatus, FileIntent, LogEntry, NoRenderer, ViewSetup, ViewportOptions,
+    ViewportPanel, ViewportRenderer, Workbench,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -40,6 +42,11 @@ struct HalberdApp {
     title: String,
     /// Messages from the logger, for the Console.
     log: Arc<LogBook>,
+    /// The game's content, while it is being mounted.
+    loading: Option<ContentLoader>,
+    /// The game's content, once mounted (the material and prop browsers
+    /// will read from it).
+    content: Option<Arc<GameContent>>,
 }
 
 impl eframe::App for HalberdApp {
@@ -47,6 +54,16 @@ impl eframe::App for HalberdApp {
         let ctx = ui.ctx().clone();
         for entry in self.log.take() {
             self.workbench.console_mut().push_logged(entry);
+        }
+        if let Some(content) = self.loading.as_ref().and_then(ContentLoader::poll) {
+            self.loading = None;
+            self.workbench.push_console(content.summary());
+            for problem in content.problems() {
+                self.workbench.push_warning(problem.clone());
+            }
+            self.workbench
+                .set_content_status(ContentStatus::Mounted(content.summary()));
+            self.content = Some(Arc::new(content));
         }
         // The window's close button: with unsaved changes, ask first.
         let close_requested = ctx.input(|i| i.viewport().close_requested());
@@ -96,6 +113,7 @@ pub(crate) fn run(
     settings: Settings,
     store: Option<SettingsStore>,
     map: Option<PathBuf>,
+    install: Option<GmodInstall>,
     log: Arc<LogBook>,
 ) -> Result<(), String> {
     let viewport_options = ViewportOptions {
@@ -143,6 +161,11 @@ pub(crate) fn run(
                 }
                 let ctx = cc.egui_ctx.clone();
                 log.start_waker(move || ctx.request_repaint());
+                let loading = install.map(|install| {
+                    workbench.set_content_status(ContentStatus::Mounting);
+                    let ctx = cc.egui_ctx.clone();
+                    ContentLoader::start(install, move || ctx.request_repaint())
+                });
                 if let Some(path) = &map {
                     files::open_path(&mut workbench, path);
                 }
@@ -163,6 +186,8 @@ pub(crate) fn run(
                     allow_close: false,
                     title: String::new(),
                     log,
+                    loading,
+                    content: None,
                 }))
             }),
         )

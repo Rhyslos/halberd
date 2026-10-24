@@ -86,6 +86,10 @@ eframe owns the window and frame loop and renders with wgpu. Each frame, `halber
 
 The Console (`halberd-ui`) holds messages with a time and a level (information, warning, error). The editor adds its own messages directly; messages from the `log` interface (any thread) wait in `halberd-app`'s log book and are added at the start of the next frame. Every message also goes to the log file: the editor's through the Console's mirror, the logger's straight from the log book.
 
+## Game content
+
+When Garry's Mod is found, `halberd-app` mounts its content on a background thread: `halberd-assets` reads `gameinfo.txt`'s search paths and opens each VPK archive's file list (`halberd-vpk`) and each loose folder, in the engine's search order. Files are read later, one at a time, from the first place that has them. See [decision 0022](docs/decisions/0022-game-content.md).
+
 ## Viewport
 
 Coordinates follow Hammer: **Z is up**, units are Hammer units, right-handed.

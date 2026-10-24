@@ -5,6 +5,7 @@
 //! found and exits instead, which is useful for troubleshooting and tests.
 
 mod cli;
+mod content;
 mod files;
 mod gpu;
 mod logging;
@@ -91,6 +92,7 @@ fn main() -> ExitCode {
         mut report,
         settings,
         store,
+        install,
     } = startup::run(&options);
     if options.report_only {
         return finish(&texts(&report), interactive, ExitCode::SUCCESS);
@@ -122,6 +124,7 @@ fn main() -> ExitCode {
         settings,
         store,
         options.map.clone(),
+        install,
         log.clone(),
     ) {
         Ok(()) => ExitCode::SUCCESS,

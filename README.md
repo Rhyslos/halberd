@@ -32,9 +32,9 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 9 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 10 of 19
 
-`██████░░░░░░░` 47%
+`███████░░░░░░` 53%
 
 <details>
 <summary>Milestones</summary>
@@ -47,7 +47,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Automatic convex splitting on save and export
 - [x] Up to 6 viewports with preset layouts and all six side views
 - [x] Render modes: wireframe, flat, textured
-- [ ] Read GMod and HL2 content from VPK archives
+- [x] Read GMod and HL2 content from VPK archives
 - [ ] Material browser and per-face materials
 - [ ] Prop browser with real model rendering
 - [ ] Basic entities: spawn points, lights, sun, sky
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-24 | Game content: Garry's Mod's and Half-Life 2's files read from their VPK archives and folders, in the game's own order |
 | 2026-10-24 | Render modes: each view draws as wireframe, flat or textured (a pattern per material until real textures arrive) |
 | 2026-10-24 | Several views: up to six, in preset layouts, each showing 3D or a flat Top, Bottom, Front, Back, Left or Right view |
 | 2026-10-23 | Floor plans: click an outline with dents (an L-shaped room), kept as one shape and saved as convex brushes |
