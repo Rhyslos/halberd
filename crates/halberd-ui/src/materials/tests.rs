@@ -121,3 +121,34 @@ fn only_so_many_pictures_are_kept() {
     assert_eq!(truncate("TOOLSNODRAW", 12), "TOOLSNODRAW");
     assert_eq!(truncate("CONCRETEFLOOR001A", 12), "CONCRETEFLO…");
 }
+
+#[test]
+fn pictures_on_screen_are_kept_and_huge_ones_refused() {
+    let mut h = harness(&NAMES);
+    h.run();
+    h.state_mut()
+        .browser
+        .add_picture("BRICK/BRICKWALL001A", Ok((2, 2, vec![255; 16])));
+    // Many pictures arrive later, but the brick is still drawn each frame.
+    for i in 0..MAX_PICTURES {
+        h.state_mut()
+            .browser
+            .add_picture(&format!("M/{i}"), Err("none".into()));
+        if i % 100 == 0 {
+            h.run();
+        }
+    }
+    assert!(
+        h.state()
+            .browser
+            .pictures
+            .contains_key("BRICK/BRICKWALL001A")
+    );
+    h.state_mut()
+        .browser
+        .add_picture("DEV/DEV_MEASUREWALL01A", Ok((4096, 1, vec![0; 4096 * 4])));
+    assert!(matches!(
+        h.state().browser.pictures.get("DEV/DEV_MEASUREWALL01A"),
+        Some(Picture::None(_))
+    ));
+}

@@ -268,3 +268,55 @@ fn fuzz_damaged_materials_never_crash() {
         }
     }
 }
+
+#[test]
+fn a_texture_without_smaller_copies_is_shrunk_to_fit() {
+    // Regression: a texture with one stored size came back at full size,
+    // so a thumbnail could be 16384 pixels wide.
+    let wide = vtf(
+        2,
+        BGRA8888,
+        16384,
+        4,
+        &[bgra(16384, 4, [10, 20, 30, 255])],
+        0,
+        1,
+    );
+    let image = Vtf::parse(&wide).unwrap().decode(128).unwrap();
+    assert_eq!((image.width, image.height), (128, 1));
+    assert_eq!(&image.pixels[..4], &[30, 20, 10, 255]);
+    // Shrinking averages: a black half and a white half become grey.
+    let mut halves = bgra(2, 2, [0, 0, 0, 255]);
+    halves.extend(bgra(2, 2, [255, 255, 255, 255]));
+    let tall = vtf(2, BGRA8888, 2, 4, &[halves], 0, 1);
+    let image = Vtf::parse(&tall).unwrap().decode(1).unwrap();
+    assert_eq!((image.width, image.height), (1, 1));
+    assert_eq!(&image.pixels[..4], &[127, 127, 127, 255]);
+    // One too big to decode just for a picture is refused with a reason.
+    let huge = vtf(2, DXT1, 4100, 4100, &[vec![0; 1025 * 1025 * 8]], 0, 1);
+    let refused = Vtf::parse(&huge).unwrap().decode(128);
+    assert_eq!(refused, Err(VtfError::TooLarge(4100, 4100)));
+    assert!(
+        refused
+            .unwrap_err()
+            .to_string()
+            .contains("too large to preview")
+    );
+}
+
+#[test]
+fn a_patch_lays_its_parameters_over_the_base() {
+    let base = Material::parse(
+        "LightmappedGeneric { $basetexture tools/toolsnodraw %compilenodraw 1 $surfaceprop concrete }",
+    )
+    .unwrap();
+    let patch = Material::parse(
+        "patch { include materials/tools/toolsnodraw.vmt replace { $surfaceprop metal } }",
+    )
+    .unwrap();
+    let merged = base.patched_by(&patch);
+    assert_eq!(merged.shader, "LightmappedGeneric");
+    assert!(merged.is_tool(), "the base's flags are kept");
+    assert_eq!(merged.param("$surfaceprop"), Some("metal"));
+    assert_eq!(merged.include(), None);
+}

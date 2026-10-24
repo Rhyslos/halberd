@@ -13,6 +13,9 @@ pub enum VtfError {
     UnsupportedFormat(&'static str),
     /// The texture is damaged; says how.
     Damaged(&'static str),
+    /// The only stored size that could be shown is too large to decode
+    /// for a picture of the size asked for.
+    TooLarge(u32, u32),
     /// The material text could not be read.
     BadMaterial(String),
 }
@@ -26,6 +29,10 @@ impl fmt::Display for VtfError {
                 write!(f, "textures stored as {name} can't be shown yet")
             }
             Self::Damaged(what) => write!(f, "the texture is damaged ({what})"),
+            Self::TooLarge(w, h) => write!(
+                f,
+                "the texture is {w}×{h} with no smaller copy, too large to preview"
+            ),
             Self::BadMaterial(why) => write!(f, "the material could not be read: {why}"),
         }
     }

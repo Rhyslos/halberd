@@ -72,6 +72,23 @@ impl Material {
             .map(|(_, v)| v.as_str())
     }
 
+    /// This material with a patch's parameters laid over it: the patch's
+    /// values win, everything else is kept (the shader stays this one's).
+    pub fn patched_by(&self, patch: &Material) -> Material {
+        let mut params = self.params.clone();
+        for (key, value) in &patch.params {
+            if key == "include" {
+                continue;
+            }
+            params.retain(|(k, _)| k != key);
+            params.push((key.clone(), value.clone()));
+        }
+        Material {
+            shader: self.shader.clone(),
+            params,
+        }
+    }
+
     /// The material this one patches (`Patch` materials' `include`).
     pub fn include(&self) -> Option<&str> {
         self.shader

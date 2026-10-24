@@ -12,6 +12,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 const MAX_LOOSE_MATERIALS: usize = 200_000;
 /// How many `include`s a patch material may follow.
 const MAX_PATCH_DEPTH: usize = 8;
+/// Largest material file read (real ones are a few hundred bytes).
+const MAX_MATERIAL_TEXT: u64 = 1024 * 1024;
 
 /// Every material in the game's content, as Hammer names them
 /// (`BRICK/BRICKWALL001A`: the path under `materials/`, without `.vmt`,
@@ -105,7 +107,9 @@ fn read_material(content: &GameContent, path: &str) -> Result<Material, String> 
     let mut path = path.to_string();
     let mut overrides: Vec<Material> = Vec::new();
     for _ in 0..MAX_PATCH_DEPTH {
-        let bytes = content.read(&path).map_err(|e| e.to_string())?;
+        let bytes = content
+            .read_at_most(&path, MAX_MATERIAL_TEXT)
+            .map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&bytes);
         let material = Material::parse(&text).map_err(|e| e.to_string())?;
         match material.include().map(str::to_string) {
@@ -114,18 +118,26 @@ fn read_material(content: &GameContent, path: &str) -> Result<Material, String> 
                 path = include.replace('\\', "/");
             }
             None => {
-                // A patch's own base texture, if it set one, wins.
-                let mut base = material;
-                for patch in overrides.iter().rev() {
-                    if patch.texture_path().is_some() {
-                        base = patch.clone();
-                    }
-                }
+                // Each patch's parameters go over what it includes; the
+                // outermost patch is laid on last, so it wins.
+                let base = overrides
+                    .iter()
+                    .rev()
+                    .fold(material, |base, patch| base.patched_by(patch));
                 return Ok(base);
             }
         }
     }
     Err("its patch materials include each other too deeply".into())
+}
+
+/// The request to read next: the biggest size first (the views' textures
+/// before the browser's pictures), and among those the newest (what is on
+/// screen now, not what scrolled past).
+fn next_request(queue: &mut Vec<(String, u32)>) -> Option<(String, u32)> {
+    let biggest = queue.iter().map(|(_, size)| *size).max()?;
+    let at = queue.iter().rposition(|(_, size)| *size == biggest)?;
+    Some(queue.remove(at))
 }
 
 /// Loads material pictures on a background thread.
@@ -145,8 +157,20 @@ impl MaterialLoader {
         std::thread::Builder::new()
             .name("halberd-materials".into())
             .spawn(move || {
-                // Stops when the loader is dropped (its sender goes).
-                while let Ok((name, max_size)) = todo.recv() {
+                let mut queue: Vec<(String, u32)> = Vec::new();
+                loop {
+                    // Waits when there is nothing to do; stops when the
+                    // loader is dropped (its sender goes).
+                    if queue.is_empty() {
+                        match todo.recv() {
+                            Ok(request) => queue.push(request),
+                            Err(_) => break,
+                        }
+                    }
+                    queue.extend(todo.try_iter());
+                    let Some((name, max_size)) = next_request(&mut queue) else {
+                        continue;
+                    };
                     let image = load_material(&content, &name, max_size);
                     if done.send(image).is_err() {
                         break;

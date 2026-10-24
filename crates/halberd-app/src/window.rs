@@ -87,14 +87,6 @@ impl eframe::App for HalberdApp {
             Some(Mounting::Busy) | None => {}
         }
         if let Some(loader) = &mut self.materials {
-            for name in self.workbench.materials_mut().take_wanted() {
-                loader.request(&name, THUMBNAIL_SIZE);
-            }
-            if let Some(gpu) = &mut self.gpu {
-                for name in gpu.wanted_textures() {
-                    loader.request(&name, MATERIAL_TEXTURE_SIZE);
-                }
-            }
             for picture in loader.poll() {
                 if picture.max_size == MATERIAL_TEXTURE_SIZE {
                     if let Some(gpu) = &mut self.gpu {
@@ -125,6 +117,18 @@ impl eframe::App for HalberdApp {
         };
         for action in self.workbench.show(ui, renderer) {
             files::handle(action, &mut self.workbench, &ctx, &mut self.allow_close);
+        }
+        // Drawing the browser and the views is what says which pictures and
+        // textures are wanted, so they are asked for after it.
+        if let Some(loader) = &mut self.materials {
+            for name in self.workbench.materials_mut().take_wanted() {
+                loader.request(&name, THUMBNAIL_SIZE);
+            }
+            if let Some(gpu) = &mut self.gpu {
+                for name in gpu.wanted_textures() {
+                    loader.request(&name, MATERIAL_TEXTURE_SIZE);
+                }
+            }
         }
         let title = self.workbench.window_title();
         if title != self.title {
