@@ -178,3 +178,46 @@ fn relative_folders_still_work() {
     assert!(result(&events).is_ok(), "{:?}", result(&events));
     drop(dir);
 }
+
+#[test]
+fn a_map_halberd_didnt_make_is_never_replaced() {
+    let (_dir, job) = setup("world {}");
+    let installed = job.installed_bsp();
+    std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
+    std::fs::write(&installed, b"STOCK").unwrap();
+    let events = run(job.clone(), None);
+    assert_eq!(
+        result(&events),
+        &Err(CompileError::WouldReplace("test_map".into()))
+    );
+    assert_eq!(std::fs::read(&installed).unwrap(), b"STOCK");
+    // Its own maps it replaces freely.
+    std::fs::remove_file(&installed).unwrap();
+    assert!(result(&run(job.clone(), None)).is_ok());
+    assert!(
+        result(&run(job, None)).is_ok(),
+        "compiled again over its own map"
+    );
+}
+
+#[test]
+fn dropping_the_runner_ends_the_running_tool() {
+    // Regression: closing the editor left the compiler running.
+    let (_dir, job) = setup("world { SLOW }");
+    let mut runner = CompileRunner::start(job, || {});
+    let started = Instant::now();
+    while !runner
+        .poll()
+        .iter()
+        .any(|e| matches!(e, CompileEvent::Step { tool: "vrad", .. }))
+    {
+        assert!(started.elapsed() < Duration::from_secs(10));
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let dropping = Instant::now();
+    drop(runner);
+    assert!(
+        dropping.elapsed() < Duration::from_secs(5),
+        "the slow tool was ended, not waited for"
+    );
+}

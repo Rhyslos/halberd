@@ -39,10 +39,39 @@ fn compile_name(file: Option<&Path>) -> String {
     }
 }
 
-/// Where maps are written for compiling (the user's own file is never
-/// touched).
-fn work_dir() -> PathBuf {
-    std::env::temp_dir().join("halberd-compile")
+/// Folder (inside Garry's Mod's game folder) holding each Halberd's
+/// compile work.
+const WORK_FOLDER: &str = "halberd_compile";
+/// Work folders left by earlier sessions are removed after this long.
+const OLD_WORK: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
+
+/// Where this Halberd writes maps for compiling: a folder of its own
+/// inside Garry's Mod's game folder (the user's own file is never touched;
+/// two Halberds never share files; and the compilers, which can't read
+/// every path, get a plain one).
+fn work_dir(game_dir: &Path) -> PathBuf {
+    game_dir
+        .join(WORK_FOLDER)
+        .join(std::process::id().to_string())
+}
+
+/// Removes other sessions' work folders that are a week old.
+fn tidy_old_work(game_dir: &Path, ours: &Path) {
+    let Ok(entries) = std::fs::read_dir(game_dir.join(WORK_FOLDER)) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let old = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > OLD_WORK);
+        if old && path != ours && path.is_dir() {
+            std::fs::remove_dir_all(&path).ok();
+        }
+    }
 }
 
 /// Starts compiling the workbench's map, or says why it can't.
@@ -60,20 +89,10 @@ pub(crate) fn start(
         return None;
     };
     let name = compile_name(workbench.file_path());
-    let dir = work_dir();
+    let dir = work_dir(&install.game_dir);
     let vmf = dir.join(format!("{name}.vmf"));
-    let text = halberd_io::vmf_from_document(workbench.document()).to_text();
-    let written = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&vmf, text));
-    workbench.compile_started(&name);
-    if let Err(e) = written {
-        workbench.compile_finished(Err(format!(
-            "the map could not be written for compiling ({}): {e}",
-            vmf.display()
-        )));
-        return None;
-    }
     let job = CompileJob {
-        vmf,
+        vmf: vmf.clone(),
         root: install.root.clone(),
         game_dir: install.game_dir.clone(),
         vbsp: install.tools.vbsp.clone(),
@@ -81,6 +100,22 @@ pub(crate) fn start(
         vrad: install.tools.vrad.clone(),
         profile: Profile::Quick,
     };
+    workbench.compile_started(&name);
+    // Check the tools before writing anything.
+    if let Err(why) = job.steps() {
+        workbench.compile_finished(Err(why.to_string()));
+        return None;
+    }
+    tidy_old_work(&install.game_dir, &dir);
+    let text = halberd_io::vmf_from_document(workbench.document()).to_text();
+    let written = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&vmf, text));
+    if let Err(e) = written {
+        workbench.compile_finished(Err(format!(
+            "the map could not be written for compiling ({}): {e}",
+            vmf.display()
+        )));
+        return None;
+    }
     let steam_dir = match &install.found_by {
         FoundBy::Steam { steam_dir } => Some(steam_dir.as_path()),
         _ => None,
@@ -122,7 +157,11 @@ impl CompileSession {
                 CompileEvent::Finished(Ok(compiled)) => {
                     let note = match &self.launcher {
                         Some(launcher) => match launcher.launch(&compiled.map_name) {
-                            Ok(()) => format!("Starting Garry's Mod on {}…", compiled.map_name),
+                            Ok(()) => format!(
+                                "Starting Garry's Mod on {0}… (If it was already open, type \
+                                 \"map {0}\" in its console.)",
+                                compiled.map_name
+                            ),
                             Err(why) => format!(
                                 "The map is in Garry's Mod's maps folder, but the game could \
                                  not be started ({why}); type \"map {}\" in its console.",

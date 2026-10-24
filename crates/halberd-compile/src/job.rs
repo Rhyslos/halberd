@@ -116,7 +116,7 @@ fn absolute(path: &Path) -> PathBuf {
 /// True if `path` is inside `root` (after following links, when they can
 /// be followed).
 fn inside(path: &Path, root: &Path) -> bool {
-    let real = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let real = |p: &Path| p.canonicalize().unwrap_or_else(|_| absolute(p));
     real(path).starts_with(real(root))
 }
 

@@ -17,6 +17,9 @@ pub enum CompileError {
     Leaked,
     /// The compiled map could not be put in the game's maps folder.
     CouldNotCopy(String),
+    /// A map of the same name, not made by Halberd, is already in the
+    /// game's maps folder (named).
+    WouldReplace(String),
     /// The user cancelled.
     Cancelled,
 }
@@ -28,7 +31,8 @@ impl fmt::Display for CompileError {
                 f,
                 "{tool} wasn't found in Garry's Mod's bin folder. In Steam, right-click \
                  Garry's Mod, choose Properties → Installed Files → Verify integrity. (GMod \
-                 for Linux and macOS has no compile tools.)"
+                 for Linux and macOS has no compile tools; they come with the Windows \
+                 version.)"
             ),
             Self::ToolOutsideGame(tool) => write!(
                 f,
@@ -50,6 +54,11 @@ impl fmt::Display for CompileError {
                     "the compiled map could not be copied into Garry's Mod: {why}"
                 )
             }
+            Self::WouldReplace(name) => write!(
+                f,
+                "Garry's Mod already has a map called {name} that Halberd didn't make, and it \
+                 won't be replaced. Save your map under another name and compile again."
+            ),
             Self::Cancelled => f.write_str("the compile was cancelled"),
         }
     }

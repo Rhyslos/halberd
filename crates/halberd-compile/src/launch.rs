@@ -72,10 +72,15 @@ impl Launcher {
         if let Some(dir) = program.parent() {
             command.current_dir(dir);
         }
-        command
+        let mut child = command
             .spawn()
-            .map(|_| ())
-            .map_err(|e| format!("{} could not be started: {e}", program.display()))
+            .map_err(|e| format!("{} could not be started: {e}", program.display()))?;
+        // Steam hands over and exits at once; wait for it on the side so
+        // it doesn't linger as a finished-but-unreaped process.
+        std::thread::spawn(move || {
+            child.wait().ok();
+        });
+        Ok(())
     }
 }
 

@@ -6,7 +6,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
-- **Compile and play.** **File → Compile and play** (F9) compiles a quick test of the map with Garry's Mod's own tools (fast visibility and lighting) and starts the game on it. Unsaved changes are included, and your map file isn't touched. A small window shows each step with a **Stop compiling** button; the compilers' output goes to the Console, with warnings and errors coloured. A leak stops the compile with an explanation. Needs Garry's Mod on Windows, which includes the compile tools.
+- **Compile and play.** **File → Compile and play** (F9) compiles a quick test of the map with Garry's Mod's own tools (fast visibility and lighting) and starts the game on it. Unsaved changes are included, and your map file isn't touched. A small window shows each step with a **Stop compiling** button; the compilers' output goes to the Console, with warnings and errors coloured. A leak stops the compile with an explanation, and a map of the same name that Halberd didn't make (such as a stock map) is never replaced. Needs Garry's Mod on Windows, which includes the compile tools.
 
 - **Map size and engine limits.** With nothing selected, **Properties** shows the **Map**: its size, how much of the largest possible Source map it spans, and meters for the engine's limits (brushes, brush sides, entities, brush entities, lights and materials), green, then yellow, then red as they fill. Hover a meter to see what happens past the limit. Anything reaching past the map's edge (16,384 units from the middle), where the compiler cuts it off, is counted, with a button to select it.
 

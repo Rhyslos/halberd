@@ -52,6 +52,9 @@ pub struct CompileRunner {
     events: Receiver<CompileEvent>,
     cancel: Arc<AtomicBool>,
     finished: bool,
+    /// The compile's thread, waited for when the runner goes (so a tool
+    /// is never left running when the editor closes).
+    thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl CompileRunner {
@@ -76,17 +79,22 @@ impl CompileRunner {
                 let result = run(&job, &stop, &report);
                 report(CompileEvent::Finished(result));
             });
-        if let Err(e) = started {
-            send.send(CompileEvent::Finished(Err(CompileError::CouldNotStart(
-                "the compile",
-                e.to_string(),
-            ))))
-            .ok();
-        }
+        let thread = match started {
+            Ok(thread) => Some(thread),
+            Err(e) => {
+                send.send(CompileEvent::Finished(Err(CompileError::CouldNotStart(
+                    "the compile",
+                    e.to_string(),
+                ))))
+                .ok();
+                None
+            }
+        };
         Self {
             events,
             cancel,
             finished: false,
+            thread,
         }
     }
 
@@ -115,8 +123,12 @@ impl CompileRunner {
 
 impl Drop for CompileRunner {
     fn drop(&mut self) {
-        // Closing the window ends a running compile.
+        // Closing the window ends a running compile: the thread sees the
+        // flag within a tenth of a second, ends the tool and waits for it.
         self.cancel();
+        if let Some(thread) = self.thread.take() {
+            thread.join().ok();
+        }
     }
 }
 
@@ -138,11 +150,17 @@ fn run(
         run_step(job, step, stop, report)?;
     }
     let installed = job.installed_bsp();
+    // Never replace a map Halberd didn't put there (a stock map, say).
+    let marker = installed.with_extension("bsp.halberd");
+    if installed.exists() && !marker.exists() {
+        return Err(CompileError::WouldReplace(job.map_name()));
+    }
     let copy = || -> std::io::Result<()> {
         if let Some(maps) = installed.parent() {
             std::fs::create_dir_all(maps)?;
         }
-        std::fs::copy(job.bsp(), &installed).map(|_| ())
+        std::fs::copy(job.bsp(), &installed)?;
+        std::fs::write(&marker, b"Compiled by Halberd; it may replace this map.\n")
     };
     copy().map_err(|e| CompileError::CouldNotCopy(e.to_string()))?;
     Ok(Compiled {
