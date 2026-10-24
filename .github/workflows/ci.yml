@@ -91,7 +91,10 @@ jobs:
 
   deny:
     name: Licenses and vulnerabilities
-    runs-on: ubuntu-latest
+    # cargo-deny's action runs in a Docker container, which has failed on
+    # the ubuntu-latest runners since they began moving to Ubuntu 26
+    # (2026-10-19). Kept on 24.04 until that settles.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
