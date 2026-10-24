@@ -18,6 +18,7 @@
 
 mod command;
 mod connection;
+mod displacement;
 mod document;
 mod entity;
 mod error;
@@ -30,6 +31,7 @@ mod texture;
 
 pub use command::{AddedBrush, Command, ElementKind, TransformKind};
 pub use connection::{Connection, MAX_CONNECTIONS, is_special_target, target_matches};
+pub use displacement::{DISP_POWERS, Displacement, ordered_corners};
 pub use document::{Document, MAX_OBJECTS};
 pub use entity::{class_box, rotation_of};
 pub use error::DocError;

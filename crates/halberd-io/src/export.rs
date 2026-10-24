@@ -126,7 +126,13 @@ fn side_block(face: &Face, info: &halberd_doc::FaceInfo, ids: &mut IdSource) -> 
         _ => format_plane(points_of_face(face)),
     };
     let mut side = Block::new("side");
-    if info.file_data.is_empty() {
+    // A face not read from a file has no plane among its entries; it may
+    // still carry blocks Halberd made, such as a displacement.
+    let from_file = info
+        .file_data
+        .iter()
+        .any(|e| matches!(e, Entry::Pair(k, _) if k.eq_ignore_ascii_case("plane")));
+    if !from_file {
         let axes = TextureAxes::world_aligned(face.plane().normal);
         side.push_pair("id", ids.next().to_string());
         side.push_pair("plane", plane);
@@ -136,6 +142,15 @@ fn side_block(face: &Face, info: &halberd_doc::FaceInfo, ids: &mut IdSource) -> 
         side.push_pair("rotation", "0");
         side.push_pair("lightmapscale", "16");
         side.push_pair("smoothing_groups", "0");
+        for entry in &info.file_data {
+            let written = match entry {
+                Entry::Pair(k, _) => side.get(k).is_some(),
+                Entry::Block(_) => false,
+            };
+            if !written {
+                side.entries.push(entry.clone());
+            }
+        }
         return side;
     }
     side.entries = info.file_data.clone();

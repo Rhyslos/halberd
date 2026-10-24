@@ -998,6 +998,7 @@ fn a_shape_key_that_cannot_run_says_why() {
 mod plan;
 
 mod scale;
+mod sculpt;
 
 mod views;
 

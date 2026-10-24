@@ -36,11 +36,14 @@ pub enum Tool {
     /// Click to put down the prop chosen in the browser (chosen there, so
     /// it is not in the tool switcher).
     Place,
+    /// Drag over displacements to raise, lower or smooth them, or paint
+    /// their blend.
+    Sculpt,
 }
 
 impl Tool {
     /// Every tool, in the order the switcher shows them.
-    pub const ALL: [Tool; 2] = [Self::Select, Self::Box];
+    pub const ALL: [Tool; 3] = [Self::Select, Self::Box, Self::Sculpt];
 
     /// Short name for the tool switcher.
     pub fn label(self) -> &'static str {
@@ -48,6 +51,7 @@ impl Tool {
             Self::Select => "Select",
             Self::Box => "Draw",
             Self::Place => "Place",
+            Self::Sculpt => "Sculpt",
         }
     }
 
@@ -67,6 +71,11 @@ impl Tool {
             Self::Place => {
                 "Click on the grid or on a brush to put the chosen prop there, standing on \
                  it; click again for more. Esc stops placing"
+            }
+            Self::Sculpt => {
+                "Drag over displacements to raise them (Ctrl: lower), smooth them, or paint \
+                 the blend between their two textures. Make a displacement first: pick a face \
+                 (4) and choose Shape, Make displacement"
             }
         }
     }
@@ -95,6 +104,9 @@ pub struct ToolInput {
     /// Alt is held: like `uniform`, but the drag's start is the middle of
     /// the shape's ground plan.
     pub centered: bool,
+    /// Seconds since the last frame (for tools that work while held, such
+    /// as Sculpt).
+    pub dt: f32,
 }
 
 /// What a tool asks the interface to do.
@@ -163,6 +175,14 @@ pub struct ToolController {
     prop: Option<place::PlaceChoice>,
     /// Where the Place tool would put it now (its origin).
     place_at: Option<glam::Vec3>,
+    /// The Sculpt tool's settings, the stroke in progress (its merge key)
+    /// and where the brush is.
+    sculpt: crate::SculptSettings,
+    sculpt_stroke: Option<u64>,
+    sculpt_strokes: u64,
+    sculpt_at: Option<glam::Vec3>,
+    /// The map's displacements, read once while the map stays the same.
+    sculpt_cache: crate::sculpt::DispCache,
 }
 
 /// What a shape is built from.
@@ -192,6 +212,11 @@ impl ToolController {
             material: None,
             prop: None,
             place_at: None,
+            sculpt: crate::SculptSettings::default(),
+            sculpt_stroke: None,
+            sculpt_strokes: 0,
+            sculpt_at: None,
+            sculpt_cache: crate::sculpt::DispCache::default(),
         }
     }
 
@@ -302,6 +327,8 @@ impl ToolController {
         self.plan = None;
         self.marquee = None;
         self.drag = None;
+        // A sculpt stroke ends with its tool (its edits stay, one step).
+        self.sculpt_stroke = None;
         if tool == Tool::Box {
             // Picked parts are hidden while drawing; let go of them, so
             // Escape there deselects as it looks like it should.
@@ -430,6 +457,7 @@ impl ToolController {
             || self.gizmo.is_dragging()
             || self.marquee.is_some()
             || self.plan.is_some()
+            || self.sculpt_stroke.is_some()
     }
 
     /// The box being drawn, for the preview outline.
@@ -531,6 +559,8 @@ impl ToolController {
             }
             Tool::Box => self.update_box(input, ray.as_ref(), doc),
             Tool::Place => self.update_place(input, ray.as_ref(), doc),
+            // Ctrl lowers or paints out.
+            Tool::Sculpt => self.sculpt(input, camera, doc, input.additive, input.dt),
         }
     }
 
@@ -736,6 +766,9 @@ fn sane_grid(grid: f32) -> f32 {
     }
 }
 
+mod displace;
+mod sculpting;
+pub(crate) use displace::with_face as with_displacement;
 mod material;
 mod operations;
 mod place;

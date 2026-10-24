@@ -7,6 +7,7 @@ use bytemuck::{Pod, Zeroable};
 use halberd_doc::{Document, Object};
 use halberd_geom::{Aabb, Brush};
 
+mod displacements;
 mod entities;
 mod props;
 pub use entities::{LIGHT_COLOR, SPAWN_COLOR, SUN_COLOR, entity_color};
@@ -266,6 +267,19 @@ impl SceneGeometry {
                 ),
                 None => (None, 0.0, None),
             };
+            if let Some(disp) = look.and_then(halberd_doc::FaceInfo::displacement) {
+                let disp_look = displacements::DispLook {
+                    color,
+                    edge_color,
+                    hue,
+                    flag: texture_flag(selected, layer),
+                    axes,
+                };
+                if displacements::add_displacement(&mut self.faces, face, &disp, &disp_look, edges)
+                {
+                    continue;
+                }
+            }
             let vertex = |i: usize| FaceVertex {
                 position: corners[i].to_array(),
                 normal,

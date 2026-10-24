@@ -87,6 +87,12 @@ pub const KEYBINDS: &[Keybind] = &[
         KeyContext::Viewport,
     ),
     cmd(
+        Command::SculptTool,
+        &[k(Key::G)],
+        "Sculpt tool: raise, smooth and paint displacements",
+        KeyContext::Viewport,
+    ),
+    cmd(
         Command::MoveGizmo,
         &[k(Key::W)],
         "Move gizmo (again: off)",

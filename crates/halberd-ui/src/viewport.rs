@@ -30,6 +30,7 @@ mod panes;
 mod plan;
 mod player;
 mod readout;
+mod sculpt;
 mod shape_ops;
 mod tools;
 
@@ -37,6 +38,7 @@ pub use layout::{MAX_VIEWS, PaneView, RenderMode, ViewLayout, ViewSetup};
 pub use leak::{GO_TO_LEAK_LABEL, HIDE_LEAK_LABEL, LEAK_BANNER_TEXT};
 pub use links::ConnectionView;
 pub use panes::LAYOUT_PICKER_LABEL;
+pub use sculpt::{SCULPT_RADIUS_NAME, SCULPT_STRENGTH_NAME};
 pub use shape_ops::SHAPE_OP_COMMANDS;
 pub(crate) use shape_ops::shape_menu;
 pub use tools::{INSIDE_ENTITIES_LABEL, PLACING_LABEL};

@@ -670,6 +670,10 @@ impl Document {
             let object = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
             gone.push((id, object.clone()));
         }
+        if gone.is_empty() && inserted.is_empty() {
+            // Only changes: these merge into one undo step while dragging.
+            return Ok(Change::Modified(modified));
+        }
         Ok(Change::Several {
             parts: vec![
                 Change::Modified(modified),

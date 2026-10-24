@@ -1,4 +1,5 @@
-//! Tests for floor plan shapes in the document: adding, moving, undo.
+//! Tests for floor plan shapes and shape edits in the document: adding,
+//! moving, merging, undo.
 
 use super::*;
 use crate::{FaceInfo, ShapeObject, TransformKind};
@@ -75,4 +76,41 @@ fn a_shape_is_not_a_brush_to_brush_edits() {
     });
     assert!(result.is_err(), "a shape can't be replaced by a brush");
     only_shape(&doc);
+}
+
+#[test]
+fn shape_edits_of_one_drag_merge_even_onto_more_brushes() {
+    let mut doc = Document::new();
+    doc.execute(Command::AddBrushes(vec![
+        super::tests::cube_at(0.0),
+        super::tests::cube_at(100.0),
+    ]))
+    .unwrap();
+    doc.end_step();
+    let all = super::tests::ids(&doc);
+    let painted = |doc: &Document, id: ObjectId, material: &str| {
+        let mut b = doc.get(id).unwrap().as_brush().unwrap().clone();
+        b.set_material(None, material);
+        Command::ShapeEdit {
+            label: "Sculpt".into(),
+            changed: vec![(id, b)],
+            added: vec![],
+            removed: vec![],
+            select_added: false,
+        }
+    };
+    doc.execute_merging(painted(&doc, all[0], "A"), 7).unwrap();
+    doc.execute_merging(painted(&doc, all[1], "B"), 7).unwrap();
+    doc.execute_merging(painted(&doc, all[0], "C"), 7).unwrap();
+    doc.end_step();
+    assert_eq!(doc.undo().as_deref(), Some("Sculpt"));
+    for id in &all {
+        let b = doc.get(*id).unwrap().as_brush().unwrap();
+        assert!(
+            b.faces()
+                .iter()
+                .all(|f| f.material == FaceInfo::default().material)
+        );
+    }
+    assert_eq!(doc.undo_label(), Some("Create 2 brushes"));
 }
