@@ -39,3 +39,5 @@ Draws the ground grid, world axes and the map's brushes into an offscreen image 
 - **`read_pixels`**: copies an image back to the CPU, for tests and screenshots.
 
 Tests (render modes): wireframe shows outlines and no faces, textured shows a pattern where flat is even. Tests: the shader is validated with wgpu's own compiler on every machine. `tests/gpu.rs` renders real frames and checks pixels (background, axis colours, grid lines, solid shaded brushes hiding what is behind them, red selection, yellow box preview, sizes from 1×1 to the GPU limit, 120-frame stability). Without a GPU those tests skip, unless `HALBERD_REQUIRE_GPU` is set, as it is in CI's window job.
+
+Point entities are drawn at the document's `entity_box` (their defined size when known); the scene is rebuilt when models' or classes' sizes change (`model_box_revision`).

@@ -11,12 +11,14 @@
 //! `gameinfo.txt` lists, searched in order, as the engine does.
 
 mod content;
+mod fgd;
 mod gmod;
 mod materials;
 mod models;
 mod steam;
 
 pub use content::{ContentError, GameContent, search_paths};
+pub use fgd::{find_fgd, load_fgd};
 pub use gmod::{
     CompileTool, CompileTools, FoundBy, GMOD_APP_ID, GmodInstall, InvalidGmodDir, inspect_gmod_dir,
 };

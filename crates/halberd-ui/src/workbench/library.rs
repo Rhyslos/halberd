@@ -38,8 +38,12 @@ pub(super) struct Library {
     /// What is known of each model read (lower-case name), for placing.
     prop_infos: HashMap<String, PlaceChoice>,
     /// A prop picked before its model was read; placed once it is.
-    pending_prop: Option<String>,
+    pub(super) pending_prop: Option<String>,
     pub(super) status: ContentStatus,
+    /// The game's entity definitions, once read.
+    pub(super) defs: Option<std::sync::Arc<halberd_fgd::Fgd>>,
+    /// The entity search box's text.
+    entity_search: String,
 }
 
 impl Default for Library {
@@ -52,6 +56,8 @@ impl Default for Library {
             prop_infos: HashMap::new(),
             pending_prop: None,
             status: ContentStatus::NoGame,
+            defs: None,
+            entity_search: String::new(),
         }
     }
 }
@@ -73,6 +79,8 @@ pub(super) enum LibraryAction {
     Place(usize),
     /// Chose a sky.
     Sky(String),
+    /// Picked an entity in the full list.
+    Catalog(super::entity_catalog::CatalogAction),
 }
 
 impl Library {
@@ -107,11 +115,27 @@ impl Library {
         ui.separator();
         let browser = match self.tab {
             Tab::Entities => {
-                *action = match entity_list::show(ui, &self.skies, sky) {
-                    Some(EntityListAction::Place(i)) => Some(LibraryAction::Place(i)),
-                    Some(EntityListAction::Sky(name)) => Some(LibraryAction::Sky(name)),
-                    None => action.take(),
-                };
+                egui::ScrollArea::vertical()
+                    .id_salt("halberd_entities_tab")
+                    .show(ui, |ui| {
+                        *action = match entity_list::show(ui, &self.skies, sky) {
+                            Some(EntityListAction::Place(i)) => Some(LibraryAction::Place(i)),
+                            Some(EntityListAction::Sky(name)) => Some(LibraryAction::Sky(name)),
+                            None => action.take(),
+                        };
+                        ui.add_space(10.0);
+                        ui.separator();
+                        let defs = self.defs.clone();
+                        let picked = super::entity_catalog::show(
+                            ui,
+                            defs.as_deref(),
+                            &mut self.entity_search,
+                            can_apply,
+                        );
+                        if let Some(picked) = picked {
+                            *action = Some(LibraryAction::Catalog(picked));
+                        }
+                    });
                 return;
             }
             Tab::Materials => &mut self.materials,
@@ -233,6 +257,7 @@ impl Workbench {
                 self.library.pending_prop = None;
                 self.viewport.tools_mut().set_placing(Some(entity.choice()));
             }
+            LibraryAction::Catalog(picked) => self.catalog_action(picked),
             LibraryAction::Sky(name) => {
                 self.doc
                     .execute(halberd_doc::Command::SetWorldSetting {

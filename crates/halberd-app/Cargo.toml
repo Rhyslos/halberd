@@ -26,6 +26,7 @@ halberd-render.workspace = true
 halberd-tools.workspace = true
 halberd-ui.workspace = true
 halberd-doc.workspace = true
+halberd-fgd.workspace = true
 halberd-geom.workspace = true
 halberd-config.workspace = true
 rfd.workspace = true

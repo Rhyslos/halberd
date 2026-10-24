@@ -122,8 +122,9 @@ pub struct ViewportRenderer {
 /// The map's geometry on the GPU, and which document state it shows.
 #[derive(Debug, Default)]
 struct SceneBuffers {
-    /// Document instance, revision and selection revision last uploaded.
-    shows: Option<(u64, u64, u64)>,
+    /// Document instance, revision, selection revision and box revision
+    /// (models' and classes' sizes) last uploaded.
+    shows: Option<(u64, u64, u64, u64)>,
     faces: GpuList,
     edges: GpuList,
     selected_edges: GpuList,
@@ -299,7 +300,12 @@ impl ViewportRenderer {
     /// changed since the last call: the geometry is only rebuilt when the
     /// document is replaced, edited or its selection changes.
     pub fn update_scene(&mut self, device: &wgpu::Device, doc: &Document) {
-        let state = (doc.instance(), doc.revision(), doc.selection_revision());
+        let state = (
+            doc.instance(),
+            doc.revision(),
+            doc.selection_revision(),
+            doc.model_box_revision(),
+        );
         if self.scene.shows == Some(state) {
             return;
         }

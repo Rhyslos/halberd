@@ -37,3 +37,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0028](0028-quick-compile.md) | Compile and play | Accepted |
 | [0029](0029-leak-path.md) | Showing where a map leaks | Accepted |
 | [0030](0030-settings-page.md) | The Settings page: keys, camera and memory | Accepted |
+| [0031](0031-entity-definitions.md) | The full entity list and keyvalue editing | Accepted |

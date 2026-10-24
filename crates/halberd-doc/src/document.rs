@@ -500,6 +500,10 @@ impl Document {
                 self.prepare_entity_settings(id, &settings)
             }
             Command::SetWorldSetting { key, value } => self.prepare_world_setting(&key, &value),
+            Command::TieToEntity { objects, entity } => self.prepare_tie(&objects, entity),
+            Command::MoveToWorld(objects) => self.prepare_move_to_world(&objects),
+            Command::SetEntityClass { id, classname } => self.prepare_entity_class(id, &classname),
+            Command::RemoveEntitySettings { id, keys } => self.prepare_remove_settings(id, &keys),
             Command::AddShape(shape) => {
                 if self.objects.len() >= MAX_OBJECTS {
                     return Err(DocError::TooManyObjects);
@@ -580,7 +584,10 @@ impl Document {
             }
             Change::Modified(objects) => {
                 for (id, _, after) in objects {
-                    self.objects.insert(*id, after.clone());
+                    // Out and in again, so a brush moving to another entity
+                    // is filed under it.
+                    self.remove(*id);
+                    self.insert(*id, after.clone());
                 }
             }
             Change::World { key, after, .. } => self.set_world_value(key, after.as_deref()),
@@ -727,4 +734,5 @@ mod materials;
 mod shape_tests;
 #[cfg(test)]
 mod tests;
+mod tie;
 mod world;

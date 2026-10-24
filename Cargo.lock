@@ -1435,6 +1435,7 @@ dependencies = [
  "halberd-compile",
  "halberd-config",
  "halberd-doc",
+ "halberd-fgd",
  "halberd-geom",
  "halberd-io",
  "halberd-render",
@@ -1450,6 +1451,7 @@ name = "halberd-assets"
 version = "0.0.1"
 dependencies = [
  "halberd-config",
+ "halberd-fgd",
  "halberd-gma",
  "halberd-kv",
  "halberd-mdl",
@@ -1488,6 +1490,9 @@ dependencies = [
 [[package]]
 name = "halberd-fgd"
 version = "0.0.1"
+dependencies = [
+ "tempfile",
+]
 
 [[package]]
 name = "halberd-geom"
@@ -1555,6 +1560,7 @@ dependencies = [
  "glam",
  "halberd-config",
  "halberd-doc",
+ "halberd-fgd",
  "halberd-geom",
  "halberd-kv",
  "halberd-tools",

@@ -42,3 +42,5 @@ Command-line options (`halberd --help`):
 | `<map.vmf>` | Open this map (double-clicking a `.vmf` set to open with Halberd does this) |
 
 On Windows a terminal window opens behind the editor during Phase 0; it shows the same report and helps diagnose problems.
+
+The content thread also reads the game's entity definitions (`halberd_assets::load_fgd`) and hands them to the workbench (`set_entity_definitions`), or says they weren't found.

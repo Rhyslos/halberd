@@ -2,7 +2,9 @@
 //! at once: reading the archives' file lists takes a moment on a slow
 //! disk.
 
-use halberd_assets::{GameContent, GmodInstall, material_names, model_names};
+use halberd_assets::{GameContent, GmodInstall, load_fgd, material_names, model_names};
+use halberd_fgd::Fgd;
+use std::path::PathBuf;
 use std::sync::mpsc;
 
 /// Content being mounted in the background.
@@ -17,6 +19,8 @@ pub(crate) struct Mounted {
     pub(crate) content: GameContent,
     pub(crate) materials: Vec<String>,
     pub(crate) models: Vec<String>,
+    /// The game's entity definitions: the file read and what it holds.
+    pub(crate) fgd: Option<(PathBuf, Fgd)>,
 }
 
 /// How mounting is going.
@@ -24,7 +28,7 @@ pub(crate) enum Mounting {
     /// Still reading.
     Busy,
     /// Done.
-    Ready(Mounted),
+    Ready(Box<Mounted>),
     /// The background work stopped without a result (it could not start,
     /// or it failed).
     Failed,
@@ -41,11 +45,13 @@ impl ContentLoader {
                 let content = GameContent::mount(&install);
                 let materials = material_names(&content);
                 let models = model_names(&content);
+                let fgd = load_fgd(&install);
                 // The window may already be gone; then nobody needs it.
                 send.send(Mounted {
                     content,
                     materials,
                     models,
+                    fgd,
                 })
                 .ok();
                 // Let go of the channel before waking the window, so a poll
@@ -65,7 +71,7 @@ impl ContentLoader {
             return Mounting::Failed;
         };
         match done.try_recv() {
-            Ok(content) => Mounting::Ready(content),
+            Ok(content) => Mounting::Ready(Box::new(content)),
             Err(mpsc::TryRecvError::Empty) => Mounting::Busy,
             Err(mpsc::TryRecvError::Disconnected) => Mounting::Failed,
         }
