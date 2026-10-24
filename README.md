@@ -34,7 +34,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 ### Phase 1 · Blockout (v0.1, public alpha) — 18 of 19
 
-`███████████░░` 84%
+`████████████░` 95%
 
 <details>
 <summary>Milestones</summary>
