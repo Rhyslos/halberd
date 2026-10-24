@@ -502,6 +502,9 @@ impl Document {
             Command::SetWorldSetting { key, value } => self.prepare_world_setting(&key, &value),
             Command::TieToEntity { objects, entity } => self.prepare_tie(&objects, entity),
             Command::MoveToWorld(objects) => self.prepare_move_to_world(&objects),
+            Command::SetConnections { id, connections } => {
+                self.prepare_connections(id, &connections)
+            }
             Command::SetEntityClass { id, classname } => self.prepare_entity_class(id, &classname),
             Command::RemoveEntitySettings { id, keys } => self.prepare_remove_settings(id, &keys),
             Command::AddShape(shape) => {
@@ -726,6 +729,7 @@ impl Document {
     }
 }
 
+mod connections;
 mod entities;
 #[cfg(test)]
 mod map_tests;

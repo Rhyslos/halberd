@@ -65,6 +65,14 @@ pub enum Command {
         /// The new entity (its class and settings; no origin needed).
         entity: EntityObject,
     },
+    /// Replaces an entity's connections (its outputs to other entities'
+    /// inputs). Lines Halberd can't read are kept.
+    SetConnections {
+        /// The entity.
+        id: ObjectId,
+        /// Its connections, in order.
+        connections: Vec<crate::Connection>,
+    },
     /// Moves brushes (or a brush entity's brushes) back to the world.
     /// Brush entities left with no brushes go.
     MoveToWorld(Vec<ObjectId>),
@@ -197,6 +205,7 @@ impl Command {
             Self::SetEntitySettings { .. } => "Change entity settings".into(),
             Self::TieToEntity { entity, .. } => format!("Tie to {}", entity.classname),
             Self::MoveToWorld(_) => "Move to world".into(),
+            Self::SetConnections { .. } => "Change outputs".into(),
             Self::SetEntityClass { classname, .. } => format!("Change class to {classname}"),
             Self::RemoveEntitySettings { keys, .. } if keys.len() == 1 => {
                 format!("Remove {}", keys[0])

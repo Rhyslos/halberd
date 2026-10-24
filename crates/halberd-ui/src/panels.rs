@@ -11,11 +11,14 @@ use std::collections::BTreeSet;
 
 mod entity_settings;
 mod keyvalues;
+mod outputs;
 #[cfg(test)]
 pub(crate) use keyvalues::{
     ADD_KEY_LABEL, CLASS_FIELD_NAME, MOVE_TO_WORLD_LABEL, NEW_KEY_NAME, NEW_VALUE_NAME,
     value_field_name,
 };
+#[cfg(test)]
+pub(crate) use outputs::{ADD_OUTPUT_LABEL, connection_field_name};
 pub(crate) mod map_summary;
 #[cfg(test)]
 pub(crate) use entity_settings::{
