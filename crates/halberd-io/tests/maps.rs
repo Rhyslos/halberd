@@ -597,3 +597,55 @@ fn an_opened_map_without_hammer_blocks_keeps_its_world_as_read() {
     assert!(!saved.contains("versioninfo"));
     assert_eq!(saved, text);
 }
+
+#[test]
+fn connections_and_tied_brushes_survive_saving_and_opening() {
+    let mut doc = Document::new();
+    let cube = Brush::cuboid(Aabb::from_corners(Vec3::ZERO, Vec3::splat(64.0))).unwrap();
+    doc.execute(Command::AddBrushes(vec![cube])).unwrap();
+    let brush = *doc.selection().iter().next().unwrap();
+    let wall = halberd_doc::EntityObject {
+        classname: "func_wall".into(),
+        origin: None,
+        file_data: vec![Entry::Pair("classname".into(), "func_wall".into())],
+    };
+    doc.execute(Command::TieToEntity {
+        objects: vec![brush],
+        entity: wall,
+    })
+    .unwrap();
+    doc.execute(Command::AddEntity(halberd_doc::EntityObject::point(
+        "logic_relay",
+        Vec3::new(0.0, 0.0, 128.0),
+        &[("targetname", "relay")],
+    )))
+    .unwrap();
+    let relay = *doc.selection().iter().next().unwrap();
+    let mut on = halberd_doc::Connection::new("OnTrigger", "lamp", "TurnOn");
+    on.delay = 1.5;
+    doc.execute(Command::SetConnections {
+        id: relay,
+        connections: vec![on.clone()],
+    })
+    .unwrap();
+    let text = saved_text(&doc);
+    assert!(
+        text.contains("\"OnTrigger\" \"lamp,TurnOn,,1.5,-1\""),
+        "{text}"
+    );
+    let back = open(&text);
+    let relay = back
+        .objects()
+        .find_map(|(_, o)| o.as_entity().filter(|e| e.classname == "logic_relay"))
+        .unwrap();
+    assert_eq!(relay.connections(), [on]);
+    let tied = back
+        .objects()
+        .find_map(|(id, o)| {
+            o.as_entity()
+                .filter(|e| e.classname == "func_wall")
+                .map(|_| id)
+        })
+        .unwrap();
+    assert_eq!(back.brushes_of(tied).count(), 1);
+}

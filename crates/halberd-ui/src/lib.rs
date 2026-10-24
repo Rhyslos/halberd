@@ -45,7 +45,7 @@ pub use settings_page::{
     key_button_name,
 };
 pub use viewport::{
-    GO_TO_LEAK_LABEL, HIDE_LEAK_LABEL, INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL,
+    ConnectionView, GO_TO_LEAK_LABEL, HIDE_LEAK_LABEL, INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL,
     LEAK_BANNER_TEXT, MAX_VIEWS, NoRenderer, PLACING_LABEL, PaneView, RenderMode,
     SHAPE_OP_COMMANDS, VIEWPORT_LABEL, ViewLayout, ViewSetup, ViewportOptions, ViewportPanel,
     ViewportRenderer, ViewportView,

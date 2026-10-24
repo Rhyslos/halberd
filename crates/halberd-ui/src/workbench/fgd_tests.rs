@@ -170,7 +170,7 @@ fn keys_are_edited_by_type_and_text_goes_in_on_enter() {
     // The class's keys are listed with their labels; inputs and outputs too.
     assert!(h.query_by_label("Health").is_some());
     assert!(h.query_by_label("Start asleep").is_some());
-    assert!(h.query_by_label("Outputs (1)").is_some());
+    assert!(h.query_by_label("Inputs it takes (1)").is_some());
     // Flags: ticking Glow adds its bit.
     h.get_by_label("Glow").click();
     h.run();

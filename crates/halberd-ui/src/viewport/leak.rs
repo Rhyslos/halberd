@@ -145,7 +145,7 @@ impl ViewportPanel {
 
 /// The part of the segment `a`–`b` in front of the camera, or `None` if
 /// all of it is behind.
-fn clip_to_view(camera: &Camera, a: Vec3, b: Vec3) -> Option<(Vec3, Vec3)> {
+pub(super) fn clip_to_view(camera: &Camera, a: Vec3, b: Vec3) -> Option<(Vec3, Vec3)> {
     if camera.ortho.is_some() {
         return Some((a, b));
     }

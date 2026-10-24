@@ -99,10 +99,12 @@ pub(crate) fn keyvalue_editor(
             edits.to_world = true;
         }
     }
+    let mut notes = super::outputs::outputs_editor(ui, doc, id, entity, class.as_ref(), defs);
     if let Some(class) = &class {
-        io_lists(ui, class);
+        inputs_list(ui, class);
     }
-    carry_out(doc, id, edits)
+    notes.extend(carry_out(doc, id, edits));
+    notes
 }
 
 /// Refuses a class change between point and brush entities (a point
@@ -438,28 +440,22 @@ fn add_row(ui: &mut Ui, id: ObjectId, edits: &mut Edits) {
     });
 }
 
-fn io_lists(ui: &mut Ui, class: &ResolvedClass) {
-    for (title, list) in [("Inputs", &class.inputs), ("Outputs", &class.outputs)] {
-        if list.is_empty() {
-            continue;
-        }
-        egui::CollapsingHeader::new(format!("{title} ({})", list.len()))
-            .id_salt(("halberd_io", title))
-            .show(ui, |ui| {
-                for io in list {
-                    let text = if io.param == "void" {
-                        io.name.clone()
-                    } else {
-                        format!("{} ({})", io.name, io.param)
-                    };
-                    ui.label(RichText::new(text).monospace())
-                        .on_hover_text(&io.description);
-                }
-                ui.label(
-                    RichText::new("Connecting outputs to inputs comes with the next milestone.")
-                        .weak()
-                        .small(),
-                );
-            });
+/// The inputs the class takes, for reference.
+fn inputs_list(ui: &mut Ui, class: &ResolvedClass) {
+    if class.inputs.is_empty() {
+        return;
     }
+    egui::CollapsingHeader::new(format!("Inputs it takes ({})", class.inputs.len()))
+        .id_salt("halberd_inputs_taken")
+        .show(ui, |ui| {
+            for input in &class.inputs {
+                let text = if input.param == "void" {
+                    input.name.clone()
+                } else {
+                    format!("{} ({})", input.name, input.param)
+                };
+                ui.label(RichText::new(text).monospace())
+                    .on_hover_text(&input.description);
+            }
+        });
 }

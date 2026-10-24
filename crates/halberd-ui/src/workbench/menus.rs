@@ -135,6 +135,21 @@ impl Workbench {
                 self.viewport.set_player_follows(follows);
             }
             self.leak_menu_item(ui);
+            ui.separator();
+            ui.label("Entity connections");
+            let shown = self.viewport.connection_view();
+            for view in crate::ConnectionView::ALL {
+                if ui
+                    .radio(shown == view, view.label())
+                    .on_hover_text(
+                        "Lines from entities to the entities their outputs reach (green: from \
+                         the selection, blue: to it)",
+                    )
+                    .clicked()
+                {
+                    self.viewport.set_connection_view(view);
+                }
+            }
         });
         if ui
             .button(KEYBINDS_TITLE)

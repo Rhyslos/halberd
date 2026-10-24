@@ -398,6 +398,8 @@ mod fgd_tests;
 #[cfg(test)]
 mod file_tests;
 #[cfg(test)]
+mod io_tests;
+#[cfg(test)]
 mod keybinds_tests;
 #[cfg(test)]
 mod library_tests;

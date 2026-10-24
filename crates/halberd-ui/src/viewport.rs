@@ -25,6 +25,7 @@ mod gizmo;
 mod input;
 mod layout;
 mod leak;
+mod links;
 mod panes;
 mod plan;
 mod player;
@@ -34,6 +35,7 @@ mod tools;
 
 pub use layout::{MAX_VIEWS, PaneView, RenderMode, ViewLayout, ViewSetup};
 pub use leak::{GO_TO_LEAK_LABEL, HIDE_LEAK_LABEL, LEAK_BANNER_TEXT};
+pub use links::ConnectionView;
 pub use panes::LAYOUT_PICKER_LABEL;
 pub use shape_ops::SHAPE_OP_COMMANDS;
 pub(crate) use shape_ops::shape_menu;
@@ -176,6 +178,9 @@ pub struct ViewportPanel {
     zoom_factor: f32,
     /// The leak path the last compile found, if any.
     leak: Option<leak::LeakPath>,
+    /// Which entity connections the views draw, and the lines.
+    connection_view: ConnectionView,
+    links: links::LinkCache,
 }
 
 impl ViewportPanel {
@@ -212,6 +217,8 @@ impl ViewportPanel {
             turn_factor: 1.0,
             zoom_factor: 1.0,
             leak: None,
+            connection_view: ConnectionView::default(),
+            links: links::LinkCache::default(),
         }
     }
 
@@ -347,6 +354,7 @@ impl ViewportPanel {
         if animating {
             ui.ctx().request_repaint();
         }
+        self.update_links(doc);
         for (i, rect) in rects.iter().enumerate() {
             self.draw_pane(ui, renderer, doc, i, *rect);
         }
