@@ -27,10 +27,35 @@ impl Document {
         self.model_boxes.get(&name.to_ascii_lowercase()).copied()
     }
 
+    /// Records the box entities of class `classname` are shown as, around
+    /// their origin (from the game's entity definitions). Not an edit.
+    pub fn set_class_box(&mut self, classname: &str, local: Aabb) {
+        let key = format!("class:{}", classname.to_ascii_lowercase());
+        if self.model_boxes.insert(key, local) != Some(local) {
+            self.model_box_revision += 1;
+        }
+    }
+
+    /// The box a point entity fills: its model's (turned with it) when the
+    /// model has been read, else its class's from the entity definitions,
+    /// else the small marker.
+    pub fn entity_box(&self, entity: &crate::EntityObject) -> Option<Aabb> {
+        if let Some(model) = entity.model().and_then(|m| self.model_box(m)) {
+            return entity.placed_box(Some(model));
+        }
+        let class = format!("class:{}", entity.classname.to_ascii_lowercase());
+        match (self.model_boxes.get(&class), entity.origin) {
+            (Some(local), Some(origin)) => {
+                Some(Aabb::from_corners(origin + local.min, origin + local.max))
+            }
+            _ => entity.marker(),
+        }
+    }
+
     /// The box around an object itself: a prop fills its model's box.
     pub(super) fn object_box(&self, object: &Object) -> Option<Aabb> {
         match object {
-            Object::Entity(e) => e.placed_box(e.model().and_then(|m| self.model_box(m))),
+            Object::Entity(e) => self.entity_box(e),
             other => other.bounds(),
         }
     }
@@ -79,5 +104,26 @@ mod tests {
         assert_eq!(doc.model_box_revision(), 1);
         let light = Command::AddEntity(EntityObject::point("light", Vec3::ZERO, &[]));
         assert_eq!(light.describe(), "Add light");
+    }
+
+    #[test]
+    fn a_class_box_from_the_definitions_is_used_without_a_model() {
+        let mut doc = Document::new();
+        doc.execute(Command::AddEntity(EntityObject::point(
+            "npc_citizen",
+            Vec3::new(100.0, 0.0, 0.0),
+            &[],
+        )))
+        .unwrap();
+        let id = *doc.selection().iter().next().unwrap();
+        let before = doc.model_box_revision();
+        doc.set_class_box(
+            "NPC_Citizen",
+            Aabb::from_corners(Vec3::new(-16.0, -16.0, 0.0), Vec3::new(16.0, 16.0, 72.0)),
+        );
+        assert!(doc.model_box_revision() > before);
+        let b = doc.bounds_of(id).unwrap();
+        assert_eq!(b.min, Vec3::new(84.0, -16.0, 0.0));
+        assert_eq!(b.max, Vec3::new(116.0, 16.0, 72.0));
     }
 }

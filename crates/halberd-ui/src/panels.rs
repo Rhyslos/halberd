@@ -10,6 +10,12 @@ use halberd_geom::{Aabb, Brush, MIN_SIZE, Plane};
 use std::collections::BTreeSet;
 
 mod entity_settings;
+mod keyvalues;
+#[cfg(test)]
+pub(crate) use keyvalues::{
+    ADD_KEY_LABEL, CLASS_FIELD_NAME, MOVE_TO_WORLD_LABEL, NEW_KEY_NAME, NEW_VALUE_NAME,
+    value_field_name,
+};
 pub(crate) mod map_summary;
 #[cfg(test)]
 pub(crate) use entity_settings::{
@@ -170,7 +176,8 @@ pub(crate) fn properties_contents(
     doc: &mut Document,
     unit: LengthUnit,
     stats: &mut map_summary::StatsCache,
-) {
+    defs: Option<&halberd_fgd::Fgd>,
+) -> Vec<String> {
     let count = doc.selection().len();
     let single = (count == 1)
         .then(|| doc.selection().iter().next().copied())
@@ -183,11 +190,11 @@ pub(crate) fn properties_contents(
         ui.add_space(8.0);
         ui.label(RichText::new("1 object selected").strong());
         let entity = entity.clone();
-        let brushes = doc.brushes_of(id).count();
         ui.label(RichText::new(&entity.classname).strong().size(15.0));
-        let editable = entity_settings::basic_entity_editor(ui, doc, id, &entity);
-        entity_details(ui, &entity, brushes, editable);
-        return;
+        if entity_settings::basic_entity_editor(ui, doc, id, &entity) {
+            ui.separator();
+        }
+        return keyvalues::keyvalue_editor(ui, doc, id, &entity, defs);
     }
     let Some(bounds) = doc.selection_bounds() else {
         placeholder(
@@ -199,7 +206,7 @@ pub(crate) fn properties_contents(
             ui.separator();
             map_summary::show(ui, doc, unit, stats);
         }
-        return;
+        return Vec::new();
     };
     ui.add_space(8.0);
     let heading = if count == 1 {
@@ -254,6 +261,7 @@ pub(crate) fn properties_contents(
             ));
         }
     }
+    Vec::new()
 }
 
 /// How an object is named in the Scene list: "Brush", or an entity's
@@ -275,41 +283,6 @@ fn materials_summary(brush: &halberd_doc::BrushObject) -> String {
     match names.as_slice() {
         [one] => format!("Material: {one}"),
         many => format!("Materials: {} different", many.len()),
-    }
-}
-
-/// An entity's settings, read-only (`editable`: some were editable above).
-fn entity_details(ui: &mut Ui, entity: &halberd_doc::EntityObject, brushes: usize, editable: bool) {
-    let note = if editable {
-        "All settings (editing the rest comes in Phase 2):"
-    } else {
-        "Editing entities comes in Phase 2."
-    };
-    ui.label(RichText::new(note).weak());
-    ui.add_space(4.0);
-    egui::Grid::new("halberd_entity_settings")
-        .num_columns(2)
-        .striped(true)
-        .spacing([12.0, 2.0])
-        .show(ui, |ui| {
-            for (key, value) in entity.settings() {
-                ui.label(RichText::new(key).monospace());
-                ui.label(RichText::new(value).monospace());
-                ui.end_row();
-            }
-        });
-    if brushes > 0 {
-        ui.label(format!(
-            "{brushes} brush{}",
-            if brushes == 1 { "" } else { "es" }
-        ));
-        ui.label(
-            RichText::new(
-                "To pick single brushes, turn on \"Inside entities\" (Ctrl+W) in the \
-                 viewport, or open the entity's list in Scene.",
-            )
-            .weak(),
-        );
     }
 }
 

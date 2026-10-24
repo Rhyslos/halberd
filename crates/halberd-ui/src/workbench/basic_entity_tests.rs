@@ -120,7 +120,7 @@ fn a_selected_light_shows_its_editable_settings() {
 }
 
 #[test]
-fn other_entities_stay_read_only() {
+fn other_entities_get_the_plain_keyvalue_editor() {
     let mut wb = Workbench::new(info(), None);
     add(&mut wb, "prop_static", &[("model", "models/a.mdl")]);
     let mut h = harness_for(wb);
@@ -128,7 +128,7 @@ fn other_entities_stay_read_only() {
     assert!(h.query_by_label(BRIGHTNESS_NAME).is_none());
     assert!(h.query_by_label(FACING_NAME).is_none());
     assert!(
-        h.query_by_label("Editing entities comes in Phase 2.")
+        h.query_by_label(&crate::panels::value_field_name("model"))
             .is_some()
     );
 }

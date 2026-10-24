@@ -48,3 +48,5 @@ Models (`models.rs`, see [decision 0024](../../docs/decisions/0024-props.md)):
 1. `model_names` lists every `models/*.mdl` in the archives and loose folders (at most 200,000 loose ones), as maps name them (`models/props_c17/oildrum001.mdl`, lower case), sorted.
 2. `load_model` reads a model's `.mdl`, `.vvd` and `.vtx` (`.dx90.vtx`, else `.vtx`, `.dx80.vtx`, `.sw.vtx`) and finds each of its materials in the model's material folders, in order (`LoadedModel`).
 3. `ModelLoader` does that on its own thread, each model asked for once until it arrives.
+
+**Entity definitions** (`fgd.rs`): `find_fgd` looks in Garry's Mod's `bin` folder for `garrysmod.fgd`, then `halflife2.fgd` and `base.fgd`, then any `.fgd`; `load_fgd` reads it with `halberd-fgd` (see [decision 0031](../../docs/decisions/0031-entity-definitions.md)).

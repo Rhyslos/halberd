@@ -185,8 +185,5 @@ fn an_entity_without_a_box_still_shows_its_details() {
     let mut h = harness_for(wb);
     h.run();
     assert!(h.query_by_label("Nothing selected").is_none());
-    assert!(
-        h.query_by_label("Editing entities comes in Phase 2.")
-            .is_some()
-    );
+    assert!(h.query_by_label(crate::panels::CLASS_FIELD_NAME).is_some());
 }

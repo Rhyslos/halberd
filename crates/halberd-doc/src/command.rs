@@ -56,6 +56,32 @@ pub enum Command {
         /// The settings to change.
         settings: Vec<(String, String)>,
     },
+    /// Ties brushes (and the brushes of brush entities among `objects`) to
+    /// a new brush entity, as Hammer's "Tie to entity". Brush entities left
+    /// with no brushes go. The selection does not change.
+    TieToEntity {
+        /// The brushes, or brush entities standing for theirs.
+        objects: Vec<ObjectId>,
+        /// The new entity (its class and settings; no origin needed).
+        entity: EntityObject,
+    },
+    /// Moves brushes (or a brush entity's brushes) back to the world.
+    /// Brush entities left with no brushes go.
+    MoveToWorld(Vec<ObjectId>),
+    /// Changes an entity's class.
+    SetEntityClass {
+        /// The entity.
+        id: ObjectId,
+        /// Its new class (letters, digits and `_`).
+        classname: String,
+    },
+    /// Removes settings from an entity (never its class or origin).
+    RemoveEntitySettings {
+        /// The entity.
+        id: ObjectId,
+        /// The keys to remove (any case).
+        keys: Vec<String>,
+    },
     /// Changes one of the map's own settings (the world's, such as its
     /// sky, `skyname`).
     SetWorldSetting {
@@ -169,6 +195,13 @@ impl Command {
             Self::AddEntity(entity) if entity.classname.starts_with("prop_") => "Place prop".into(),
             Self::AddEntity(entity) => format!("Add {}", entity.classname),
             Self::SetEntitySettings { .. } => "Change entity settings".into(),
+            Self::TieToEntity { entity, .. } => format!("Tie to {}", entity.classname),
+            Self::MoveToWorld(_) => "Move to world".into(),
+            Self::SetEntityClass { classname, .. } => format!("Change class to {classname}"),
+            Self::RemoveEntitySettings { keys, .. } if keys.len() == 1 => {
+                format!("Remove {}", keys[0])
+            }
+            Self::RemoveEntitySettings { .. } => "Remove entity settings".into(),
             Self::SetWorldSetting { key, .. } if key.eq_ignore_ascii_case("skyname") => {
                 "Change sky".into()
             }

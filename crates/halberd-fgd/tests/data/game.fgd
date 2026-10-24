@@ -1,0 +1,56 @@
+// Halberd test data, including base.fgd.
+@include "base.fgd"
+
+@PointClass base(Light) iconsprite("editor/light.vmt") sphere(_fifty_percent_distance) color(255 255 0) light() = light : "An invisible omnidirectional light source."
+[
+	spawnflags(flags) =
+	[
+		1 : "Initially dark" : 0
+	]
+	_distance(integer) : "Maximum Distance" : 0 : "This is the distance that light is allowed to cast."
+]
+
+@PointClass base(Targetname, Angles) studio("models/editor/playerstart.mdl") size(-16 -16 0, 16 16 72) color(0 255 0) = info_player_start :
+	"This entity indicates the position and facing direction at which the player will spawn. " +
+	"Any number of info_player_start entities may be placed in a map."
+[
+	spawnflags(flags) =
+	[
+		1: "Master (Has priority if multiple info_player_starts exist)" : 0
+	]
+]
+
+@SolidClass base(Targetname, RenderFields) = func_brush : "An brush entity that can be toggled."
+[
+	solidity(choices) : "Solidity" : 0 =
+	[
+		0 : "Toggle"
+		1 : "Never Solid"
+		2 : "Always Solid"
+	]
+	input Toggle(void) : "Toggles the brush."
+	output OnUser1(string) : "Overridden output."
+]
+
+@SolidClass = func_detail : "An entity that turns its brushes into detail brushes." []
+
+@PointClass base(Targetname) size(-8 -8 -8, 8 8 8) = logic_relay : "A message forwarder."
+[
+	StartDisabled(choices) : "Start Disabled" : 0 = [ 0 : "No" 1 : "Yes" ]
+	input Trigger(void) : "Trigger the relay."
+	output OnTrigger(void) : "Fired when the relay is triggered."
+]
+
+@MaterialExclusion
+[
+	"debug"
+	"dev"
+]
+
+@AutoVisGroup = "Brushes"
+[
+	"Triggers"
+	[
+		"trigger_once"
+	]
+]

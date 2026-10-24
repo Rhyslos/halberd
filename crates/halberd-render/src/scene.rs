@@ -171,7 +171,9 @@ impl SceneGeometry {
                 Object::Entity(entity) if let Some(model) = entity.model().and_then(model_of) => {
                     scene.add_prop(entity, model, selected, layer_of);
                 }
-                Object::Entity(entity) => scene.add_point_entity(entity, selected, layer_of),
+                Object::Entity(entity) => {
+                    scene.add_point_entity(entity, doc.entity_box(entity), selected, layer_of)
+                }
                 Object::Shape(shape) => scene.add_shape(shape, selected, layer_of),
             }
         }

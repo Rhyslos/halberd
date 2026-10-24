@@ -42,3 +42,5 @@ The document, commands and undo are implemented (see [decision 0009](../../docs/
 - **Queries**: `pick` (nearest object along a ray), `selection_bounds`.
 
 Tests include a stress test of 3,000 random adds, deletes, undos and redos.
+
+**Brush entities and classes** (`document/tie.rs`, [decision 0031](../../docs/decisions/0031-entity-definitions.md)): `TieToEntity` ties brushes (or a brush entity's brushes) to a new brush entity, `MoveToWorld` gives them back to the world (a brush entity left with no brushes goes), `SetEntityClass` changes a class, `RemoveEntitySettings` removes keys (never the class or origin). A brush moving to another entity is re-filed when a change is applied. `set_class_box` records a point class's size from the entity definitions; `entity_box` gives an entity's box (its model's, else its class's, else the marker).

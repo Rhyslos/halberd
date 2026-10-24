@@ -175,7 +175,10 @@ fn entities_are_listed_and_their_settings_shown() {
     // A light's colour and brightness can be edited; all its settings are
     // listed too.
     assert!(h.query_by_label(crate::panels::BRIGHTNESS_NAME).is_some());
-    assert!(h.query_by_label("255 240 200 300").is_some());
+    assert!(
+        h.query_by_label(&crate::panels::value_field_name("_light"))
+            .is_some()
+    );
     assert!(
         h.query_by_label("Box width").is_none(),
         "no size fields for entities"
