@@ -1,6 +1,6 @@
 //! Edits to the map.
 
-use crate::{Object, ObjectId};
+use crate::{BrushObject, Object, ObjectId};
 use halberd_geom::{Brush, FaceFate};
 
 /// An edit to the map. Every change goes through one, so it can be undone.
@@ -39,7 +39,25 @@ pub enum Command {
         /// Each brush with its new shape and what became of each face.
         brushes: Vec<(ObjectId, Brush, Vec<FaceFate>)>,
     },
+    /// A shape operation (extrude, join, split…), as one undo step: some
+    /// brushes get new shapes and face data, some are added, some removed.
+    /// Changed brushes stay in their entity; added ones join the selection
+    /// (and objects an undo brings back join it too).
+    ShapeEdit {
+        /// What was done, for the Edit menu ("Extrude face").
+        label: String,
+        /// Brushes with their new shape and face data.
+        changed: Vec<(ObjectId, BrushObject)>,
+        /// New brushes, each with the brush entity it joins.
+        added: Vec<AddedBrush>,
+        /// Objects taken out.
+        removed: Vec<ObjectId>,
+    },
 }
+
+/// What a [`Command::ShapeEdit`] adds: a brush, and the brush entity it
+/// belongs to (`None`: a world brush).
+pub type AddedBrush = (BrushObject, Option<ObjectId>);
 
 /// A part of a brush that can be picked and edited on its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -75,6 +93,12 @@ pub enum TransformKind {
     Rotate,
     /// Scaled or resized.
     Scale,
+    /// Mirrored.
+    Mirror,
+    /// Corners merged into one.
+    Merge,
+    /// Parts taken away.
+    Delete,
 }
 
 impl TransformKind {
@@ -84,6 +108,9 @@ impl TransformKind {
             Self::Move => "Move",
             Self::Rotate => "Rotate",
             Self::Scale => "Scale",
+            Self::Mirror => "Mirror",
+            Self::Merge => "Merge",
+            Self::Delete => "Delete",
         }
     }
 }
@@ -96,6 +123,7 @@ impl Command {
             Self::AddBrushes(brushes) if brushes.len() == 1 => "Create brush".into(),
             Self::AddBrushes(brushes) => format!("Create {} brushes", brushes.len()),
             Self::ReplaceBrush { .. } => "Change brush".into(),
+            Self::ShapeEdit { label, .. } => label.clone(),
             Self::EditBrushes {
                 kind,
                 parts: (part, count),
@@ -138,6 +166,8 @@ pub(crate) enum Change {
     Removed(Vec<(ObjectId, Object)>),
     /// These objects changed: each with how it was before and after.
     Modified(Vec<(ObjectId, Object, Object)>),
+    /// Several changes, in order.
+    Several(Vec<Change>),
 }
 
 impl Change {
@@ -152,6 +182,9 @@ impl Change {
                     .map(|(id, before, after)| (id, after, before))
                     .collect(),
             ),
+            Self::Several(parts) => {
+                Self::Several(parts.into_iter().rev().map(Self::inverse).collect())
+            }
         }
     }
 
@@ -161,6 +194,7 @@ impl Change {
         match self {
             Self::Modified(objects) => objects.iter().all(|(_, before, after)| before == after),
             Self::Inserted(objects) | Self::Removed(objects) => objects.is_empty(),
+            Self::Several(parts) => parts.iter().all(Self::is_noop),
         }
     }
 

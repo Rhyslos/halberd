@@ -198,13 +198,15 @@ impl Workbench {
 
     /// Edit → Delete: removes the selected objects (an undoable edit).
     pub fn delete_selection(&mut self) {
-        // In Vertex, Edge or Face mode, Delete would surprise: it would
-        // remove the whole brushes, not the picked parts.
+        // In Vertex, Edge or Face mode, Delete takes away the picked parts,
+        // never the whole brushes.
         if self.delete_waits() {
-            self.push_warning(
-                "Deleting corners, edges or faces is not possible yet. Press 1 for Object \
-                 mode to delete whole brushes.",
-            );
+            let notes = self
+                .viewport
+                .run_shape_op(halberd_tools::ShapeOp::DeleteParts, &mut self.doc);
+            for note in notes {
+                self.push_warning(note);
+            }
             return;
         }
         let selected: Vec<_> = self.doc.selection().iter().copied().collect();
@@ -215,8 +217,8 @@ impl Workbench {
         }
     }
 
-    /// True if Delete waits because the Select tool is picking corners,
-    /// edges or faces of selected brushes.
+    /// True if Delete is for picked parts, not whole objects: the Select
+    /// tool is picking corners, edges or faces of selected brushes.
     fn delete_waits(&self) -> bool {
         let tools = self.viewport.tools();
         tools.tool() == halberd_tools::Tool::Select
@@ -356,7 +358,13 @@ impl Workbench {
         );
         let can_undo = self.doc.undo_label().is_some();
         let can_redo = self.doc.redo_label().is_some();
-        let can_delete = !self.doc.selection().is_empty() && !self.delete_waits();
+        let can_delete = if self.delete_waits() {
+            self.viewport
+                .shape_op_ready(halberd_tools::ShapeOp::DeleteParts, &self.doc)
+                .is_ok()
+        } else {
+            !self.doc.selection().is_empty()
+        };
         if ui
             .add_enabled(can_undo, egui::Button::new(undo).shortcut_text(undo_keys))
             .clicked()
@@ -384,6 +392,12 @@ impl Workbench {
     fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<WorkbenchAction>) {
         ui.menu_button("File", |ui| self.file_menu(ui, actions));
         ui.menu_button("Edit", |ui| self.edit_menu(ui));
+        ui.menu_button("Shape", |ui| {
+            let notes = crate::viewport::shape_menu(ui, &mut self.viewport, &mut self.doc);
+            for note in notes {
+                self.push_warning(note);
+            }
+        });
         ui.menu_button("View", |ui| {
             if ui.button("Reset panel layout").clicked() {
                 self.reset_layout();

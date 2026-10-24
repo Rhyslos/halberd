@@ -12,7 +12,11 @@ use halberd_tools::{GizmoMode, SelectMode, Tool, ToolAction, ToolInput};
 /// flip the gizmo on and off). The modifiers are the ones held when the key
 /// went down: Ctrl may already be let go by the frame that reads it (fast
 /// typing, scripted input), and Ctrl+W must not count as a plain W.
-fn first_press(input: &egui::InputState, key: Key, held: impl Fn(Modifiers) -> bool) -> bool {
+pub(super) fn first_press(
+    input: &egui::InputState,
+    key: Key,
+    held: impl Fn(Modifiers) -> bool,
+) -> bool {
     input.events.iter().any(|e| {
         matches!(
             e,
@@ -60,6 +64,7 @@ impl ViewportPanel {
             let on = !self.tools.inside_entities();
             self.tools.set_inside_entities(on);
         }
+        let mut notes = Vec::new();
         if !typing {
             if self.tools.is_drawing() {
                 // While drawing, R turns the shape; the gizmo keys wait.
@@ -70,6 +75,9 @@ impl ViewportPanel {
             } else {
                 self.gizmo_keys(ui);
                 self.select_mode_keys(ui);
+                if !popup_open && !self.tools.is_busy() {
+                    notes.extend(self.shape_op_keys(ui, doc));
+                }
             }
         }
         if box_key {
@@ -114,7 +122,6 @@ impl ViewportPanel {
             centered,
         };
         let camera = *self.controller.camera();
-        let mut notes = Vec::new();
         match self.tools.update(&input, &camera, doc) {
             Some(ToolAction::Select(id)) => doc.set_selection(id),
             Some(ToolAction::ToggleSelected(id)) => doc.toggle_selected(id),

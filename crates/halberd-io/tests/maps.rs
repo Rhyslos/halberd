@@ -452,3 +452,61 @@ fn a_corner_edit_saves_with_unique_face_ids_and_reads_back() {
     assert_eq!(read.faces().len(), bent.faces().len());
     assert_eq!(read.bounds(), bent.bounds());
 }
+
+#[test]
+fn a_brush_split_in_two_saves_with_unique_ids() {
+    use halberd_doc::{BrushObject, FaceInfo};
+    use halberd_geom::Plane;
+    let mut doc = open(SAMPLE);
+    let (id, object) = doc.objects().next().unwrap();
+    let object = object.as_brush().unwrap().clone();
+    let plane = Plane::new(Vec3::X, Vec3::ZERO).unwrap();
+    let (behind, front) = object.brush().cut(plane);
+    let (behind, front) = (behind.unwrap(), front.unwrap());
+    // As the Split operation builds them: the first part keeps the faces'
+    // data, the second gets copies, and both cut faces copy a look.
+    let infos = |part: &halberd_geom::Brush, copy: bool| -> Vec<FaceInfo> {
+        part.faces()
+            .iter()
+            .map(|f| match object.faces().get(f.source()) {
+                Some(info) if !copy => info.clone(),
+                Some(info) => info.copied(),
+                None => object.faces()[0].copied(),
+            })
+            .collect()
+    };
+    let first = BrushObject::with_faces(
+        behind.clone(),
+        infos(&behind, false),
+        object.file_data.clone(),
+    );
+    let second = BrushObject::with_faces(front.clone(), infos(&front, true), object.copied_data());
+    doc.execute(Command::ShapeEdit {
+        label: "Split brush".into(),
+        changed: vec![(id, first)],
+        added: vec![(second, None)],
+        removed: Vec::new(),
+    })
+    .unwrap();
+    let text = saved_text(&doc);
+    let vmf = Vmf::parse(&text).unwrap();
+    // Hammer counts solid ids and side ids separately.
+    let mut solids = Vec::new();
+    let mut sides = Vec::new();
+    for solid in vmf.world().unwrap().blocks("solid") {
+        solids.push(solid.get("id").unwrap().to_string());
+        sides.extend(
+            solid
+                .blocks("side")
+                .map(|s| s.get("id").unwrap().to_string()),
+        );
+    }
+    for ids in [&solids, &sides] {
+        let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "no id is used twice: {ids:?}");
+    }
+    assert_eq!(solids.len(), 3, "the two parts and the other world brush");
+    let again = open(&text);
+    let brushes = |d: &Document| d.objects().filter(|(_, o)| o.as_brush().is_some()).count();
+    assert_eq!(brushes(&again), brushes(&doc));
+}

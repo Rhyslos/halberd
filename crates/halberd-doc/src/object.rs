@@ -46,6 +46,30 @@ pub struct FaceInfo {
     pub loaded_plane: Option<Plane>,
 }
 
+impl FaceInfo {
+    /// Face data for a new face that copies this one's look: the material
+    /// and texture alignment, without what belongs to this face alone (its
+    /// saved id, its displacement and its plane as written in the file).
+    /// A new id is given when saving.
+    pub fn copied(&self) -> Self {
+        let file_data = self
+            .file_data
+            .iter()
+            .filter(|entry| match entry {
+                Entry::Pair(key, _) => !key.eq_ignore_ascii_case("id"),
+                Entry::Block(block) => !block.name.eq_ignore_ascii_case("dispinfo"),
+            })
+            .cloned()
+            .collect();
+        Self {
+            material: self.material.clone(),
+            file_data,
+            file_plane: None,
+            loaded_plane: None,
+        }
+    }
+}
+
 impl Default for FaceInfo {
     fn default() -> Self {
         Self {
@@ -128,13 +152,35 @@ impl BrushObject {
         let mut shaped = self.with_shape(brush);
         for (info, fate) in shaped.faces.iter_mut().zip(fates) {
             if !fate.whole {
-                info.file_data.retain(|entry| match entry {
-                    Entry::Pair(key, _) => !key.eq_ignore_ascii_case("id"),
-                    Entry::Block(block) => !block.name.eq_ignore_ascii_case("dispinfo"),
-                });
+                let plane = (info.file_plane.take(), info.loaded_plane.take());
+                *info = info.copied();
+                (info.file_plane, info.loaded_plane) = plane;
             }
         }
         shaped
+    }
+
+    /// A brush from a shape and its face data, in face order (`faces` must
+    /// have one entry per face of `brush`; missing ones get the default).
+    pub fn with_faces(brush: Brush, faces: Vec<FaceInfo>, file_data: Vec<Entry>) -> Self {
+        let mut faces = faces;
+        faces.resize_with(brush.faces().len(), FaceInfo::default);
+        Self {
+            brush,
+            faces,
+            file_data,
+            entity: None,
+        }
+    }
+
+    /// What a copy of this brush keeps of its own file data: everything but
+    /// its saved id (Hammer's colour and visgroups stay).
+    pub fn copied_data(&self) -> Vec<Entry> {
+        self.file_data
+            .iter()
+            .filter(|e| !matches!(e, Entry::Pair(key, _) if key.eq_ignore_ascii_case("id")))
+            .cloned()
+            .collect()
     }
 
     /// The brush entity this brush belongs to, or `None` for a world brush.

@@ -23,6 +23,7 @@ const EPSILON: f64 = 1e-3;
 const SNAP: f64 = 1e-2;
 
 mod edit;
+mod ops;
 pub use edit::{FaceFate, Topology};
 
 /// One flat side of a brush.
