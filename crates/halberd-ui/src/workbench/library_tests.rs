@@ -127,3 +127,42 @@ fn picking_a_prop_starts_placing_it_once_its_model_is_read() {
         halberd_tools::Tool::Select
     );
 }
+
+#[test]
+fn a_newly_opened_map_knows_the_boxes_of_models_already_read() {
+    // Regression: model boxes lived only in the old document, so after
+    // opening a map props were picked by a tiny marker box.
+    let mut wb = Workbench::new(info(), None);
+    wb.add_prop_info(barrel());
+    let mut doc = Document::new();
+    doc.execute(Command::AddEntity(halberd_doc::EntityObject::point(
+        "prop_static",
+        Vec3::ZERO,
+        &[("model", "models/props_c17/oildrum001.mdl")],
+    )))
+    .unwrap();
+    wb.set_document(doc, None);
+    let id = wb.document().objects().next().unwrap().0;
+    assert_eq!(wb.document().bounds_of(id).unwrap().max.z, 46.0);
+}
+
+#[test]
+fn a_picked_prop_that_cant_be_read_says_why() {
+    let mut wb = Workbench::new(info(), None);
+    wb.props_mut()
+        .set_names(vec!["models/broken.mdl".to_string()]);
+    let mut h = harness_for(wb);
+    h.run();
+    h.get_by_label(PROPS_TAB).click();
+    h.run();
+    h.get_by_label("models/broken.mdl").click();
+    h.run();
+    h.state_mut()
+        .prop_failed("models/broken.mdl", "its vertices (.vvd file) are missing");
+    h.run();
+    assert!(h.query_by_label_contains("can't be placed").is_some());
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Select
+    );
+}

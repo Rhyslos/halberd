@@ -50,6 +50,18 @@ impl Model {
         let info = mdl::parse(mdl)?;
         let vertices = vvd::parse(vvd, info.checksum)?;
         let triangles = vtx::parse(vtx, info.checksum)?;
+        // Meshes may claim the same vertices over and over; their total
+        // is capped before anything is copied.
+        let claimed: usize = info
+            .body_parts
+            .iter()
+            .filter_map(|models| models.first())
+            .flat_map(|model| &model.meshes)
+            .map(|mesh| mesh.vertex_count)
+            .fold(0usize, usize::saturating_add);
+        if claimed > crate::MAX_VERTICES {
+            return Err(MdlError::TooLarge("its number of vertices"));
+        }
         let skin = info.skins.first();
         let mut meshes = Vec::new();
         let mut min = [f32::INFINITY; 3];

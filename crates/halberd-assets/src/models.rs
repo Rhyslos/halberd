@@ -10,6 +10,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 const MAX_LOOSE_MODELS: usize = 200_000;
 /// Triangle files tried, best first.
 const TRIANGLE_FILES: [&str; 4] = [".dx90.vtx", ".vtx", ".dx80.vtx", ".sw.vtx"];
+/// Largest model file read (real ones are at most a few megabytes).
+const MAX_MODEL_FILE: u64 = 64 * 1024 * 1024;
 
 /// Every model in the game's content, as maps name them
 /// (`models/props_c17/oildrum001.mdl`, lower case), sorted. Slow: call it
@@ -53,7 +55,7 @@ pub fn load_model(content: &GameContent, name: &str) -> LoadedModel {
         loaded.model = Err("its name does not end in .mdl".into());
         return loaded;
     };
-    let read = |ext: &str| content.read(&format!("{stem}{ext}"));
+    let read = |ext: &str| content.read_at_most(&format!("{stem}{ext}"), MAX_MODEL_FILE);
     let files = read(".mdl").and_then(|mdl| Ok((mdl, read(".vvd")?)));
     let (mdl, vvd) = match files {
         Ok(files) => files,

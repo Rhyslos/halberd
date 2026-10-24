@@ -115,8 +115,10 @@ impl eframe::App for HalberdApp {
                     .add_picture(&picture.name, result);
             }
         }
-        if let Some(feed) = &mut self.props {
-            feed.deliver(&mut self.workbench, self.gpu.as_mut());
+        if let Some(feed) = &mut self.props
+            && feed.deliver(&mut self.workbench, self.gpu.as_mut())
+        {
+            ctx.request_repaint();
         }
         // The window's close button: with unsaved changes, ask first.
         let close_requested = ctx.input(|i| i.viewport().close_requested());

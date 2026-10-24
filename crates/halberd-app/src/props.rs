@@ -10,11 +10,18 @@ use halberd_geom::Aabb;
 use halberd_render::PropModel;
 use halberd_tools::PropChoice;
 use halberd_ui::Workbench;
+use std::collections::VecDeque;
 use std::sync::Arc;
+
+/// Most models handed over in one frame: each one's picture is drawn and
+/// read back while the frame waits, so a burst is spread over frames.
+const MODELS_PER_FRAME: usize = 6;
 
 /// Reads models for the prop browser and the views.
 pub(crate) struct PropFeed {
     loader: ModelLoader,
+    /// Models read but not handed over yet.
+    waiting: VecDeque<LoadedModel>,
 }
 
 impl PropFeed {
@@ -23,15 +30,27 @@ impl PropFeed {
     pub(crate) fn new(content: Arc<GameContent>, wake: impl Fn() + Send + 'static) -> Self {
         Self {
             loader: ModelLoader::new(content, wake),
+            waiting: VecDeque::new(),
         }
     }
 
-    /// Hands over the models read since the last frame.
-    pub(crate) fn deliver(&mut self, workbench: &mut Workbench, gpu: Option<&mut GpuViewport>) {
+    /// Hands over models read since the last frame, a few at a time.
+    /// Returns true if more are waiting (the window should draw another
+    /// frame soon).
+    pub(crate) fn deliver(
+        &mut self,
+        workbench: &mut Workbench,
+        gpu: Option<&mut GpuViewport>,
+    ) -> bool {
         let mut gpu = gpu;
-        for loaded in self.loader.poll() {
+        self.waiting.extend(self.loader.poll());
+        for _ in 0..MODELS_PER_FRAME {
+            let Some(loaded) = self.waiting.pop_front() else {
+                break;
+            };
             deliver_one(loaded, workbench, gpu.as_deref_mut());
         }
+        !self.waiting.is_empty()
     }
 
     /// Asks for the models the browser wants pictures of and the models
@@ -58,6 +77,7 @@ fn deliver_one(loaded: LoadedModel, workbench: &mut Workbench, gpu: Option<&mut 
     let model = match model {
         Ok(model) => model,
         Err(why) => {
+            workbench.prop_failed(&name, &why);
             workbench.props_mut().add_picture(&name, Err(why));
             if let Some(gpu) = gpu {
                 gpu.model_arrived(&name, None);
@@ -67,7 +87,6 @@ fn deliver_one(loaded: LoadedModel, workbench: &mut Workbench, gpu: Option<&mut 
     };
     let (min, max) = model.bounds;
     let local = Aabb::from_corners(min.into(), max.into());
-    workbench.document_mut().set_model_box(&name, local);
     workbench.add_prop_info(PropChoice {
         model: name.clone(),
         local,

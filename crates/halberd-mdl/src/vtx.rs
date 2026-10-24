@@ -1,9 +1,10 @@
 //! The `.vtx` file (`.dx90.vtx`): the triangles of each mesh, as indices
 //! into the mesh's vertices.
 //!
-//! Layout (OptimizedModel::FileHeader_t, 36 bytes): version 7, cache
-//! size, bone limits, checksum, LOD count, material replacement offset,
-//! body part count and offset. Then body parts → models → levels of
+//! Layout (OptimizedModel::FileHeader_t, 36 bytes): version 7 (at 0),
+//! cache size (4), bones per strip and per triangle (8, 10; two bytes
+//! each), bones per vertex (12), checksum (16), LOD count (20), material
+//! replacement offset (24), body part count and offset (28, 32). Then body parts → models → levels of
 //! detail → meshes → strip groups, each found by count and offset from
 //! the structure that holds it. A strip group lists its vertices (each
 //! naming a vertex of the mesh) and triangle indices into that list.
@@ -17,6 +18,10 @@ const MAX_LIST: usize = 4096;
 const MAX_STRIP_GROUPS: usize = 64;
 /// Most triangle indices read in all.
 const MAX_INDICES: usize = 1 << 23;
+/// Most body parts, models, meshes and strip groups visited in all
+/// (offsets may point at the same structure again and again, so each
+/// level's own limit is not enough).
+const MAX_VISITS: usize = 1 << 16;
 
 /// Per body part, per model, per mesh: triangle corners as vertex numbers
 /// within the mesh.
@@ -28,7 +33,7 @@ pub(crate) fn parse(data: &[u8], checksum: i32) -> Result<Triangles, MdlError> {
     if version != 7 {
         return Err(MdlError::UnsupportedVersion(FILE, version));
     }
-    if b.i32(12)? != checksum {
+    if b.i32(16)? != checksum {
         return Err(MdlError::Mismatched);
     }
     // Newer compilers add two topology fields to each strip group (33
@@ -40,16 +45,28 @@ pub(crate) fn parse(data: &[u8], checksum: i32) -> Result<Triangles, MdlError> {
     }
 }
 
+/// Counts structures visited against [`MAX_VISITS`].
+fn visit(visits: &mut usize, n: usize) -> Result<(), MdlError> {
+    *visits = visits.saturating_add(n);
+    if *visits > MAX_VISITS {
+        return Err(MdlError::TooLarge("its number of parts"));
+    }
+    Ok(())
+}
+
 fn walk(b: &Bytes<'_>, group_size: usize) -> Result<Triangles, MdlError> {
     let mut total = 0usize;
+    let mut visits = 0usize;
     let part_count = b.count(28, MAX_LIST, "its number of body parts")?;
     let parts_at = b.offset(0, 32)?;
+    visit(&mut visits, part_count)?;
     let mut parts = Vec::with_capacity(part_count);
     for p in 0..part_count {
         let part_at = parts_at + p * 8;
         let model_count = b.count(part_at, MAX_LIST, "its number of models")?;
         let models_at = b.offset(part_at, part_at + 4)?;
-        let mut models = Vec::with_capacity(model_count.min(16));
+        visit(&mut visits, model_count)?;
+        let mut models = Vec::with_capacity(model_count);
         for m in 0..model_count {
             let model_at = models_at + m * 8;
             let lods = b.count(model_at, 8, "its number of levels of detail")?;
@@ -60,11 +77,12 @@ fn walk(b: &Bytes<'_>, group_size: usize) -> Result<Triangles, MdlError> {
             let lod_at = b.offset(model_at, model_at + 4)?;
             let mesh_count = b.count(lod_at, MAX_LIST, "its number of meshes")?;
             let meshes_at = b.offset(lod_at, lod_at + 4)?;
+            visit(&mut visits, mesh_count)?;
             let mut meshes = Vec::with_capacity(mesh_count);
             for i in 0..mesh_count {
                 // MeshHeader_t: 9 bytes (packed).
                 let mesh_at = meshes_at + i * 9;
-                meshes.push(mesh(b, mesh_at, group_size, &mut total)?);
+                meshes.push(mesh(b, mesh_at, group_size, &mut total, &mut visits)?);
             }
             models.push(meshes);
         }
@@ -79,8 +97,10 @@ fn mesh(
     at: usize,
     group_size: usize,
     total: &mut usize,
+    visits: &mut usize,
 ) -> Result<Vec<u32>, MdlError> {
     let group_count = b.count(at, MAX_STRIP_GROUPS, "its number of strip groups")?;
+    visit(visits, group_count)?;
     let groups_at = b.offset(at, at + 4)?;
     let mut corners = Vec::new();
     for g in 0..group_count {

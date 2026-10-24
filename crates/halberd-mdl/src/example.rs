@@ -164,8 +164,10 @@ fn vvd_file(meshes: &[ExampleMesh]) -> Vec<u8> {
 fn vtx_file(meshes: &[ExampleMesh]) -> Vec<u8> {
     let mut vtx = vec![0u8; 36];
     put_i32(&mut vtx, 0, 7);
-    put(&mut vtx, 12, EXAMPLE_CHECKSUM.to_le_bytes());
-    put_i32(&mut vtx, 16, 1);
+    // Bones per vertex (12), then the checksum (16) and LOD count (20).
+    put_i32(&mut vtx, 12, 3);
+    put(&mut vtx, 16, EXAMPLE_CHECKSUM.to_le_bytes());
+    put_i32(&mut vtx, 20, 1);
     put_i32(&mut vtx, 28, 1);
     put_i32(&mut vtx, 32, 36);
     let part = vtx.len();

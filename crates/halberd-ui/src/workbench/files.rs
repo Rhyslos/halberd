@@ -62,6 +62,10 @@ impl Workbench {
     /// Nothing is selected, the tools start fresh, and the camera frames the
     /// whole map.
     pub fn set_document(&mut self, doc: Document, path: Option<PathBuf>) {
+        let mut doc = doc;
+        // Models already read keep their boxes, so props in this map are
+        // picked by their real size.
+        self.library.give_model_boxes(&mut doc);
         let bounds = doc
             .objects()
             .filter_map(|(id, _)| doc.bounds_of(id))

@@ -95,7 +95,7 @@ fn files_that_dont_belong_together_are_refused() {
         Err(MdlError::Mismatched)
     );
     let mut b = two_meshes();
-    put_i32(&mut b.vtx, 12, 99);
+    put_i32(&mut b.vtx, 16, 99);
     assert_eq!(
         Model::parse(&b.mdl, &b.vvd, &b.vtx),
         Err(MdlError::Mismatched)
@@ -234,4 +234,91 @@ fn an_example_box_has_six_sides_facing_out() {
         let dot: f32 = (0..3).map(|k| n[k] * a.normal[k]).sum();
         assert!(dot > 0.0, "a triangle faces inwards");
     }
+}
+
+/// A `.vtx` header written field by field from the Source SDK's
+/// `OptimizedModel::FileHeader_t`, not from the example writer.
+#[test]
+fn the_vtx_checksum_is_read_where_the_engine_writes_it() {
+    // Regression: the checksum was read from bones-per-vertex (offset 12)
+    // and both the reader and the example writer agreed, so every real
+    // model was refused as mismatched.
+    let b = two_meshes();
+    let mut vtx = b.vtx.clone();
+    let header: [(usize, i32); 7] = [
+        (0, 7),                                       // version
+        (4, 24),                                      // vertCacheSize
+        (12, 3),                                      // maxBonesPerVert
+        (16, halberd_mdl::example::EXAMPLE_CHECKSUM), // checkSum
+        (20, 1),                                      // numLODs
+        (28, 1),                                      // numBodyParts
+        (32, 36),                                     // bodyPartOffset
+    ];
+    vtx[8..10].copy_from_slice(&53u16.to_le_bytes()); // maxBonesPerStrip
+    vtx[10..12].copy_from_slice(&9u16.to_le_bytes()); // maxBonesPerTri
+    for (at, value) in header {
+        put_i32(&mut vtx, at, value);
+    }
+    assert!(Model::parse(&b.mdl, &b.vvd, &vtx).is_ok());
+}
+
+#[test]
+fn parts_pointing_at_each_other_cant_use_up_memory() {
+    // Regression: every level pointed back at the same structure, so a
+    // small file listed millions of empty meshes.
+    let b = two_meshes();
+    let mut vtx = vec![0u8; 60];
+    put_i32(&mut vtx, 0, 7);
+    put_i32(&mut vtx, 16, halberd_mdl::example::EXAMPLE_CHECKSUM);
+    put_i32(&mut vtx, 28, 4096); // body parts, all at 36
+    put_i32(&mut vtx, 32, 36);
+    // Each body part (8 bytes at 36): 4096 models at itself.
+    put_i32(&mut vtx, 36, 4096);
+    put_i32(&mut vtx, 40, 0);
+    let refused = Model::parse(&b.mdl, &b.vvd, &vtx);
+    assert!(
+        matches!(
+            refused,
+            Err(MdlError::TooLarge(_)) | Err(MdlError::Damaged(..))
+        ),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn meshes_claiming_the_same_vertices_again_and_again_are_refused() {
+    // Regression: each mesh's range was checked, never their total.
+    let triangles = vec![0u16, 1, 2];
+    let mut meshes = Vec::new();
+    for _ in 0..600 {
+        meshes.push(ExampleMesh {
+            material: 0,
+            vertices: numbered(0, 2000),
+            triangles: triangles.clone(),
+        });
+    }
+    let files = model_files(&ExampleModel {
+        materials: &["a"],
+        meshes: &meshes,
+        ..ExampleModel::default()
+    });
+    // Every mesh points at the first 2000 vertices.
+    let mesh_at = {
+        let model_at = i32::from_le_bytes(files.mdl[236..240].try_into().unwrap()) as usize + 16;
+        model_at
+            + i32::from_le_bytes(files.mdl[model_at + 76..model_at + 80].try_into().unwrap())
+                as usize
+    };
+    let mut mdl = files.mdl.clone();
+    for i in 0..600 {
+        put_i32(&mut mdl, mesh_at + i * 116 + 12, 0);
+    }
+    let mut big = mdl.clone();
+    for i in 0..600 {
+        put_i32(&mut big, mesh_at + i * 116 + 8, 2000);
+    }
+    assert_eq!(
+        Model::parse(&big, &files.vvd, &files.vtx),
+        Err(MdlError::TooLarge("its number of vertices"))
+    );
 }

@@ -59,6 +59,13 @@ pub(super) enum LibraryAction {
 }
 
 impl Library {
+    /// Tells `doc` the box of every model read so far.
+    pub(super) fn give_model_boxes(&self, doc: &mut halberd_doc::Document) {
+        for prop in self.prop_infos.values() {
+            doc.set_model_box(&prop.model, prop.local);
+        }
+    }
+
     /// Draws the panel. What the user did is put in `action`, for the
     /// workbench to carry out once the panels are drawn.
     pub(super) fn show(
@@ -122,11 +129,22 @@ impl Workbench {
     /// for the Place tool now.
     pub fn add_prop_info(&mut self, prop: PropChoice) {
         let key = prop.model.to_ascii_lowercase();
+        self.doc.set_model_box(&prop.model, prop.local);
         if self.library.pending_prop.as_deref() == Some(key.as_str()) {
             self.library.pending_prop = None;
             self.viewport.tools_mut().set_prop(Some(prop.clone()));
         }
         self.library.prop_infos.insert(key, prop);
+    }
+
+    /// A model could not be read. If the user picked it to place, says
+    /// why in the Console instead of leaving the click unanswered.
+    pub fn prop_failed(&mut self, model: &str, why: &str) {
+        let key = model.to_ascii_lowercase();
+        if self.library.pending_prop.as_deref() == Some(key.as_str()) {
+            self.library.pending_prop = None;
+            self.push_warning(format!("{model} can't be placed: {why}."));
+        }
     }
 
     /// Tells the Library panel how far mounting the game's content has got.
