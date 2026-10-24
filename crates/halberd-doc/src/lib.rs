@@ -23,6 +23,7 @@ mod history;
 mod map_data;
 mod object;
 mod shape;
+mod texture;
 
 pub use command::{AddedBrush, Command, ElementKind, TransformKind};
 pub use document::{Document, MAX_OBJECTS};
@@ -34,3 +35,4 @@ pub use object::{
     POINT_ENTITY_HALF_SIZE,
 };
 pub use shape::{PieceIds, ShapeObject};
+pub use texture::{DEFAULT_TEXTURE_SCALE, TextureAxes, TextureAxis};

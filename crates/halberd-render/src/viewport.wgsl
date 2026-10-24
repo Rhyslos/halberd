@@ -12,7 +12,8 @@ struct Frame {
     // Grid spacings: minor, major, super; w = half the grid's width.
     grid: vec4<f32>,
     // Where the grid lies: x = the axis it is flat across (0 X, 1 Y, 2 Z),
-    // y = its position along that axis, z = 1 to fade into the distance.
+    // y = its position along that axis, z = 1 to fade into the distance;
+    // w = how brushes are drawn: 0 flat, 1 textured, 2 wireframe.
     plane: vec4<f32>,
 };
 
@@ -100,6 +101,12 @@ fn line_vs(in: LineIn) -> LineOut {
     var out: LineOut;
     out.clip = frame.view_proj * vec4<f32>(in.position, 1.0);
     out.color = in.color;
+    // Without faces, the dark outlines that frame solid faces would vanish
+    // into the background: draw them light instead.
+    let dark = max(max(in.color.r, in.color.g), in.color.b) < 0.08;
+    if frame.plane.w > 1.5 && dark {
+        out.color = vec4<f32>(0.55, 0.57, 0.62, 1.0);
+    }
     return out;
 }
 
@@ -114,12 +121,16 @@ struct BrushIn {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) color: vec4<f32>,
+    // Texture coordinates, material hue, and 1 if the face has a material
+    // (2 if it is also selected).
+    @location(3) texture: vec4<f32>,
 };
 
 struct BrushOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) color: vec4<f32>,
+    @location(2) texture: vec4<f32>,
 };
 
 @vertex
@@ -128,7 +139,31 @@ fn brush_vs(in: BrushIn) -> BrushOut {
     out.clip = frame.view_proj * vec4<f32>(in.position, 1.0);
     out.normal = in.normal;
     out.color = in.color;
+    out.texture = in.texture;
     return out;
+}
+
+// A colour from a hue (0 to 1), muted, in linear space.
+fn hue_color(hue: f32) -> vec3<f32> {
+    let k = vec3<f32>(0.0, 2.0 / 3.0, 1.0 / 3.0);
+    let rgb = clamp(abs(fract(vec3<f32>(hue) + k) * 6.0 - 3.0) - 1.0, vec3<f32>(0.0), vec3<f32>(1.0));
+    return mix(vec3<f32>(0.32), rgb * 0.55, 0.55);
+}
+
+// The Textured mode's stand-in for a texture, until real ones are read: the
+// material's own colour, a faint checker every quarter texture and a line
+// at each texture's edge, so alignment, scale and rotation show.
+fn material_pattern(texture: vec4<f32>) -> vec3<f32> {
+    let base = hue_color(texture.z);
+    let uv = texture.xy;
+    let quarter = floor(uv * 4.0);
+    let checker = (i32(quarter.x) + i32(quarter.y)) & 1;
+    var color = base * select(1.0, 0.86, checker == 1);
+    let per_pixel = max(fwidth(uv), vec2<f32>(1e-6));
+    let edge = abs(fract(uv - 0.5) - 0.5) / per_pixel;
+    let on_edge = 1.0 - min(min(edge.x, edge.y), 1.0);
+    color = mix(color, base * 1.6 + 0.05, on_edge * 0.7);
+    return color;
 }
 
 // Simple fixed lighting from above and to one side, so every face of a box
@@ -138,5 +173,12 @@ fn brush_fs(in: BrushOut) -> @location(0) vec4<f32> {
     let light = normalize(vec3<f32>(0.35, 0.55, 0.85));
     let diffuse = max(dot(normalize(in.normal), light), 0.0);
     let shade = 0.38 + 0.62 * diffuse;
-    return vec4<f32>(in.color.rgb * shade, in.color.a);
+    var color = in.color.rgb;
+    if frame.plane.w > 0.5 && frame.plane.w < 1.5 && in.texture.w > 0.5 {
+        let pattern = material_pattern(in.texture);
+        // Selected faces keep a red tint so the selection still shows.
+        let selected = in.texture.w > 1.5;
+        color = select(pattern, mix(pattern, in.color.rgb, 0.55), selected);
+    }
+    return vec4<f32>(color * shade, in.color.a);
 }

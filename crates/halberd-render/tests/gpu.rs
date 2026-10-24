@@ -11,8 +11,8 @@ use glam::{Vec2, Vec3};
 use halberd_doc::{Command, Document};
 use halberd_geom::{Aabb, Brush};
 use halberd_render::{
-    BACKGROUND, FrameParams, GridPlane, PlayerOutline, ViewportRenderer, ViewportTarget,
-    best_sample_count, read_pixels,
+    BACKGROUND, FrameParams, GridPlane, PlayerOutline, RenderMode, ViewportRenderer,
+    ViewportTarget, best_sample_count, read_pixels,
 };
 use halberd_tools::{Camera, Side, SideCamera};
 
@@ -112,6 +112,26 @@ fn render_full(
     preview: Option<Aabb>,
     player: Option<PlayerOutline>,
 ) -> Shot {
+    render_mode(
+        gpu,
+        renderer,
+        target,
+        camera,
+        preview,
+        player,
+        RenderMode::Flat,
+    )
+}
+
+fn render_mode(
+    gpu: &Gpu,
+    renderer: &ViewportRenderer,
+    target: &ViewportTarget,
+    camera: Camera,
+    preview: Option<Aabb>,
+    player: Option<PlayerOutline>,
+    mode: RenderMode,
+) -> Shot {
     let size = target.size();
     let params = FrameParams {
         view_projection: camera.view_projection(Vec2::new(size[0] as f32, size[1] as f32)),
@@ -120,6 +140,7 @@ fn render_full(
         preview,
         player,
         grid: grid_for(&camera),
+        mode,
     };
     renderer.render(&gpu.device, &gpu.queue, target, &params);
     Shot {
@@ -277,6 +298,7 @@ fn rendering_many_frames_is_stable() {
             preview: None,
             player: None,
             grid: GridPlane::default(),
+            mode: RenderMode::Flat,
         };
         renderer.render(&gpu.device, &gpu.queue, &target, &params);
     }
@@ -453,4 +475,72 @@ fn side_views_show_the_grid_behind_the_map_in_every_direction() {
             .count();
         assert!(lines >= 4, "{side:?}: grid lines across the top: {lines}");
     }
+}
+
+#[test]
+fn wireframe_shows_light_outlines_and_no_faces() {
+    let Some(gpu) = gpu() else { return };
+    let (renderer, target, camera) = box_scene(&gpu, false);
+    let shot = render_mode(
+        &gpu,
+        &renderer,
+        &target,
+        camera,
+        None,
+        None,
+        RenderMode::Wireframe,
+    );
+    let background = background_srgb();
+    let background = i32::from(background[0]) + i32::from(background[1]) + i32::from(background[2]);
+    // The middle of the top face is see-through now: the Z axis shows.
+    assert!(
+        shot.best_near(Vec3::new(0.0, 0.0, 64.0), blue) > 60,
+        "the axis inside the box shows through"
+    );
+    // A top corner of the box is outlined in a light colour.
+    assert!(shot.best_near(Vec3::new(64.0, -64.0, 128.0), brightness) > background + 150);
+}
+
+#[test]
+fn textured_mode_shows_a_pattern_on_the_faces() {
+    let Some(gpu) = gpu() else { return };
+    let (renderer, target, camera) = box_scene(&gpu, false);
+    let flat = render_mode(
+        &gpu,
+        &renderer,
+        &target,
+        camera,
+        None,
+        None,
+        RenderMode::Flat,
+    );
+    let textured = render_mode(
+        &gpu,
+        &renderer,
+        &target,
+        camera,
+        None,
+        None,
+        RenderMode::Textured,
+    );
+    // The top face is one colour when flat; textured, its pixels vary.
+    // (Sampled away from y = 0, where a texture's edge line runs.)
+    let spread = |shot: &Shot| {
+        let values: Vec<i32> = (-40..=40)
+            .step_by(4)
+            .filter_map(|d| {
+                let at = shot
+                    .camera
+                    .project(Vec3::new(d as f32, -30.0, 128.0), Vec2::new(400.0, 300.0))?;
+                shot.pixel(at.x as i64, at.y as i64).map(brightness)
+            })
+            .collect();
+        values.iter().max().unwrap() - values.iter().min().unwrap()
+    };
+    assert!(spread(&flat) < 6, "flat is even: {}", spread(&flat));
+    assert!(
+        spread(&textured) > 12,
+        "textured has a pattern: {}",
+        spread(&textured)
+    );
 }

@@ -6,7 +6,8 @@ use eframe::egui_wgpu::RenderState;
 use eframe::wgpu;
 use halberd_doc::Document;
 use halberd_render::{
-    FrameParams, GridPlane, PlayerOutline, ViewportRenderer as GpuRenderer, ViewportTarget,
+    FrameParams, GridPlane, PlayerOutline, RenderMode, ViewportRenderer as GpuRenderer,
+    ViewportTarget,
 };
 use halberd_tools::PLAYER_EYE_HEIGHT;
 use halberd_ui::{ViewportRenderer, ViewportView};
@@ -105,6 +106,11 @@ impl ViewportRenderer for GpuViewport {
                 axis: view.grid_axis,
                 offset: view.grid_offset,
                 fade: view.grid_fade,
+            },
+            mode: match view.render_mode {
+                halberd_ui::RenderMode::Wireframe => RenderMode::Wireframe,
+                halberd_ui::RenderMode::Flat => RenderMode::Flat,
+                halberd_ui::RenderMode::Textured => RenderMode::Textured,
             },
         };
         let slot = self.prepare_target(view.id, view.size_px);

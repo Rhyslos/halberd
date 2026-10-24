@@ -1,7 +1,7 @@
 //! Drawing each view of the viewport panel, its view menu, and the layout
 //! picker; saving and restoring the views.
 
-use super::layout::{MAX_VIEWS, PaneView, ViewLayout, ViewSetup};
+use super::layout::{MAX_VIEWS, PaneView, RenderMode, ViewLayout, ViewSetup};
 use super::{
     PIVOT_COLOR, PLAYER_LABEL_COLOR, ViewportPanel, ViewportRenderer, ViewportView, elements,
     gizmo, plan,
@@ -39,6 +39,20 @@ impl ViewportPanel {
             .map_or(PaneView::Perspective, |p| p.view)
     }
 
+    /// How view `index` draws brushes.
+    pub fn render_mode(&self, index: usize) -> RenderMode {
+        self.panes
+            .get(index)
+            .map_or_else(RenderMode::default, |p| p.mode)
+    }
+
+    /// Makes view `index` draw brushes as `mode`.
+    pub fn set_render_mode(&mut self, index: usize, mode: RenderMode) {
+        if let Some(pane) = self.panes.get_mut(index) {
+            pane.mode = mode;
+        }
+    }
+
     /// Makes view `index` show `view`.
     pub fn set_view(&mut self, index: usize, view: PaneView) {
         if let Some(pane) = self.panes.get_mut(index) {
@@ -52,6 +66,7 @@ impl ViewportPanel {
             layout: self.layout,
             views: self.panes.iter().map(|p| p.view).collect(),
             sides: self.panes.iter().map(|p| p.side).collect(),
+            modes: self.panes.iter().map(|p| p.mode).collect(),
         }
     }
 
@@ -61,6 +76,9 @@ impl ViewportPanel {
         self.set_layout(setup.layout);
         for (pane, view) in self.panes.iter_mut().zip(setup.views) {
             pane.set_view(view);
+        }
+        for (pane, mode) in self.panes.iter_mut().zip(setup.modes) {
+            pane.mode = mode;
         }
         for (pane, side) in self.panes.iter_mut().zip(setup.sides) {
             let keep = pane.side.side;
@@ -108,6 +126,7 @@ impl ViewportPanel {
             grid_axis,
             grid_offset,
             grid_fade: pane.view == PaneView::Perspective,
+            render_mode: pane.mode,
         };
 
         let painter = ui.painter_at(rect);
@@ -203,6 +222,19 @@ impl ViewportPanel {
                 for view in PaneView::ALL {
                     if ui.selectable_label(view == current, view.label()).clicked() {
                         self.panes[index].set_view(view);
+                        ui.close();
+                    }
+                }
+                ui.separator();
+                ui.label("Draw as");
+                let mode = self.panes[index].mode;
+                for choice in RenderMode::ALL {
+                    if ui
+                        .radio(mode == choice, choice.label())
+                        .on_hover_text(choice.description())
+                        .clicked()
+                    {
+                        self.panes[index].mode = choice;
                         ui.close();
                     }
                 }
