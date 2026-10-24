@@ -1,14 +1,18 @@
 //! Floor plans: flat outlines of any shape, dents included, and the convex
 //! brushes that fill them.
 //!
-//! An outline is split into as few convex parts as an easy method allows
-//! (Hertel and Mehlhorn's): cut it into triangles by clipping off "ears",
-//! then remove every cut whose two sides together are still convex. That
-//! gives at most four times the fewest possible parts, and in practice
-//! about the same number a person would choose.
+//! An outline is split with straight cuts where it can be: from the corner
+//! of a dent, a wall is continued straight across (see `cuts`), so an L
+//! becomes two rectangles. Otherwise it is split into as few convex parts
+//! as an easy method allows (Hertel and Mehlhorn's): cut into triangles by
+//! clipping off "ears", then every cut whose two sides together are still
+//! convex is removed. That gives at most four times the fewest possible
+//! parts, and in practice about the same number a person would choose.
 
 use crate::{Brush, GeomError, Plane};
 use glam::{DVec2, Vec2, Vec3};
+
+mod cuts;
 
 /// Most corners an outline may have.
 pub const MAX_OUTLINE_POINTS: usize = 256;
@@ -82,11 +86,48 @@ pub fn clean_outline(outline: &[Vec2]) -> Result<Vec<Vec2>, GeomError> {
     Ok(points.into_iter().map(|p| p.as_vec2()).collect())
 }
 
-/// The outline split into convex parts, each counter-clockwise.
+/// The outline split into convex parts, each counter-clockwise. Straight
+/// cuts that continue a wall are preferred (an L becomes two rectangles);
+/// where they would need more parts than the general split, or can't fix
+/// a dent, the general split is used.
 pub fn convex_parts(outline: &[Vec2]) -> Result<Vec<Vec<Vec2>>, GeomError> {
     let outline = clean_outline(outline)?;
-    let points: Vec<DVec2> = outline.iter().map(|p| p.as_dvec2()).collect();
-    let mut parts: Vec<Vec<usize>> = triangulate(&points)?
+    let mut points: Vec<DVec2> = outline.iter().map(|p| p.as_dvec2()).collect();
+    let all: Vec<usize> = (0..points.len()).collect();
+    let general = general_parts(&points, &all)?;
+    let straight = match cuts::straight_cuts(&mut points, all) {
+        Some(parts) => {
+            let mut finished = Vec::with_capacity(parts.len());
+            for part in parts {
+                if is_convex(&points, &part) {
+                    finished.push(part);
+                } else {
+                    finished.extend(general_parts(&points, &part)?);
+                }
+            }
+            Some(finished)
+        }
+        None => None,
+    };
+    let parts = match straight {
+        Some(straight) if straight.len() <= general.len() => straight,
+        _ => general,
+    };
+    // A cut ending on a wall leaves a corner on a straight line there.
+    Ok(parts
+        .into_iter()
+        .map(|part| {
+            let corners: Vec<Vec2> = part.into_iter().map(|i| points[i].as_vec2()).collect();
+            without_straight_corners(&corners)
+        })
+        .collect())
+}
+
+/// The part `polygon` (indices into `points`, counter-clockwise) split the
+/// general way: into triangles, then merged while they stay convex.
+fn general_parts(points: &[DVec2], polygon: &[usize]) -> Result<Vec<Vec<usize>>, GeomError> {
+    let corners: Vec<DVec2> = polygon.iter().map(|&i| points[i]).collect();
+    let mut parts: Vec<Vec<usize>> = triangulate(&corners)?
         .into_iter()
         .map(|t| t.to_vec())
         .collect();
@@ -97,7 +138,7 @@ pub fn convex_parts(outline: &[Vec2]) -> Result<Vec<Vec<Vec2>>, GeomError> {
         'search: for i in 0..parts.len() {
             for j in i + 1..parts.len() {
                 if let Some(joined) = join(&parts[i], &parts[j])
-                    && is_convex(&points, &joined)
+                    && is_convex(&corners, &joined)
                 {
                     parts[i] = joined;
                     parts.remove(j);
@@ -109,7 +150,7 @@ pub fn convex_parts(outline: &[Vec2]) -> Result<Vec<Vec<Vec2>>, GeomError> {
     }
     Ok(parts
         .into_iter()
-        .map(|part| part.into_iter().map(|i| outline[i]).collect())
+        .map(|part| part.into_iter().map(|i| polygon[i]).collect())
         .collect())
 }
 

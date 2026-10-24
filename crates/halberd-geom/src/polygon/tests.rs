@@ -227,3 +227,75 @@ fn random_outlines_far_from_the_middle_fill_exactly_or_are_refused() {
         "most outlines work: {made} made, {refused} refused"
     );
 }
+
+/// True if every side of `part` runs along X or Y.
+fn boxy(part: &[Vec2]) -> bool {
+    let n = part.len();
+    (0..n).all(|i| {
+        let d = part[(i + 1) % n] - part[i];
+        d.x == 0.0 || d.y == 0.0
+    })
+}
+
+#[test]
+fn an_l_u_and_plus_split_into_rectangles() {
+    let l = v(&[
+        (0.0, 0.0),
+        (256.0, 0.0),
+        (256.0, 128.0),
+        (128.0, 128.0),
+        (128.0, 256.0),
+        (0.0, 256.0),
+    ]);
+    let u = v(&[
+        (0.0, 0.0),
+        (192.0, 0.0),
+        (192.0, 192.0),
+        (128.0, 192.0),
+        (128.0, 64.0),
+        (64.0, 64.0),
+        (64.0, 192.0),
+        (0.0, 192.0),
+    ]);
+    let plus = v(&[
+        (64.0, 0.0),
+        (128.0, 0.0),
+        (128.0, 64.0),
+        (192.0, 64.0),
+        (192.0, 128.0),
+        (128.0, 128.0),
+        (128.0, 192.0),
+        (64.0, 192.0),
+        (64.0, 128.0),
+        (0.0, 128.0),
+        (0.0, 64.0),
+        (64.0, 64.0),
+    ]);
+    for (outline, pieces) in [(l, 2), (u, 3), (plus, 3)] {
+        let parts = convex_parts(&outline).unwrap();
+        assert_eq!(parts.len(), pieces, "{outline:?}");
+        for part in &parts {
+            assert_eq!(part.len(), 4, "a rectangle: {part:?}");
+            assert!(boxy(part), "{part:?}");
+        }
+        let total: f32 = parts.iter().map(|p| area(p)).sum();
+        assert_eq!(total, area(&clean_outline(&outline).unwrap()));
+    }
+}
+
+#[test]
+fn a_cut_that_would_end_between_units_is_not_made() {
+    // The dent's walls continue onto a slanted side at a point that is not
+    // on whole units, so the general split is used, still on whole units.
+    let outline = v(&[
+        (0.0, 0.0),
+        (100.0, 0.0),
+        (100.0, 50.0),
+        (50.0, 50.0),
+        (50.0, 100.0),
+        (0.0, 33.0),
+    ]);
+    for part in convex_parts(&outline).unwrap() {
+        assert!(part.iter().all(|p| *p == p.round()), "{part:?}");
+    }
+}
