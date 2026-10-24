@@ -5,7 +5,7 @@
 
 use crate::camera::Ray;
 use glam::Vec3;
-use halberd_doc::{BrushObject, Command, Displacement, Document, ObjectId, ordered_corners};
+use halberd_doc::{BrushObject, Command, Displacement, Document, Object, ObjectId};
 
 /// What dragging does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -74,60 +74,38 @@ impl SculptSettings {
     pub const STRENGTH_RANGE: (f32, f32) = (1.0, 1024.0);
 }
 
-/// One displacement face in the map: its brush, face, grid and corners.
-struct DispFace {
-    brush: ObjectId,
-    face: usize,
-    disp: Displacement,
-    corners: [Vec3; 4],
-}
+mod surfaces;
+pub(crate) use surfaces::DispCache;
+use surfaces::DispFace;
 
-/// Most displacement faces looked at by one stroke (far more than a
-/// map has).
-const MAX_DISP_FACES: usize = 20_000;
-
-fn disp_faces(doc: &Document) -> Vec<DispFace> {
-    let mut out = Vec::new();
-    for (id, object) in doc.objects() {
-        let Some(brush) = object.as_brush() else {
-            continue;
-        };
-        for (k, (shape, info)) in brush.brush().faces().iter().zip(brush.faces()).enumerate() {
-            let Some(disp) = info.displacement() else {
-                continue;
-            };
-            if let Some(corners) =
-                ordered_corners(shape.vertices(), shape.plane().normal, disp.start)
-            {
-                out.push(DispFace {
-                    brush: id,
-                    face: k,
-                    disp,
-                    corners,
-                });
-            }
-            if out.len() >= MAX_DISP_FACES {
-                return out;
-            }
-        }
-    }
-    out
-}
-
-/// Where `ray` first hits a displacement's surface, if it does.
+/// Where `ray` first hits a displacement's surface, if it does (and no
+/// world brush or shape is in front of it). Reads the map's displacements
+/// each time; the Sculpt tool keeps them read instead.
 pub fn pick_displacement(doc: &Document, ray: &Ray) -> Option<Vec3> {
+    let mut cache = DispCache::default();
+    cache.update(doc);
+    pick_in(doc, &cache, ray)
+}
+
+/// [`pick_displacement`] with displacements already read.
+pub(crate) fn pick_in(doc: &Document, cache: &DispCache, ray: &Ray) -> Option<Vec3> {
     let mut best: Option<f32> = None;
-    for face in disp_faces(doc) {
-        let Some(points) = face.disp.points(&face.corners) else {
+    for face in cache.faces() {
+        if !ray_box(ray, face.min, face.max) {
             continue;
-        };
+        }
         let side = face.disp.side();
         for row in 0..side - 1 {
             for col in 0..side - 1 {
                 let a = row * side + col;
                 let (b, c, d) = (a + 1, a + side, a + side + 1);
                 for [i, j, k] in [[a, c, b], [b, c, d]] {
-                    if let Some(t) = ray_triangle(ray, points[i], points[j], points[k])
+                    let (Some(p), Some(q), Some(r)) =
+                        (face.points.get(i), face.points.get(j), face.points.get(k))
+                    else {
+                        continue;
+                    };
+                    if let Some(t) = ray_triangle(ray, *p, *q, *r)
                         && best.is_none_or(|b| t < b)
                     {
                         best = Some(t);
@@ -136,7 +114,31 @@ pub fn pick_displacement(doc: &Document, ray: &Ray) -> Option<Vec3> {
             }
         }
     }
-    best.map(|t| ray.origin + ray.direction * t)
+    let t = best?;
+    // A wall in front of the terrain hides it. Brushes with displacements
+    // don't count: their own faces lie under raised ground.
+    let blocked = doc.objects().any(|(id, object)| {
+        let world = match object {
+            Object::Brush(b) => b.entity().is_none() && !cache.has(id),
+            Object::Shape(_) => true,
+            Object::Entity(_) => false,
+        };
+        world
+            && object
+                .ray_hit(ray.origin, ray.direction)
+                .is_some_and(|hit| hit < t - 0.5)
+    });
+    (!blocked).then(|| ray.origin + ray.direction * t)
+}
+
+/// True if `ray` passes through the box from `min` to `max`.
+fn ray_box(ray: &Ray, min: Vec3, max: Vec3) -> bool {
+    let inv = ray.direction.recip();
+    let (a, b) = ((min - ray.origin) * inv, (max - ray.origin) * inv);
+    let near = a.min(b).max_element();
+    let far = a.max(b).min_element();
+    // A ray along an axis gives NaN for the flat sides: let it through.
+    near.is_nan() || far.is_nan() || (far >= near.max(0.0))
 }
 
 /// Distance along `ray` to triangle `a b c` (either side), if it hits.
@@ -167,6 +169,7 @@ fn ray_triangle(ray: &Ray, a: Vec3, b: Vec3, c: Vec3) -> Option<f32> {
 /// out.
 pub(crate) fn stroke(
     doc: &Document,
+    cache: &DispCache,
     center: Vec3,
     settings: &SculptSettings,
     invert: bool,
@@ -189,18 +192,22 @@ pub(crate) fn stroke(
         return None;
     }
     let mut changed: Vec<(ObjectId, BrushObject)> = Vec::new();
-    for mut face in disp_faces(doc) {
-        let weights = weights(&face, center, radius);
+    for face in cache.faces().filter(|f| f.near(center, radius)) {
+        let weights = weights(face, center, radius);
         if weights.iter().all(|w| *w <= 0.0) {
             continue;
         }
-        apply(&mut face.disp, &weights, settings.mode, amount);
+        let mut disp = face.disp.clone();
+        apply(&mut disp, face.normal, &weights, settings.mode, amount);
+        if settings.mode != SculptMode::Paint {
+            disp.forget_derived();
+        }
         let base = changed
             .iter()
             .find(|(id, _)| *id == face.brush)
             .map(|(_, b)| b.clone())
             .or_else(|| doc.get(face.brush)?.as_brush().cloned())?;
-        let updated = crate::tool::with_displacement(&base, face.face, Some(&face.disp));
+        let updated = crate::tool::with_displacement(&base, face.face, Some(&disp));
         changed.retain(|(id, _)| *id != face.brush);
         changed.push((face.brush, updated));
     }
@@ -226,20 +233,16 @@ pub(crate) fn stroke(
 /// raising exactly); points further than `radius` above or below the
 /// brush along the face's normal are out of reach.
 fn weights(face: &DispFace, center: Vec3, radius: f32) -> Vec<f32> {
-    let [c0, c1, _, c3] = face.corners;
-    let normal = (c3 - c0).cross(c1 - c0).normalize_or_zero();
-    let Some(base) = face.disp.base_points(&face.corners) else {
-        return Vec::new();
-    };
-    base.iter()
-        .zip(&face.disp.distances)
-        .map(|(b, height)| {
+    face.base
+        .iter()
+        .enumerate()
+        .map(|(k, b)| {
             let offset = center - *b;
-            let along = offset.dot(normal);
-            if (along - height).abs() > radius {
+            let along = offset.dot(face.normal);
+            if (along - face.disp.height(k, face.normal)).abs() > radius {
                 return 0.0;
             }
-            falloff((offset - normal * along).length(), radius)
+            falloff((offset - face.normal * along).length(), radius)
         })
         .collect()
 }
@@ -251,11 +254,11 @@ fn falloff(distance: f32, radius: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-fn apply(disp: &mut Displacement, weights: &[f32], mode: SculptMode, amount: f32) {
+fn apply(disp: &mut Displacement, normal: Vec3, weights: &[f32], mode: SculptMode, amount: f32) {
     match mode {
         SculptMode::Raise => {
             for (k, w) in weights.iter().enumerate() {
-                disp.raise(k, amount * w);
+                disp.raise(k, amount * w, normal);
             }
         }
         SculptMode::Paint => {
@@ -264,37 +267,59 @@ fn apply(disp: &mut Displacement, weights: &[f32], mode: SculptMode, amount: f32
                 disp.set_alpha(k, alpha + amount * w);
             }
         }
-        SculptMode::Smooth => {
-            let side = disp.side();
-            let before = disp.distances.clone();
-            // How far towards its neighbours' average a point moves in one
-            // step, at full weight.
-            let rate = (amount.abs() / 64.0).clamp(0.0, 1.0);
-            for (k, w) in weights.iter().enumerate() {
-                if *w <= 0.0 {
-                    continue;
-                }
-                let (row, col) = (k / side, k % side);
-                let mut sum = 0.0;
-                let mut count = 0.0;
-                for (dr, dc) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
-                    let (r, c) = (row as i64 + dr, col as i64 + dc);
-                    if (0..side as i64).contains(&r) && (0..side as i64).contains(&c) {
-                        sum += before[r as usize * side + c as usize];
-                        count += 1.0;
-                    }
-                }
-                let average = sum / count;
-                disp.raise(k, (average - before[k]) * rate * w);
-            }
+        SculptMode::Smooth => smooth(disp, normal, weights, amount),
+    }
+}
+
+/// Moves each point in reach towards its neighbours' average height.
+fn smooth(disp: &mut Displacement, normal: Vec3, weights: &[f32], amount: f32) {
+    let side = disp.side();
+    let before: Vec<f32> = (0..side * side).map(|k| disp.height(k, normal)).collect();
+    // How far towards the average a point moves in one step, at full
+    // weight.
+    let rate = (amount.abs() / 64.0).clamp(0.0, 1.0);
+    for (k, w) in weights.iter().enumerate() {
+        let Some(height) = before.get(k).filter(|_| *w > 0.0) else {
+            continue;
+        };
+        let (row, col) = (k / side, k % side);
+        let neighbours = [
+            (row > 0).then(|| k - side),
+            (row + 1 < side).then(|| k + side),
+            (col > 0).then(|| k - 1),
+            (col + 1 < side).then(|| k + 1),
+        ];
+        let around: Vec<f32> = neighbours
+            .iter()
+            .flatten()
+            .filter_map(|n| before.get(*n).copied())
+            .collect();
+        if around.is_empty() {
+            continue;
         }
+        let average = around.iter().sum::<f32>() / around.len() as f32;
+        disp.raise(k, (average - height) * rate * w, normal);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use halberd_doc::ordered_corners;
     use halberd_geom::{Aabb, Brush};
+
+    /// One stroke step, with the displacements read afresh.
+    fn step(
+        doc: &Document,
+        center: Vec3,
+        settings: &SculptSettings,
+        invert: bool,
+        dt: f32,
+    ) -> Option<Command> {
+        let mut cache = DispCache::default();
+        cache.update(doc);
+        stroke(doc, &cache, center, settings, invert, dt)
+    }
 
     /// A map with one 512-unit box whose top is a displacement.
     fn terrain() -> (Document, ObjectId) {
@@ -354,17 +379,17 @@ mod tests {
         let (mut doc, id) = terrain();
         let settings = SculptSettings::default();
         let center = Vec3::new(256.0, 256.0, 0.0);
-        let up = stroke(&doc, center, &settings, false, 0.1).unwrap();
+        let up = step(&doc, center, &settings, false, 0.1).unwrap();
         doc.execute(up).unwrap();
         let d = top(&doc, id);
         let middle = d.distances[4 * 9 + 4];
         assert!((middle - 6.4).abs() < 0.01, "{middle}");
         assert_eq!(d.distances[0], 0.0, "corners are out of reach");
-        let down = stroke(&doc, center, &settings, true, 0.1).unwrap();
+        let down = step(&doc, center, &settings, true, 0.1).unwrap();
         doc.execute(down).unwrap();
         assert!(top(&doc, id).distances[40].abs() < 0.01);
         // Far away, nothing to do.
-        assert!(stroke(&doc, Vec3::splat(5000.0), &settings, false, 0.1).is_none());
+        assert!(step(&doc, Vec3::splat(5000.0), &settings, false, 0.1).is_none());
     }
 
     #[test]
@@ -376,7 +401,7 @@ mod tests {
             strength: 1024.0,
             ..SculptSettings::default()
         };
-        doc.execute(stroke(&doc, center, &paint, false, 0.1).unwrap())
+        doc.execute(step(&doc, center, &paint, false, 0.1).unwrap())
             .unwrap();
         assert!(top(&doc, id).alphas[40] > 100.0);
         // A spike gets smoothed down.
@@ -385,7 +410,7 @@ mod tests {
             strength: 1024.0,
             ..SculptSettings::default()
         };
-        doc.execute(stroke(&doc, center, &spike, false, 0.1).unwrap())
+        doc.execute(step(&doc, center, &spike, false, 0.1).unwrap())
             .unwrap();
         let tall = top(&doc, id).distances[40];
         let smooth = SculptSettings {
@@ -395,7 +420,7 @@ mod tests {
         };
         // The brush is where the pointer meets the spike's tip.
         let tip = center + Vec3::Z * tall;
-        doc.execute(stroke(&doc, tip, &smooth, false, 0.1).unwrap())
+        doc.execute(step(&doc, tip, &smooth, false, 0.1).unwrap())
             .unwrap();
         assert!(top(&doc, id).distances[40] < tall);
     }
@@ -405,18 +430,64 @@ mod tests {
         let (doc, _) = terrain();
         let center = Vec3::new(256.0, 256.0, 0.0);
         let settings = SculptSettings::default();
-        assert!(stroke(&doc, center, &settings, false, 0.0).is_none());
-        assert!(stroke(&doc, center, &settings, false, f32::NAN).is_none());
-        assert!(stroke(&doc, center, &settings, false, f32::INFINITY).is_none());
+        assert!(step(&doc, center, &settings, false, 0.0).is_none());
+        assert!(step(&doc, center, &settings, false, f32::NAN).is_none());
+        assert!(step(&doc, center, &settings, false, f32::INFINITY).is_none());
         let broken = SculptSettings {
             radius: f32::NAN,
             ..SculptSettings::default()
         };
-        assert!(stroke(&doc, center, &broken, false, 0.1).is_none());
+        assert!(step(&doc, center, &broken, false, 0.1).is_none());
         let broken = SculptSettings {
             strength: f32::NAN,
             ..SculptSettings::default()
         };
-        assert!(stroke(&doc, center, &broken, false, 0.1).is_none());
+        assert!(step(&doc, center, &broken, false, 0.1).is_none());
+    }
+
+    #[test]
+    fn hammers_lowered_points_rise_when_raised() {
+        let (mut doc, id) = terrain();
+        // As Hammer saves a dip: pointing down, a positive distance.
+        let mut d = top(&doc, id);
+        d.normals[40] = -Vec3::Z;
+        d.distances[40] = 20.0;
+        let object = doc.get(id).unwrap().as_brush().unwrap().clone();
+        let face = object
+            .faces()
+            .iter()
+            .position(|f| f.displacement().is_some())
+            .unwrap();
+        doc.execute(Command::ShapeEdit {
+            label: "Dip".into(),
+            changed: vec![(id, crate::tool::with_displacement(&object, face, Some(&d)))],
+            added: vec![],
+            removed: vec![],
+            select_added: false,
+        })
+        .unwrap();
+        // The pointer meets the dip's floor.
+        let center = Vec3::new(256.0, 256.0, -20.0);
+        doc.execute(step(&doc, center, &SculptSettings::default(), false, 0.1).unwrap())
+            .unwrap();
+        let height = top(&doc, id).height(40, Vec3::Z);
+        assert!((height - (-20.0 + 6.4)).abs() < 0.01, "{height}");
+    }
+
+    #[test]
+    fn a_wall_in_front_hides_the_terrain() {
+        let (mut doc, _) = terrain();
+        let ray = Ray {
+            origin: Vec3::new(100.0, 200.0, 500.0),
+            direction: -Vec3::Z,
+        };
+        assert!(pick_displacement(&doc, &ray).is_some());
+        let roof = Brush::cuboid(Aabb::from_corners(
+            Vec3::new(0.0, 0.0, 200.0),
+            Vec3::new(512.0, 512.0, 216.0),
+        ))
+        .unwrap();
+        doc.execute(Command::AddBrushes(vec![roof])).unwrap();
+        assert_eq!(pick_displacement(&doc, &ray), None);
     }
 }

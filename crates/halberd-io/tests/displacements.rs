@@ -30,8 +30,8 @@ fn terrain() -> (Document, ObjectId) {
     let shape = &brush.faces()[top];
     let corners = ordered_corners(shape.vertices(), Vec3::Z, shape.vertices()[0]).unwrap();
     let mut disp = Displacement::flat(2, corners[0], Vec3::Z);
-    disp.raise(12, 48.5);
-    disp.raise(3, -8.0);
+    disp.raise(12, 48.5, Vec3::Z);
+    disp.raise(3, -8.0, Vec3::Z);
     disp.set_alpha(24, 200.0);
     let object = doc.get(id).unwrap().as_brush().unwrap();
     let mut faces = object.faces().to_vec();

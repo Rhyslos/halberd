@@ -181,6 +181,8 @@ pub struct ToolController {
     sculpt_stroke: Option<u64>,
     sculpt_strokes: u64,
     sculpt_at: Option<glam::Vec3>,
+    /// The map's displacements, read once while the map stays the same.
+    sculpt_cache: crate::sculpt::DispCache,
 }
 
 /// What a shape is built from.
@@ -214,6 +216,7 @@ impl ToolController {
             sculpt_stroke: None,
             sculpt_strokes: 0,
             sculpt_at: None,
+            sculpt_cache: crate::sculpt::DispCache::default(),
         }
     }
 
@@ -324,6 +327,8 @@ impl ToolController {
         self.plan = None;
         self.marquee = None;
         self.drag = None;
+        // A sculpt stroke ends with its tool (its edits stay, one step).
+        self.sculpt_stroke = None;
         if tool == Tool::Box {
             // Picked parts are hidden while drawing; let go of them, so
             // Escape there deselects as it looks like it should.

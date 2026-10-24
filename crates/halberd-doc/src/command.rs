@@ -365,10 +365,18 @@ impl Change {
         // is after the last; one changed by only one of them keeps that
         // change (a sculpt stroke can run onto further brushes).
         let mut merged = first.clone();
+        let mut places: std::collections::HashMap<ObjectId, usize> = merged
+            .iter()
+            .enumerate()
+            .map(|(k, (id, ..))| (*id, k))
+            .collect();
         for (id, before, after) in second {
-            match merged.iter_mut().find(|(m, ..)| m == id) {
+            match places.get(id).and_then(|k| merged.get_mut(*k)) {
                 Some(entry) => entry.2 = after.clone(),
-                None => merged.push((*id, before.clone(), after.clone())),
+                None => {
+                    places.insert(*id, merged.len());
+                    merged.push((*id, before.clone(), after.clone()));
+                }
             }
         }
         Some(Self::Modified(merged))

@@ -45,7 +45,8 @@ impl ToolController {
     ) -> Option<ToolAction> {
         let cursor = input.cursor.filter(|c| c.is_finite());
         let ray = cursor.map(|c| camera.ray_through(c, input.size.max(Vec2::ONE)));
-        self.sculpt_at = ray.and_then(|r| sculpt::pick_displacement(doc, &r));
+        self.sculpt_cache.update(doc);
+        self.sculpt_at = ray.and_then(|r| sculpt::pick_in(doc, &self.sculpt_cache, &r));
         if input.cancel {
             // Escape takes back the stroke in progress.
             return self.sculpt_stroke.take().map(ToolAction::CancelMerging);
@@ -61,7 +62,7 @@ impl ToolController {
             self.sculpt_stroke = Some(STROKE_KEYS + self.sculpt_strokes);
         }
         let center = self.sculpt_at?;
-        let command = sculpt::stroke(doc, center, &self.sculpt, invert, dt)?;
+        let command = sculpt::stroke(doc, &self.sculpt_cache, center, &self.sculpt, invert, dt)?;
         Some(ToolAction::ExecuteMerging(command, self.sculpt_stroke?))
     }
 }
@@ -187,6 +188,17 @@ mod tests {
         assert_eq!(middle_height(&doc, id), 0.0);
         // Still holding the button does nothing until it is pressed again.
         assert_eq!(t.update(&frame(false, true), &cam, &doc), None);
+    }
+
+    #[test]
+    fn changing_tool_mid_stroke_ends_it() {
+        let (mut doc, _) = terrain();
+        let mut t = sculpt_tool();
+        apply(&mut doc, &mut t, frame(true, true));
+        assert!(t.is_busy());
+        t.set_tool(Tool::Select);
+        assert!(!t.is_busy(), "nothing is left waiting");
+        assert_eq!(t.sculpt_at(), None);
     }
 
     #[test]

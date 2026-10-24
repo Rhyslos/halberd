@@ -196,12 +196,44 @@ impl Displacement {
         Some(out)
     }
 
-    /// Moves point `k` by `amount` along its direction (kept within
-    /// limits).
-    pub fn raise(&mut self, k: usize, amount: f32) {
-        if let Some(d) = self.distances.get_mut(k) {
-            *d = (*d + amount).clamp(-MAX_DISTANCE, MAX_DISTANCE);
+    /// Moves point `k` by `amount` along `face_normal` (the face's outward
+    /// direction; negative lowers), kept within limits.
+    ///
+    /// A point's movement is stored as Hammer stores it: a unit direction
+    /// times a distance that is never negative (a lowered point points
+    /// down), so the direction is worked out again from the movement.
+    pub fn raise(&mut self, k: usize, amount: f32, face_normal: Vec3) {
+        if !amount.is_finite() {
+            return;
         }
+        let (Some(n), Some(d)) = (self.normals.get_mut(k), self.distances.get_mut(k)) else {
+            return;
+        };
+        let moved = (*n * *d + face_normal * amount).clamp_length_max(MAX_DISTANCE);
+        let length = moved.length();
+        if length.is_finite() && length > 1e-4 {
+            (*n, *d) = (moved / length, length);
+        } else {
+            (*n, *d) = (face_normal, 0.0);
+        }
+    }
+
+    /// How far point `k` is moved out of the face along `face_normal`
+    /// (negative: into it).
+    pub fn height(&self, k: usize, face_normal: Vec3) -> f32 {
+        match (self.normals.get(k), self.distances.get(k)) {
+            (Some(n), Some(d)) => (*n * *d).dot(face_normal),
+            _ => 0.0,
+        }
+    }
+
+    /// Forgets what Hammer works out from the shape (which triangles are
+    /// walkable), as it no longer fits once the shape changes; Hammer and
+    /// the compiler work it out again.
+    pub fn forget_derived(&mut self) {
+        self.extra.retain(
+            |e| !matches!(e, Entry::Block(b) if b.name.eq_ignore_ascii_case("triangle_tags")),
+        );
     }
 
     /// Sets point `k`'s blend (kept between 0 and 255).
@@ -222,6 +254,14 @@ impl Displacement {
 }
 
 impl crate::FaceInfo {
+    /// True if the face has a displacement block, even one that can't be
+    /// read.
+    pub fn has_dispinfo(&self) -> bool {
+        self.file_data
+            .iter()
+            .any(|e| matches!(e, Entry::Block(b) if b.name.eq_ignore_ascii_case("dispinfo")))
+    }
+
     /// The face's displacement, if it has a usable one.
     pub fn displacement(&self) -> Option<Displacement> {
         self.file_data.iter().find_map(|e| match e {
@@ -373,13 +413,38 @@ mod tests {
     #[test]
     fn raised_points_move_along_their_normal() {
         let mut d = Displacement::flat(2, Vec3::ZERO, Vec3::Z);
-        d.raise(12, 32.0);
-        d.raise(0, 1.0e9);
+        d.raise(12, 32.0, Vec3::Z);
+        d.raise(0, 1.0e9, Vec3::Z);
         let points = d.points(&square()).unwrap();
         assert_eq!(points[12], Vec3::new(32.0, 32.0, 32.0));
         assert_eq!(d.distances[0], MAX_DISTANCE);
         d.set_alpha(3, 900.0);
         assert_eq!(d.alphas[3], 255.0);
+    }
+
+    #[test]
+    fn heights_are_stored_as_hammer_stores_them() {
+        let mut d = Displacement::flat(2, Vec3::ZERO, Vec3::Z);
+        // Lowered: pointing down, a distance that is never negative.
+        d.raise(5, -10.0, Vec3::Z);
+        assert_eq!((d.normals[5], d.distances[5]), (-Vec3::Z, 10.0));
+        assert_eq!(d.height(5, Vec3::Z), -10.0);
+        // Raising a lowered point brings it up, through the face.
+        d.raise(5, 15.0, Vec3::Z);
+        assert_eq!((d.normals[5], d.distances[5]), (Vec3::Z, 5.0));
+        // Back to the face: no movement, the face's direction.
+        d.raise(5, -5.0, Vec3::Z);
+        assert_eq!((d.normals[5], d.distances[5]), (Vec3::Z, 0.0));
+        // Hammer writes "0 0 0" for points it never moved; they still move.
+        d.normals[6] = Vec3::ZERO;
+        d.distances[6] = 3.0;
+        d.raise(6, 2.0, Vec3::Z);
+        assert_eq!(d.height(6, Vec3::Z), 2.0);
+        // Out of range does nothing.
+        d.raise(999, 1.0, Vec3::Z);
+        assert_eq!(d.height(999, Vec3::Z), 0.0);
+        d.raise(7, f32::NAN, Vec3::Z);
+        assert_eq!((d.normals[7], d.distances[7]), (Vec3::Z, 0.0));
     }
 
     #[test]
@@ -394,7 +459,7 @@ mod tests {
     #[test]
     fn blocks_round_trip_and_keep_what_they_dont_read() {
         let mut d = Displacement::flat(3, Vec3::new(-8.0, 0.0, 16.0), Vec3::Z);
-        d.raise(40, 12.5);
+        d.raise(40, 12.5, Vec3::Z);
         d.set_alpha(2, 128.0);
         let mut block = d.to_block();
         block.push_block(Block::new("triangle_tags"));

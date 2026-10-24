@@ -127,7 +127,7 @@ mod tests {
         let shape = &brush.faces()[top];
         let corners = ordered_corners(shape.vertices(), Vec3::Z, shape.vertices()[0]).unwrap();
         let mut disp = Displacement::flat(2, corners[0], Vec3::Z);
-        disp.raise(12, 100.0);
+        disp.raise(12, 100.0, Vec3::Z);
         disp.set_alpha(0, 255.0);
         let object = doc.get(id).unwrap().as_brush().unwrap();
         let mut faces = object.faces().to_vec();

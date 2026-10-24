@@ -64,12 +64,13 @@ impl ToolController {
         Ok(outcome)
     }
 
-    /// Turns each picked displacement face back into a plain face.
+    /// Turns each picked displacement face back into a plain face (also
+    /// one whose displacement can't be read).
     pub(super) fn remove_displacements(&self, doc: &Document) -> Result<ShapeOpOutcome, String> {
         let mut changed: Vec<(ObjectId, BrushObject)> = Vec::new();
         let mut removed = 0;
         for (id, object, face) in self.picked_faces(doc) {
-            if object.faces()[face].displacement().is_none() {
+            if !object.faces()[face].has_dispinfo() {
                 continue;
             }
             let base = changed
