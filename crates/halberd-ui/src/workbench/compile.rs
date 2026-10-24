@@ -180,14 +180,16 @@ impl Workbench {
         if self.viewport.tools().is_busy() || self.is_asking_to_save() {
             return;
         }
-        if ui.input_mut(|i| i.consume_shortcut(&COMPILE_SHORTCUT)) && !self.is_compiling() {
+        let key = self.viewport.bindings().key(crate::Command::Compile);
+        let pressed = key.is_some_and(|k| ui.input_mut(|i| crate::bindings::consume(i, k)));
+        if pressed && !self.is_compiling() {
             actions.push(WorkbenchAction::Compile);
         }
     }
 
     /// The File menu's entry.
     pub(super) fn compile_menu_item(&self, ui: &mut Ui, actions: &mut Vec<WorkbenchAction>) {
-        let keys = ui.ctx().format_shortcut(&COMPILE_SHORTCUT);
+        let keys = self.key_text(ui, crate::Command::Compile);
         let item = ui
             .add_enabled(
                 !self.is_compiling(),

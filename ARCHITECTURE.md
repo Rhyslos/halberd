@@ -62,7 +62,7 @@ See [decision 0009](docs/decisions/0009-document-commands-and-brushes.md).
 | VTF, VMT (textures, materials) | Yes | No |
 | VDF (Steam config) | Yes | No |
 | `.halberd` (Halberd projects, versioned) | Yes | Yes |
-| `settings.toml` (editor settings; View menu choices are saved back to it) | Yes | Yes |
+| `settings.toml` (editor settings; the Settings window and View menu choices are saved back to it) | Yes | Yes |
 | `app.ron` (window size, panel layout, viewport camera and views; written by eframe) | Yes | Yes |
 
 Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from the user's own GMod install. Halberd never ships them.
@@ -116,6 +116,8 @@ Rendering sits behind the `ViewportRenderer` trait, so the panel runs in tests w
 The player figure's place and clearance are worked out by the viewport panel each frame (`halberd_tools::clearance`, cached while the figure and map stay the same) and drawn by the renderer in a colour for whether a player fits ([decision 0026](docs/decisions/0026-scale-tools.md)).
 
 ## Compiling
+
+**Settings** ([decision 0030](docs/decisions/0030-settings-page.md)): `halberd-config` holds the settings (camera speeds, changed keys as text, the memory budget and what it allows, `Budgets`). `halberd-ui` knows the commands (`Command`, `Bindings`): every key the interface reads goes through the bindings, so changed keys work everywhere and show in menus and the Keybinds window. The workbench applies changes at once; `halberd-app` saves `Workbench::settings()` whenever it changes, and applies the memory budget at startup (browser pictures, GPU texture count).
 
 **Compile and play** (F9; [decision 0028](docs/decisions/0028-quick-compile.md)): the workbench asks for a compile; `halberd-app` writes the map as it is now to a work folder in Garry's Mod's game folder (`halberd-io`), and `halberd-compile` runs Garry's Mod's vbsp, vvis and vrad on their own thread, one process at a time, never through a shell. Their output reaches the Console line by line; the compiled map is copied into `garrysmod/maps` and the game is started on it through Steam. On a leak, vbsp's pointfile (`.lin`) is read and passed on as `CompileEvent::LeakPath`; the viewport draws it in every view until a compile succeeds ([decision 0029](docs/decisions/0029-leak-path.md)). **Check for leaks** runs the `LeakCheck` profile (vbsp `-leaktest` alone; nothing installed).
 

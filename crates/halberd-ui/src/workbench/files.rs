@@ -3,7 +3,8 @@
 //! the program around the workbench, which the workbench asks through
 //! [`WorkbenchAction`]s.
 
-use super::{FileIntent, QUIT_SHORTCUT, Workbench, WorkbenchAction};
+use super::{FileIntent, Workbench, WorkbenchAction};
+use crate::Command;
 use crate::console::LogEntry;
 use egui::{Id, Key, KeyboardShortcut, Modifiers, RichText, Ui};
 use halberd_doc::Document;
@@ -150,23 +151,36 @@ impl Workbench {
         }
     }
 
+    /// The key of `command` as menus show it ("Ctrl+S"), or nothing.
+    pub(super) fn key_text(&self, ui: &Ui, command: Command) -> String {
+        self.viewport
+            .bindings()
+            .key(command)
+            .map(|k| ui.ctx().format_shortcut(&k))
+            .unwrap_or_default()
+    }
+
     pub(super) fn file_shortcuts(&mut self, ui: &Ui, actions: &mut Vec<WorkbenchAction>) {
         // Mid-drag, files wait until the drag ends.
         if self.viewport.tools().is_busy() || self.is_asking_to_save() {
             return;
         }
-        let consume = |s: &KeyboardShortcut| ui.input_mut(|i| i.consume_shortcut(s));
-        // Ctrl+Shift+S first: Ctrl+S would also match it.
-        if consume(&SAVE_AS_SHORTCUT) {
+        let bindings = self.viewport.bindings().clone();
+        let consume = |command| {
+            bindings
+                .key(command)
+                .is_some_and(|s| ui.input_mut(|i| crate::bindings::consume(i, s)))
+        };
+        if consume(Command::SaveAs) {
             actions.push(WorkbenchAction::SaveAs { then: None });
-        } else if consume(&SAVE_SHORTCUT) {
+        } else if consume(Command::Save) {
             actions.push(WorkbenchAction::Save { then: None });
         }
-        let intent = if consume(&QUIT_SHORTCUT) {
+        let intent = if consume(Command::Quit) {
             Some(FileIntent::Quit)
-        } else if consume(&OPEN_SHORTCUT) {
+        } else if consume(Command::Open) {
             Some(FileIntent::Open)
-        } else if consume(&NEW_SHORTCUT) {
+        } else if consume(Command::New) {
             Some(FileIntent::New)
         } else {
             None
@@ -175,28 +189,28 @@ impl Workbench {
     }
 
     pub(super) fn file_menu(&mut self, ui: &mut Ui, actions: &mut Vec<WorkbenchAction>) {
-        let item = |ui: &mut Ui, text: &str, shortcut: &KeyboardShortcut| {
-            let keys = ui.ctx().format_shortcut(shortcut);
+        let item = |this: &Self, ui: &mut Ui, text: &str, command| {
+            let keys = this.key_text(ui, command);
             ui.add(egui::Button::new(text).shortcut_text(keys))
                 .clicked()
         };
-        if item(ui, "New", &NEW_SHORTCUT) {
+        if item(self, ui, "New", Command::New) {
             actions.extend(self.request(FileIntent::New));
         }
-        if item(ui, "Open…", &OPEN_SHORTCUT) {
+        if item(self, ui, "Open…", Command::Open) {
             actions.extend(self.request(FileIntent::Open));
         }
         ui.separator();
-        if item(ui, "Save", &SAVE_SHORTCUT) {
+        if item(self, ui, "Save", Command::Save) {
             actions.push(WorkbenchAction::Save { then: None });
         }
-        if item(ui, "Save As…", &SAVE_AS_SHORTCUT) {
+        if item(self, ui, "Save As…", Command::SaveAs) {
             actions.push(WorkbenchAction::SaveAs { then: None });
         }
         ui.separator();
         self.compile_menu_item(ui, actions);
         ui.separator();
-        if item(ui, "Quit", &QUIT_SHORTCUT) {
+        if item(self, ui, "Quit", Command::Quit) {
             actions.extend(self.request(FileIntent::Quit));
         }
     }

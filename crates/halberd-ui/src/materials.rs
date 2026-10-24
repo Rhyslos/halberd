@@ -72,12 +72,19 @@ pub struct AssetBrowser {
     wanted: Vec<String>,
     /// Pictures asked for and not yet back.
     asked: std::collections::HashSet<String>,
+    /// Most pictures kept (the memory budget); `None`: the standard 600.
+    limit: Option<usize>,
 }
 
 impl AssetBrowser {
     /// A browser of materials (the default).
     pub fn materials() -> Self {
         Self::default()
+    }
+
+    /// Keeps at most `most` pictures (at least 1), from the memory budget.
+    pub fn set_picture_limit(&mut self, most: usize) {
+        self.limit = Some(most.max(1));
     }
 
     /// A browser of prop models.
@@ -155,7 +162,7 @@ impl AssetBrowser {
         if self.pictures.insert(name.clone(), picture).is_none() {
             self.order.push_back(name);
         }
-        while self.order.len() > MAX_PICTURES {
+        while self.order.len() > self.limit.unwrap_or(MAX_PICTURES) {
             if let Some(old) = self.order.pop_front() {
                 self.pictures.remove(&old);
             }

@@ -2,55 +2,26 @@
 //! carrying them out.
 
 use super::ViewportPanel;
-use super::tools::first_press;
+use crate::Command;
+use crate::bindings::pressed;
 use egui::{Key, KeyboardShortcut, Modifiers, Ui};
 use halberd_doc::Document;
 use halberd_tools::ShapeOp;
 
-/// The key for each shape operation that has one.
-pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 12] = [
-    (
-        ShapeOp::Extrude,
-        KeyboardShortcut::new(Modifiers::NONE, Key::E),
-    ),
-    (
-        ShapeOp::Bevel,
-        KeyboardShortcut::new(Modifiers::COMMAND, Key::B),
-    ),
-    (
-        ShapeOp::Bridge,
-        KeyboardShortcut::new(Modifiers::NONE, Key::F),
-    ),
-    (
-        ShapeOp::Split,
-        KeyboardShortcut::new(Modifiers::NONE, Key::K),
-    ),
-    (
-        ShapeOp::Clip,
-        KeyboardShortcut::new(Modifiers::NONE, Key::X),
-    ),
-    (
-        ShapeOp::Join,
-        KeyboardShortcut::new(Modifiers::COMMAND, Key::J),
-    ),
-    (
-        ShapeOp::MergeCorners,
-        KeyboardShortcut::new(Modifiers::NONE, Key::M),
-    ),
-    (
-        ShapeOp::MirrorAcrossView,
-        KeyboardShortcut::new(Modifiers::COMMAND, Key::M),
-    ),
-    (ShapeOp::Union, KeyboardShortcut::new(CTRL_SHIFT, Key::U)),
-    (ShapeOp::Subtract, KeyboardShortcut::new(CTRL_SHIFT, Key::C)),
-    (
-        ShapeOp::Intersect,
-        KeyboardShortcut::new(CTRL_SHIFT, Key::I),
-    ),
-    (
-        ShapeOp::MakeBrushes,
-        KeyboardShortcut::new(CTRL_SHIFT, Key::B),
-    ),
+/// The command (and so the key) of each shape operation that has one.
+pub const SHAPE_OP_COMMANDS: [(ShapeOp, Command); 12] = [
+    (ShapeOp::Extrude, Command::Extrude),
+    (ShapeOp::Bevel, Command::Bevel),
+    (ShapeOp::Bridge, Command::Bridge),
+    (ShapeOp::Split, Command::Split),
+    (ShapeOp::Clip, Command::Clip),
+    (ShapeOp::Join, Command::Join),
+    (ShapeOp::MergeCorners, Command::MergeCorners),
+    (ShapeOp::MirrorAcrossView, Command::Mirror),
+    (ShapeOp::Union, Command::Union),
+    (ShapeOp::Subtract, Command::Subtract),
+    (ShapeOp::Intersect, Command::Intersect),
+    (ShapeOp::MakeBrushes, Command::MakeBrushes),
 ];
 
 /// Ctrl and Shift together (Cmd and Shift on macOS).
@@ -59,12 +30,12 @@ const CTRL_SHIFT: Modifiers = Modifiers {
     ..Modifiers::COMMAND
 };
 
-/// The key for `op`, if it has one.
-fn shape_op_key(op: ShapeOp) -> Option<KeyboardShortcut> {
-    SHAPE_OP_KEYS
+/// The command of `op`, if it has one.
+fn shape_op_command(op: ShapeOp) -> Option<Command> {
+    SHAPE_OP_COMMANDS
         .iter()
         .find(|(o, _)| *o == op)
-        .map(|(_, key)| *key)
+        .map(|(_, command)| *command)
 }
 
 impl ViewportPanel {
@@ -85,27 +56,32 @@ impl ViewportPanel {
 
     /// The shape operation keys pressed this frame, carried out.
     pub(super) fn shape_op_keys(&mut self, ui: &Ui, doc: &mut Document) -> Vec<String> {
-        let pressed: Vec<ShapeOp> = ui.input(|i| {
-            let mut ops: Vec<ShapeOp> = SHAPE_OP_KEYS
+        let bindings = &self.bindings;
+        let ops: Vec<ShapeOp> = ui.input(|i| {
+            SHAPE_OP_COMMANDS
                 .iter()
-                .filter(|(_, key)| {
-                    first_press(i, key.logical_key, |m| m.matches_exact(key.modifiers))
-                })
-                .map(|(op, _)| *op)
-                .collect();
-            // The window system turns Ctrl+C, with Shift too, into Copy
-            // and sends no key: Ctrl+Shift+C arrives as a Copy.
-            let copy = i.events.iter().any(|e| matches!(e, egui::Event::Copy));
-            if copy && i.modifiers.matches_exact(CTRL_SHIFT) && !ops.contains(&ShapeOp::Subtract) {
-                ops.push(ShapeOp::Subtract);
-            }
-            ops
+                .filter_map(|(op, command)| Some((*op, bindings.key(*command)?)))
+                .filter(|(_, key)| pressed(i, *key) || arrives_as_clipboard(i, *key))
+                .map(|(op, _)| op)
+                .collect::<Vec<_>>()
         });
-        pressed
-            .into_iter()
+        ops.into_iter()
             .flat_map(|op| self.run_shape_op(op, doc))
             .collect()
     }
+}
+
+/// True if `key` is Ctrl+Shift+C or X, which the window system sends as
+/// Copy or Cut (with no key at all).
+fn arrives_as_clipboard(input: &egui::InputState, key: KeyboardShortcut) -> bool {
+    let event = match key.logical_key {
+        Key::C => egui::Event::Copy,
+        Key::X => egui::Event::Cut,
+        _ => return false,
+    };
+    key.modifiers.matches_exact(CTRL_SHIFT)
+        && input.modifiers.matches_exact(CTRL_SHIFT)
+        && input.events.contains(&event)
 }
 
 /// The Shape menu: every operation, greyed out with the reason when it
@@ -124,7 +100,7 @@ pub(crate) fn shape_menu(
             ui.separator();
         }
         let mut button = egui::Button::new(op.label());
-        if let Some(key) = shape_op_key(op) {
+        if let Some(key) = shape_op_command(op).and_then(|c| viewport.bindings().key(c)) {
             button = button.shortcut_text(ui.ctx().format_shortcut(&key));
         }
         let ready = viewport.shape_op_ready(op, doc);
