@@ -153,3 +153,36 @@ fn the_keybinds_viewer_shows_changed_keys() {
     wb.keybinds.search = "ctrl+s".into();
     assert!(!wb.keybinds.found().iter().any(|b| b.action == "Save"));
 }
+
+#[test]
+fn a_command_on_ctrl_shift_x_works_though_it_arrives_as_cut() {
+    // Regression: Ctrl+Shift+X was accepted but never fired.
+    let mut settings = answered();
+    settings
+        .keys
+        .insert("file.save".into(), "Ctrl+Shift+X".into());
+    let mut h = harness_with_actions(Workbench::new(info(), None).with_settings(settings));
+    h.run();
+    h.event(egui::Event::ModifiersChanged(
+        Modifiers::COMMAND | Modifiers::SHIFT,
+    ));
+    h.event(egui::Event::Cut);
+    h.run();
+    assert_eq!(h.state().1, [WorkbenchAction::Save { then: None }]);
+}
+
+#[test]
+fn typing_a_letter_bound_to_a_command_only_types() {
+    // Regression: with Save on N, typing N in a text box saved.
+    let mut settings = answered();
+    settings.keys.insert("file.save".into(), "N".into());
+    let mut h = harness_with_actions(Workbench::new(info(), None).with_settings(settings));
+    h.run();
+    h.get_by_label(SETTINGS_TITLE).click();
+    h.run();
+    h.get_by_label(crate::KEY_FILTER_NAME).click();
+    h.run();
+    h.key_press(Key::N);
+    h.run();
+    assert!(h.state().1.is_empty(), "{:?}", h.state().1);
+}

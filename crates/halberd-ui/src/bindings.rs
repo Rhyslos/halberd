@@ -213,7 +213,13 @@ pub fn check_binding(command: Command, key: KeyboardShortcut) -> Result<(), Bind
         Key::ArrowUp | Key::ArrowDown if plain => {
             return Err(BindingRefused::Reserved("moving through lists"));
         }
-        Key::C | Key::X | Key::V if key.modifiers.matches_exact(CTRL) => {
+        // The window system turns these into copy, cut and paste, with no
+        // key at all; only Ctrl+Shift+C and X can be told apart (they
+        // arrive as Copy and Cut with Shift held).
+        Key::C | Key::X | Key::V
+            if key.modifiers.command
+                && !(key.modifiers.matches_exact(CTRL_SHIFT) && key.logical_key != Key::V) =>
+        {
             return Err(BindingRefused::Reserved("copy, cut and paste"));
         }
         _ => {}
@@ -229,6 +235,9 @@ pub fn check_binding(command: Command, key: KeyboardShortcut) -> Result<(), Bind
 pub struct Bindings {
     /// Changed commands: their key, or `None` for no key.
     changed: HashMap<Command, Option<KeyboardShortcut>>,
+    /// Changes to commands this Halberd doesn't have (from a newer one),
+    /// kept word for word so saving doesn't lose them.
+    unknown: BTreeMap<String, String>,
 }
 
 impl Bindings {
@@ -241,9 +250,10 @@ impl Bindings {
             let Some(command) = Command::from_id(id) else {
                 notes.push(format!(
                     "The settings file changes the key of \"{}\", which this Halberd doesn't \
-                     have; it was left out.",
+                     have; it is kept for the Halberd that does.",
                     shorten(id)
                 ));
+                bindings.unknown.insert(id.clone(), text.clone());
                 continue;
             };
             match parse_chord(text) {
@@ -274,10 +284,13 @@ impl Bindings {
 
     /// The changes, for the settings file.
     pub fn to_settings(&self) -> BTreeMap<String, String> {
-        self.changed
-            .iter()
-            .map(|(command, key)| (command.id().to_string(), chord_text(*key)))
-            .collect()
+        let mut out = self.unknown.clone();
+        out.extend(
+            self.changed
+                .iter()
+                .map(|(command, key)| (command.id().to_string(), chord_text(*key))),
+        );
+        out
     }
 
     /// `command`'s key, or `None` if it has none.
@@ -317,9 +330,7 @@ impl Bindings {
             .iter()
             .copied()
             .filter(|other| {
-                *other != command
-                    && other.group().overlaps(command.group())
-                    && self.key(*other) == Some(key)
+                *other != command && work_together(*other, command) && self.key(*other) == Some(key)
             })
             .collect()
     }
@@ -341,48 +352,30 @@ impl Bindings {
     }
 }
 
-/// True if `key` went down this frame (not a repeat) with exactly its
-/// modifiers.
-pub(crate) fn pressed(input: &egui::InputState, key: KeyboardShortcut) -> bool {
-    input.events.iter().any(|e| {
-        matches!(
-            e,
-            egui::Event::Key { key: k, pressed: true, repeat: false, modifiers, .. }
-                if *k == key.logical_key && modifiers.matches_exact(key.modifiers)
-        )
-    })
-}
-
-/// True if `key` was pressed this frame with exactly its modifiers
-/// (repeats count, as holding Ctrl+Z keeps undoing); the presses are taken
-/// out so nothing else acts on them.
-pub(crate) fn consume(input: &mut egui::InputState, key: KeyboardShortcut) -> bool {
-    let before = input.events.len();
-    input.events.retain(|e| {
-        !matches!(
-            e,
-            egui::Event::Key { key: k, pressed: true, modifiers, .. }
-                if *k == key.logical_key && modifiers.matches_exact(key.modifiers)
-        )
-    });
-    input.events.len() != before
-}
-
-/// The keys of `key` as the keyboard viewer draws them, modifiers first.
-pub(crate) fn caps(key: KeyboardShortcut) -> Vec<crate::KeyCap> {
-    use crate::KeyCap;
-    let mut caps = Vec::new();
-    if key.modifiers.command || key.modifiers.ctrl {
-        caps.push(KeyCap::Ctrl);
+/// True if `a` and `b` can both act on one key press.
+fn work_together(a: Command, b: Command) -> bool {
+    use Command::{
+        AllGizmos, DrawTool, InsideEntities, MoveGizmo, RotateGizmo, ScaleGizmo, SelectTool,
+    };
+    let (ga, gb) = (a.group(), b.group());
+    if ga.overlaps(gb) {
+        return true;
     }
-    if key.modifiers.shift {
-        caps.push(KeyCap::Shift);
+    // The tool keys are read while drawing too.
+    let while_drawing = |c: Command| matches!(c, SelectTool | DrawTool | InsideEntities);
+    if (ga == BindingGroup::Drawing && while_drawing(b))
+        || (gb == BindingGroup::Drawing && while_drawing(a))
+    {
+        return true;
     }
-    if key.modifiers.alt {
-        caps.push(KeyCap::Alt);
+    // A flying key held down also presses: only the gizmo keys step aside
+    // (they need Shift while flying).
+    let gizmo = |c: Command| matches!(c, MoveGizmo | RotateGizmo | ScaleGizmo | AllGizmos);
+    match (ga, gb) {
+        (BindingGroup::Flying, _) => !gizmo(b),
+        (_, BindingGroup::Flying) => !gizmo(a),
+        _ => false,
     }
-    caps.push(KeyCap::Key(key.logical_key));
-    caps
 }
 
 /// Text that may be long or odd, cut short for a message.
@@ -458,6 +451,9 @@ fn key_from_name(name: &str) -> Option<Key> {
             .find(|k| k.name().eq_ignore_ascii_case(name))
     })
 }
+
+mod input;
+pub(crate) use input::{caps, consume, pressed, usable_while_typing};
 
 #[cfg(test)]
 mod tests;

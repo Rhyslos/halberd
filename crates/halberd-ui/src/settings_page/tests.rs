@@ -101,12 +101,12 @@ fn ctrl_shift_c_arriving_as_copy_is_taken() {
         h.state().bindings.key(Command::Intersect),
         shortcut(Modifiers::COMMAND | Modifiers::SHIFT, Key::C)
     );
-    // Plain Ctrl+C stays copy.
+    // Plain Ctrl+C stays copy: still waiting for a key.
     h.state_mut().page.capturing = Some(Command::Union);
     h.event(egui::Event::ModifiersChanged(Modifiers::COMMAND));
     h.event(egui::Event::Copy);
     h.run();
-    assert!(h.query_by_label_contains("copy, cut and paste").is_some());
+    assert!(h.state().page.is_capturing());
     assert!(!h.state().bindings.is_changed(Command::Union));
 }
 

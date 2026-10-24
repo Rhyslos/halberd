@@ -166,9 +166,12 @@ impl Workbench {
             return;
         }
         let bindings = self.viewport.bindings().clone();
+        // While typing, plain letters are text, not commands.
+        let typing = ui.ctx().egui_wants_keyboard_input();
         let consume = |command| {
             bindings
                 .key(command)
+                .filter(|k| !typing || crate::bindings::usable_while_typing(*k))
                 .is_some_and(|s| ui.input_mut(|i| crate::bindings::consume(i, s)))
         };
         if consume(Command::SaveAs) {

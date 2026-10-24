@@ -34,7 +34,7 @@ The viewport camera and the first left-mouse tools are implemented.
 - Fly mode is hidden when WASD movement is turned off in settings.
 - `CameraController::frame` points the camera at the whole of a map when it is opened. `set_wasd_enabled` and `set_fly_speed` apply the Settings page (turning off WASD leaves the Fly camera).
 - Guarantees, each covered by tests: the pivot stays exactly under the pointer while orbiting; zooming leaves the orbit point exactly where it is on screen; the view never flips over; the camera stays inside ±131072 units; broken input (NaN, zero sizes, huge frame times) never breaks the camera.
-- `CameraState` (camera, mode, pivot, fly speed) is saved between sessions.
+- `CameraState` (camera, mode, pivot, fly speed) is saved between sessions; the editor then sets the flying speed from Settings ("Flying speed", the speed each session starts at).
 
 ### Left-mouse tools
 

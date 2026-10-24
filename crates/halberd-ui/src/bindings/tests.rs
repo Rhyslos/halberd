@@ -98,7 +98,9 @@ fn bad_entries_are_explained_and_left_out() {
     assert!(notes.iter().any(|n| n.contains("tool.teleport")));
     assert!(notes.iter().any(|n| n.contains("kept for cancelling")));
     assert!(notes.iter().any(|n| n.contains("without Ctrl")));
-    assert_eq!(bindings, Bindings::default());
+    for command in Command::ALL {
+        assert_eq!(bindings.key(*command), command.default_key(), "{command:?}");
+    }
 }
 
 #[test]
@@ -163,4 +165,50 @@ fn fuzz_odd_key_text_never_crashes() {
             assert_eq!(parse_chord(&chord_text(chord)), Ok(chord), "{text:?}");
         }
     }
+}
+
+#[test]
+fn changes_for_commands_this_halberd_lacks_are_kept() {
+    // Regression: an older Halberd dropped a newer one's key changes when
+    // it saved.
+    let mut saved = BTreeMap::new();
+    saved.insert("future.command".to_string(), "Ctrl+G".to_string());
+    saved.insert("file.save".to_string(), "F5".to_string());
+    let (bindings, notes) = Bindings::from_settings(&saved);
+    assert!(notes[0].contains("kept"));
+    assert_eq!(bindings.to_settings(), saved);
+}
+
+#[test]
+fn clipboard_keys_are_refused_unless_they_can_be_told_apart() {
+    let ctrl_alt = Modifiers { alt: true, ..CTRL };
+    let refuse = |k| check_binding(Command::Save, k).is_err();
+    assert!(refuse(key(ctrl_alt, Key::C)));
+    assert!(refuse(key(ctrl_alt, Key::X)));
+    assert!(refuse(key(CTRL_SHIFT, Key::V)));
+    assert!(!refuse(key(CTRL_SHIFT, Key::C)));
+    assert!(!refuse(key(CTRL_SHIFT, Key::X)));
+    assert!(!refuse(key(Modifiers::SHIFT, Key::C)));
+}
+
+#[test]
+fn double_actions_while_drawing_and_flying_are_pointed_out() {
+    let mut bindings = Bindings::default();
+    // Turning a shape with Q also cancels it and picks Select.
+    bindings.set(Command::TurnShape, Some(key(NONE, Key::Q)));
+    assert_eq!(bindings.clashes(Command::TurnShape), [Command::SelectTool]);
+    // Flying up with E also extrudes.
+    bindings.set(Command::FlyUp, Some(key(NONE, Key::E)));
+    assert_eq!(bindings.clashes(Command::FlyUp), [Command::Extrude]);
+    // But W flies and (with Shift) picks Move, by design.
+    assert!(bindings.clashes(Command::FlyForward).is_empty());
+}
+
+#[test]
+fn plain_keys_wait_while_typing_but_ctrl_and_function_keys_dont() {
+    assert!(!usable_while_typing(key(NONE, Key::N)));
+    assert!(!usable_while_typing(key(Modifiers::SHIFT, Key::N)));
+    assert!(usable_while_typing(key(CTRL, Key::N)));
+    assert!(usable_while_typing(key(NONE, Key::F9)));
+    assert!(!usable_while_typing(key(NONE, Key::F)));
 }

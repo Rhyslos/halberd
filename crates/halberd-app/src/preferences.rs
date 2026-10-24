@@ -25,10 +25,11 @@ impl PreferenceSaver {
     }
 
     /// Records the editor's settings, saving the file if they changed.
-    /// Returns a message for the Console if saving failed (once per change,
-    /// not every frame).
-    pub(crate) fn update(&mut self, current: &Settings) -> Option<String> {
-        if *current == self.settings {
+    /// While `busy` (a slider being dragged) it waits, so the file isn't
+    /// written every frame. Returns a message for the Console if saving
+    /// failed (once per change, not every frame).
+    pub(crate) fn update(&mut self, current: &Settings, busy: bool) -> Option<String> {
+        if busy || *current == self.settings {
             return None;
         }
         self.settings = current.clone();
@@ -60,18 +61,33 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let store = SettingsStore::new(folder.path().join("settings.toml"));
         let mut saver = PreferenceSaver::new(Settings::default(), Some(store.clone()));
-        assert_eq!(saver.update(&Settings::default()), None, "nothing changed");
+        assert_eq!(
+            saver.update(&Settings::default(), false),
+            None,
+            "nothing changed"
+        );
         assert!(!store.path().exists(), "unchanged settings are not written");
-        assert_eq!(saver.update(&changed()), None);
+        assert_eq!(saver.update(&changed(), false), None);
         let loaded = store.load().settings;
         assert_eq!(loaded, changed());
         assert_eq!(saver.settings(), &changed());
     }
 
     #[test]
+    fn nothing_is_saved_while_a_slider_is_dragged() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(folder.path().join("settings.toml"));
+        let mut saver = PreferenceSaver::new(Settings::default(), Some(store.clone()));
+        assert_eq!(saver.update(&changed(), true), None);
+        assert!(!store.path().exists(), "waits for the drag to end");
+        assert_eq!(saver.update(&changed(), false), None);
+        assert_eq!(store.load().settings, changed());
+    }
+
+    #[test]
     fn without_a_settings_folder_changes_last_the_session() {
         let mut saver = PreferenceSaver::new(Settings::default(), None);
-        assert_eq!(saver.update(&changed()), None);
+        assert_eq!(saver.update(&changed(), false), None);
         assert_eq!(saver.settings(), &changed());
     }
 
@@ -83,8 +99,12 @@ mod tests {
         std::fs::create_dir(&blocked).unwrap();
         let mut saver =
             PreferenceSaver::new(Settings::default(), Some(SettingsStore::new(blocked)));
-        let note = saver.update(&changed()).unwrap();
+        let note = saver.update(&changed(), false).unwrap();
         assert!(note.starts_with("Settings were not saved"), "{note}");
-        assert_eq!(saver.update(&changed()), None, "not again every frame");
+        assert_eq!(
+            saver.update(&changed(), false),
+            None,
+            "not again every frame"
+        );
     }
 }

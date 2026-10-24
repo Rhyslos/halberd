@@ -103,6 +103,11 @@ impl SettingsPage {
         };
         let pressed = ui.input_mut(|i| {
             let found = i.events.iter().find_map(captured_key).or_else(|| {
+                // Ctrl+Shift+C and X arrive as Copy and Cut; with other
+                // modifiers (Shift+Delete on Windows) they aren't keys.
+                if !halberd_modifiers(i.modifiers).matches_exact(CTRL_SHIFT) {
+                    return None;
+                }
                 let key = if i.events.contains(&egui::Event::Copy) {
                     Key::C
                 } else if i.events.contains(&egui::Event::Cut) {
@@ -292,6 +297,12 @@ fn captured_key(event: &egui::Event) -> Option<KeyboardShortcut> {
         _ => None,
     }
 }
+
+/// Ctrl and Shift.
+const CTRL_SHIFT: Modifiers = Modifiers {
+    shift: true,
+    ..Modifiers::COMMAND
+};
 
 /// `m` as Halberd stores modifiers: Ctrl (or Cmd) as the command key.
 fn halberd_modifiers(m: Modifiers) -> Modifiers {

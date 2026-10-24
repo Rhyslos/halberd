@@ -180,7 +180,12 @@ impl Workbench {
         if self.viewport.tools().is_busy() || self.is_asking_to_save() {
             return;
         }
-        let key = self.viewport.bindings().key(crate::Command::Compile);
+        let typing = ui.ctx().egui_wants_keyboard_input();
+        let key = self
+            .viewport
+            .bindings()
+            .key(crate::Command::Compile)
+            .filter(|k| !typing || crate::bindings::usable_while_typing(*k));
         let pressed = key.is_some_and(|k| ui.input_mut(|i| crate::bindings::consume(i, k)));
         if pressed && !self.is_compiling() {
             actions.push(WorkbenchAction::Compile);

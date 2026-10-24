@@ -4,7 +4,7 @@
 use super::ViewportPanel;
 use crate::Command;
 use crate::bindings::pressed;
-use egui::{Key, KeyboardShortcut, Modifiers, Ui};
+use egui::Ui;
 use halberd_doc::Document;
 use halberd_tools::ShapeOp;
 
@@ -23,12 +23,6 @@ pub const SHAPE_OP_COMMANDS: [(ShapeOp, Command); 12] = [
     (ShapeOp::Intersect, Command::Intersect),
     (ShapeOp::MakeBrushes, Command::MakeBrushes),
 ];
-
-/// Ctrl and Shift together (Cmd and Shift on macOS).
-const CTRL_SHIFT: Modifiers = Modifiers {
-    shift: true,
-    ..Modifiers::COMMAND
-};
 
 /// The command of `op`, if it has one.
 fn shape_op_command(op: ShapeOp) -> Option<Command> {
@@ -61,7 +55,7 @@ impl ViewportPanel {
             SHAPE_OP_COMMANDS
                 .iter()
                 .filter_map(|(op, command)| Some((*op, bindings.key(*command)?)))
-                .filter(|(_, key)| pressed(i, *key) || arrives_as_clipboard(i, *key))
+                .filter(|(_, key)| pressed(i, *key))
                 .map(|(op, _)| op)
                 .collect::<Vec<_>>()
         });
@@ -69,19 +63,6 @@ impl ViewportPanel {
             .flat_map(|op| self.run_shape_op(op, doc))
             .collect()
     }
-}
-
-/// True if `key` is Ctrl+Shift+C or X, which the window system sends as
-/// Copy or Cut (with no key at all).
-fn arrives_as_clipboard(input: &egui::InputState, key: KeyboardShortcut) -> bool {
-    let event = match key.logical_key {
-        Key::C => egui::Event::Copy,
-        Key::X => egui::Event::Cut,
-        _ => return false,
-    };
-    key.modifiers.matches_exact(CTRL_SHIFT)
-        && input.modifiers.matches_exact(CTRL_SHIFT)
-        && input.events.contains(&event)
 }
 
 /// The Shape menu: every operation, greyed out with the reason when it

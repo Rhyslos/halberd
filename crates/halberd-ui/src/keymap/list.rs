@@ -218,7 +218,8 @@ pub const KEYBINDS: &[Keybind] = &[
         "Make ordinary brushes from the selected floor plan shapes",
         KeyContext::Viewport,
     ),
-    bind(
+    cmd(
+        Command::Delete,
         &[k(Key::Delete)],
         "In Vertex or Face mode: delete the picked corners or faces",
         KeyContext::Viewport,
@@ -256,7 +257,8 @@ pub const KEYBINDS: &[Keybind] = &[
         KeyContext::Drawing,
     ),
     bind(&[k(Key::Escape)], "Cancel the shape", KeyContext::Drawing),
-    bind(
+    cmd(
+        Command::SelectTool,
         &[k(Key::Q)],
         "Cancel the shape and pick the Select tool",
         KeyContext::Drawing,

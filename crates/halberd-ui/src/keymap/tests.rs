@@ -33,9 +33,11 @@ fn every_command_is_listed_with_its_default_keys() {
             .iter()
             .filter(|b| b.command == Some(*command) && b.context != KeyContext::RightMouse)
             .collect();
-        assert_eq!(listed.len(), 1, "{command:?} is listed once");
+        assert!(!listed.is_empty(), "{command:?} is listed");
         let default = command.default_key().map(crate::bindings::caps);
-        assert_eq!(Some(listed[0].keys.to_vec()), default, "{command:?}");
+        for bind in listed {
+            assert_eq!(Some(bind.keys.to_vec()), default, "{command:?}");
+        }
     }
 }
 

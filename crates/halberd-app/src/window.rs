@@ -190,12 +190,18 @@ impl eframe::App for HalberdApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
         }
-        if let Some(note) = self.preferences.update(&self.workbench.settings()) {
+        let dragging = ctx.egui_is_using_pointer();
+        if let Some(note) = self
+            .preferences
+            .update(&self.workbench.settings(), dragging)
+        {
             self.workbench.push_warning(note);
         }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        // A change made in the last frames (a drag let go at closing).
+        self.preferences.update(&self.workbench.settings(), false);
         eframe::set_value(storage, LAYOUT_KEY, self.workbench.layout());
         eframe::set_value(
             storage,

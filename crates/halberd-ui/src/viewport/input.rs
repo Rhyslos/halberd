@@ -47,12 +47,6 @@ impl ViewportPanel {
         }
     }
 
-    /// Picks the views that get this frame's input. The camera's: the one
-    /// under the pointer, unless the right or middle button is held in the
-    /// current one. The tools': the one under the pointer, unless the left
-    /// button is held or a tool is busy there; a floor plan being drawn
-    /// moves to any view it can be drawn in, so corners can be placed in
-    /// one view and the next in another.
     /// The flying keys held, by their bindings.
     fn fly_keys(&self, i: &egui::InputState) -> FlyKeys {
         let down = |command| {
@@ -71,6 +65,12 @@ impl ViewportPanel {
         }
     }
 
+    /// Picks the views that get this frame's input. The camera's: the one
+    /// under the pointer, unless the right or middle button is held in the
+    /// current one. The tools': the one under the pointer, unless the left
+    /// button is held or a tool is busy there; a floor plan being drawn
+    /// moves to any view it can be drawn in, so corners can be placed in
+    /// one view and the next in another.
     pub(super) fn choose_active(&mut self, responses: &[egui::Response]) {
         let count = responses.len();
         if self.active >= count {
