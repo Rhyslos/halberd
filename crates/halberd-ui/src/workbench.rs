@@ -7,6 +7,7 @@ use crate::layout::{default_layout, restore_or_default};
 use crate::panel::Panel;
 use crate::panels::{about_contents, placeholder, properties_contents, scene_contents};
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
+pub use compile::{COMPILE_LABEL, COMPILE_SHORTCUT, CompileLine, STOP_COMPILE_LABEL};
 use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 pub use entity_list::{DEFAULT_SKY, ENTITIES_TAB, SKY_PICKER_NAME, sky_names};
@@ -71,6 +72,12 @@ pub enum WorkbenchAction {
         /// What the user was doing when asked to save first.
         then: Option<FileIntent>,
     },
+    /// Compile the map (as it is now) and start Garry's Mod on it; report
+    /// with [`Workbench::compile_started`] and the other `compile_`
+    /// calls.
+    Compile,
+    /// Stop the compile that is running.
+    CancelCompile,
 }
 
 /// Something that would close the current map, and so may first need its
@@ -106,6 +113,8 @@ pub struct Workbench {
     error: Option<String>,
     /// The Library panel: the material and prop browsers.
     library: Library,
+    /// The compile running, if any.
+    compiling: Option<compile::CompileProgress>,
     /// The map's size and limits, kept while the map doesn't change.
     stats: crate::panels::map_summary::StatsCache,
 }
@@ -130,6 +139,7 @@ impl Workbench {
             asking_to_save: None,
             error: None,
             library: Library::default(),
+            compiling: None,
             stats: Default::default(),
         };
         if let Some(note) = note {
@@ -267,6 +277,7 @@ impl Workbench {
     ) -> Vec<WorkbenchAction> {
         let mut actions = Vec::new();
         self.file_shortcuts(ui, &mut actions);
+        self.compile_shortcut(ui, &mut actions);
         self.edit_shortcuts(ui);
         // Between drags, the next edit starts a new undo step; during a drag
         // (of a size field, say) its many small edits stay one step.
@@ -570,6 +581,7 @@ impl TabViewer for PanelViewer<'_> {
     }
 }
 
+mod compile;
 mod entity_list;
 mod files;
 mod library;
@@ -582,6 +594,8 @@ pub use files::{
 
 #[cfg(test)]
 mod basic_entity_tests;
+#[cfg(test)]
+mod compile_tests;
 #[cfg(test)]
 mod console_tests;
 #[cfg(test)]

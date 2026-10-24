@@ -1,6 +1,7 @@
 //! The editor window: opens it with eframe (winit + wgpu) and hands each
 //! frame to the workbench from `halberd-ui`.
 
+use crate::compile::{self, CompileSession};
 use crate::content::{ContentLoader, Mounted, Mounting};
 use crate::files;
 use crate::gpu::GpuViewport;
@@ -13,7 +14,7 @@ use halberd_config::{Settings, SettingsStore};
 use halberd_render::MATERIAL_TEXTURE_SIZE;
 use halberd_ui::{
     AppInfo, ContentStatus, FileIntent, LogEntry, NoRenderer, THUMBNAIL_SIZE, ViewSetup,
-    ViewportOptions, ViewportPanel, ViewportRenderer, Workbench,
+    ViewportOptions, ViewportPanel, ViewportRenderer, Workbench, WorkbenchAction,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -54,6 +55,10 @@ struct HalberdApp {
     materials: Option<MaterialLoader>,
     /// Reads models for the prop browser and the views.
     props: Option<PropFeed>,
+    /// Garry's Mod, if found (for compiling and starting the game).
+    install: Option<GmodInstall>,
+    /// The compile running, if any.
+    compile: Option<CompileSession>,
 }
 
 impl eframe::App for HalberdApp {
@@ -135,7 +140,25 @@ impl eframe::App for HalberdApp {
             None => &mut self.no_renderer,
         };
         for action in self.workbench.show(ui, renderer) {
-            files::handle(action, &mut self.workbench, &ctx, &mut self.allow_close);
+            match action {
+                WorkbenchAction::Compile => {
+                    if self.compile.is_none() {
+                        self.compile =
+                            compile::start(&mut self.workbench, self.install.as_ref(), &ctx);
+                    }
+                }
+                WorkbenchAction::CancelCompile => {
+                    if let Some(session) = &self.compile {
+                        session.cancel();
+                    }
+                }
+                other => files::handle(other, &mut self.workbench, &ctx, &mut self.allow_close),
+            }
+        }
+        if let Some(session) = &mut self.compile
+            && !session.poll(&mut self.workbench)
+        {
+            self.compile = None;
         }
         // Drawing the browser and the views is what says which pictures and
         // textures are wanted, so they are asked for after it.
@@ -237,6 +260,7 @@ pub(crate) fn run(
                 }
                 let ctx = cc.egui_ctx.clone();
                 log.start_waker(move || ctx.request_repaint());
+                let kept_install = install.clone();
                 let loading = install.map(|install| {
                     workbench.set_content_status(ContentStatus::Mounting);
                     let ctx = cc.egui_ctx.clone();
@@ -265,6 +289,8 @@ pub(crate) fn run(
                     content: None,
                     materials: None,
                     props: None,
+                    install: kept_install,
+                    compile: None,
                 }))
             }),
         )
