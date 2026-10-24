@@ -8,8 +8,8 @@ use crate::preferences::PreferenceSaver;
 use eframe::egui;
 use halberd_config::{Settings, SettingsStore};
 use halberd_ui::{
-    AppInfo, FileIntent, LogEntry, NoRenderer, ViewportOptions, ViewportPanel, ViewportRenderer,
-    Workbench,
+    AppInfo, FileIntent, LogEntry, NoRenderer, ViewSetup, ViewportOptions, ViewportPanel,
+    ViewportRenderer, Workbench,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,6 +21,9 @@ const APP_NAME: &str = "Halberd";
 const LAYOUT_KEY: &str = "halberd_panel_layout";
 /// Key under which the viewport camera is remembered between sessions.
 const CAMERA_KEY: &str = "halberd_viewport_camera";
+/// Key under which the viewport's views (layout, what each shows, the side
+/// views' cameras) are remembered between sessions.
+const VIEWS_KEY: &str = "halberd_viewport_views";
 /// Window size on first launch, in logical pixels.
 const FIRST_SIZE: [f32; 2] = [1600.0, 900.0];
 /// The smallest the window may get while staying usable.
@@ -74,6 +77,7 @@ impl eframe::App for HalberdApp {
             CAMERA_KEY,
             &self.workbench.viewport().camera_state(),
         );
+        eframe::set_value(storage, VIEWS_KEY, &self.workbench.viewport().view_setup());
     }
 }
 
@@ -120,7 +124,10 @@ pub(crate) fn run(
             Box::new(move |cc| {
                 let saved_layout = cc.storage.and_then(|s| eframe::get_value(s, LAYOUT_KEY));
                 let saved_camera = cc.storage.and_then(|s| eframe::get_value(s, CAMERA_KEY));
-                let viewport = ViewportPanel::new(saved_camera, viewport_options);
+                let saved_views: Option<ViewSetup> =
+                    cc.storage.and_then(|s| eframe::get_value(s, VIEWS_KEY));
+                let viewport = ViewportPanel::new(saved_camera, viewport_options)
+                    .with_view_setup(saved_views.unwrap_or_default());
                 let editor = &settings.editor;
                 let mut workbench = Workbench::new(info, saved_layout)
                     .with_viewport(viewport)

@@ -182,7 +182,7 @@ impl Frame {
             return None;
         }
         let size = size.max(Vec2::ONE);
-        let length = depth * 2.0 * (camera.fov_y * 0.5).tan() * GIZMO_ARM_POINTS / size.y;
+        let length = camera.units_per_point(pivot, size.y) * GIZMO_ARM_POINTS;
         Some(Self {
             pivot,
             length,

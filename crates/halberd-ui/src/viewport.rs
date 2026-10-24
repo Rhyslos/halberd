@@ -1,30 +1,36 @@
-//! The 3D viewport panel: turns mouse and keyboard input into camera moves
-//! and tool actions, shows the rendered image, and draws the tool and
-//! camera mode switchers.
+//! The viewport panel: up to six views (the 3D perspective and the six flat
+//! side views) in a preset layout. Turns mouse and keyboard input into
+//! camera moves and tool actions, shows the rendered images, and draws the
+//! tool, camera mode, view and layout switchers.
+//!
+//! The view under the pointer gets the input; while a button is held or a
+//! tool is busy (a drag, a floor plan being drawn) it keeps it, even if the
+//! pointer wanders into another view.
 //!
 //! Rendering itself happens elsewhere, behind the [`ViewportRenderer`]
 //! trait, so this panel (and its tests) need no GPU.
 
-use egui::{
-    Align, Align2, Color32, FontId, Key, Layout, PointerButton, Rect, Sense, Stroke, Ui, UiBuilder,
-    pos2, vec2,
-};
+use egui::{Align, Color32, Key, Layout, PointerButton, Rect, Sense, Stroke, Ui, UiBuilder, vec2};
 use glam::{Mat4, Vec2, Vec3};
 use halberd_config::LengthUnit;
 use halberd_doc::Document;
 use halberd_geom::Aabb;
 use halberd_tools::{
-    CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, PLAYER_HEIGHT, Tool,
-    ToolController, ViewportInput, player_bounds,
+    CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, Tool, ToolController,
+    ViewportInput,
 };
 
 mod draw_options;
 mod elements;
 mod gizmo;
+mod layout;
+mod panes;
 mod plan;
 mod shape_ops;
 mod tools;
 
+pub use layout::{MAX_VIEWS, PaneView, ViewLayout, ViewSetup};
+pub use panes::LAYOUT_PICKER_LABEL;
 pub use shape_ops::SHAPE_OP_KEYS;
 pub(crate) use shape_ops::shape_menu;
 pub use tools::INSIDE_ENTITIES_LABEL;
@@ -46,6 +52,15 @@ pub struct ViewportView {
     pub preview_shape: Vec<halberd_geom::Brush>,
     /// Where to draw the player figure for scale, if shown.
     pub player: Option<Aabb>,
+    /// Which view this is (0 to [`MAX_VIEWS`] - 1), so a renderer can keep
+    /// an image for each.
+    pub id: usize,
+    /// The axis the grid is flat across (0 X, 1 Y, 2 Z).
+    pub grid_axis: usize,
+    /// The grid's position along that axis.
+    pub grid_offset: f32,
+    /// Whether the grid fades into the distance (the 3D view only).
+    pub grid_fade: bool,
 }
 
 /// Draws viewport images. The editor implements this with the GPU; tests
@@ -95,7 +110,8 @@ impl Default for ViewportOptions {
     }
 }
 
-/// Accessible name of the viewport, and the label tests look for.
+/// Accessible name of the first view, and the label tests look for. The
+/// other views are named "View 2" to "View 6".
 pub const VIEWPORT_LABEL: &str = "3D viewport";
 /// Pivot marker colour.
 const PIVOT_COLOR: Color32 = Color32::from_rgb(255, 196, 64);
@@ -106,7 +122,12 @@ const PLAYER_GAP: f32 = 32.0;
 
 /// The viewport panel's state.
 pub struct ViewportPanel {
-    controller: CameraController,
+    /// Every view's state, shown or not (a layout with fewer views keeps
+    /// the rest as they were).
+    panes: Vec<layout::Pane>,
+    layout: ViewLayout,
+    /// The view that gets the mouse and keys.
+    active: usize,
     tools: ToolController,
     grid_size: f32,
     left_was_held: bool,
@@ -121,15 +142,26 @@ pub struct ViewportPanel {
     text_focus_was: bool,
     length_unit: LengthUnit,
     show_player: bool,
-    right_was_held: bool,
-    middle_was_held: bool,
 }
 
 impl ViewportPanel {
     /// A viewport starting from a saved camera (or the default one).
     pub fn new(saved: Option<CameraState>, options: ViewportOptions) -> Self {
+        let first = CameraController::new(saved.unwrap_or_default(), options.wasd_enabled);
+        let panes = (0..MAX_VIEWS)
+            .map(|i| {
+                let controller = if i == 0 {
+                    first.clone()
+                } else {
+                    CameraController::new(CameraState::default(), options.wasd_enabled)
+                };
+                layout::Pane::new(i, controller)
+            })
+            .collect();
         Self {
-            controller: CameraController::new(saved.unwrap_or_default(), options.wasd_enabled),
+            panes,
+            layout: ViewLayout::Single,
+            active: 0,
             tools: ToolController::new(options.grid_size),
             grid_size: options.grid_size,
             left_was_held: false,
@@ -139,19 +171,28 @@ impl ViewportPanel {
             text_focus_was: false,
             length_unit: LengthUnit::Units,
             show_player: true,
-            right_was_held: false,
-            middle_was_held: false,
         }
     }
 
-    /// The camera state to save between sessions.
-    pub fn camera_state(&self) -> CameraState {
-        self.controller.state()
+    /// The camera of the view that gets the input.
+    pub fn active_camera(&self) -> halberd_tools::Camera {
+        self.panes[self.active].camera()
     }
 
-    /// The camera controller, for reading the camera and mode.
+    /// The view that gets the input (0 to [`MAX_VIEWS`] - 1).
+    pub fn active_view(&self) -> usize {
+        self.active
+    }
+
+    /// The first view's 3D camera state, to save between sessions.
+    pub fn camera_state(&self) -> CameraState {
+        self.panes[0].perspective.state()
+    }
+
+    /// The first view's 3D camera controller, for reading the camera and
+    /// mode.
     pub fn controller(&self) -> &CameraController {
-        &self.controller
+        &self.panes[0].perspective
     }
 
     /// The active left-mouse tool.
@@ -178,7 +219,10 @@ impl ViewportPanel {
 
     /// Points the camera at the whole of `bounds` (a newly opened map).
     pub fn frame(&mut self, bounds: Aabb) {
-        self.controller.frame(bounds);
+        for pane in &mut self.panes {
+            pane.perspective.frame(bounds);
+            pane.side.frame(bounds);
+        }
     }
 
     /// The tools, for changing the gizmo mode.
@@ -216,114 +260,96 @@ impl ViewportPanel {
         renderer: &mut dyn ViewportRenderer,
         doc: &mut Document,
     ) -> Vec<String> {
-        let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
-        response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Other, true, VIEWPORT_LABEL)
-        });
+        let (full, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
+        let rects = self.layout.rects(full);
+        let responses: Vec<egui::Response> = rects
+            .iter()
+            .enumerate()
+            .map(|(i, rect)| {
+                let response = ui.interact(
+                    *rect,
+                    ui.id().with(("halberd_view", i)),
+                    Sense::click_and_drag(),
+                );
+                response.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::WidgetType::Other, true, view_label(i))
+                });
+                response
+            })
+            .collect();
+        self.choose_active(&responses);
 
-        let input = self.gather_input(ui, &response, rect);
-        let animating = self.controller.update(&input, &DocumentScene::new(doc));
-        let notes = self.update_tools(ui, &response, rect, doc);
+        let mut animating = false;
+        for (i, (rect, response)) in rects.iter().zip(&responses).enumerate() {
+            let input = self.gather_input(ui, response, *rect, i);
+            let pane = &mut self.panes[i];
+            animating |= match pane.view {
+                PaneView::Perspective => pane.perspective.update(&input, &DocumentScene::new(doc)),
+                PaneView::Side(_) => {
+                    pane.side.update(&input);
+                    false
+                }
+            };
+        }
+        let active = self.active;
+        let notes = self.update_tools(ui, &responses[active], rects[active], doc);
         // Pointer movement already triggers redraws; only flying with a key
         // held needs frames without new input.
         if animating {
             ui.ctx().request_repaint();
         }
-
-        let size = Vec2::new(rect.width().max(1.0), rect.height().max(1.0));
-        let ppp = ui.ctx().pixels_per_point();
-        let camera = *self.controller.camera();
-        let view = ViewportView {
-            size_px: [
-                (rect.width() * ppp).round().max(1.0) as u32,
-                (rect.height() * ppp).round().max(1.0) as u32,
-            ],
-            view_projection: camera.view_projection(size),
-            camera_position: camera.position,
-            grid_size: self.grid_size,
-            preview: self.tools.preview(),
-            preview_shape: self.tools.preview_brushes(),
-            player: self
-                .show_player
-                .then(|| player_bounds(player_feet(self.tools.preview(), doc, camera.position))),
-        };
-
-        let painter = ui.painter_at(rect);
-        match renderer.render(&view, doc) {
-            Ok(texture) => {
-                let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
-                painter.image(texture, rect, uv, Color32::WHITE);
-            }
-            Err(reason) => {
-                painter.rect_filled(rect, 0.0, Color32::from_rgb(18, 20, 24));
-                painter.text(
-                    rect.center(),
-                    Align2::CENTER_CENTER,
-                    format!("3D view unavailable: {reason}"),
-                    FontId::proportional(14.0),
-                    Color32::from_gray(150),
-                );
-            }
+        for (i, rect) in rects.iter().enumerate() {
+            self.draw_pane(ui, renderer, doc, i, *rect);
         }
-
-        if let Some(pivot) = self.controller.active_pivot()
-            && let Some(at) = camera.project(pivot, size)
-        {
-            let centre = rect.min + vec2(at.x, at.y);
-            painter.circle_stroke(centre, 6.0, Stroke::new(1.5, PIVOT_COLOR));
-            painter.circle_filled(centre, 2.0, PIVOT_COLOR);
-        }
-
-        if let Some(player) = view.player
-            && let Some(at) = camera.project(player.center().with_z(player.max.z + 8.0), size)
-            && rect.contains(rect.min + vec2(at.x, at.y))
-        {
-            painter.text(
-                rect.min + vec2(at.x, at.y),
-                Align2::CENTER_BOTTOM,
-                format!(
-                    "Player · {}",
-                    self.length_unit.format(f64::from(PLAYER_HEIGHT))
-                ),
-                FontId::proportional(11.0),
-                PLAYER_LABEL_COLOR,
+        if rects.len() > 1 {
+            let painter = ui.painter_at(full);
+            painter.rect_stroke(
+                rects[active].shrink(0.5),
+                0.0,
+                Stroke::new(1.0, ACTIVE_VIEW_COLOR),
+                egui::StrokeKind::Inside,
             );
         }
-
-        if let Some(overlay) = self.tools.element_overlay(&camera, size, doc) {
-            elements::draw(&painter, rect, &overlay);
-            if let Some((a, b)) = self.tools.marquee() {
-                elements::draw_box(&painter, rect, a, b);
-            }
-            if doc.selection().is_empty() {
-                elements::hint(&painter, rect, self.tools.select_mode());
-            }
-        }
-        let gizmo_shapes = self.tools.gizmo_shapes(&camera, size, doc);
-        gizmo::draw(&painter, rect, &gizmo_shapes);
-        if self.tools.tool() == Tool::Box && self.tools.shape() == halberd_geom::Shape::FloorPlan {
-            let preview = self.tools.plan_preview();
-            if let Some(plan) = &preview {
-                plan::draw(&painter, rect, &camera, plan);
-            }
-            plan::hint(&painter, rect, preview.as_ref());
-        }
-
-        painter.text(
-            rect.left_top() + vec2(8.0, 6.0),
-            Align2::LEFT_TOP,
-            "Perspective",
-            FontId::proportional(12.0),
-            Color32::from_gray(160),
-        );
-
-        self.tool_switcher(ui, rect);
-        self.mode_switcher(ui, rect);
+        self.tool_switcher(ui, rects[0]);
+        self.layout_picker(ui, full);
         notes
     }
 
+    /// Picks the view that gets this frame's input: the one under the
+    /// pointer, unless a button is held or a tool is busy in the current one.
+    fn choose_active(&mut self, responses: &[egui::Response]) {
+        let count = responses.len();
+        if self.active >= count {
+            self.active = 0;
+        }
+        let pane = &self.panes[self.active];
+        let held = self.left_was_held || pane.right_was_held || pane.middle_was_held;
+        if held || self.tools.is_busy() {
+            return;
+        }
+        if let Some(i) = responses.iter().position(egui::Response::hovered) {
+            self.active = i;
+        }
+    }
+
     /// Reads this frame's mouse and keyboard input for the viewport.
-    fn gather_input(&mut self, ui: &Ui, response: &egui::Response, rect: Rect) -> ViewportInput {
+    fn gather_input(
+        &mut self,
+        ui: &Ui,
+        response: &egui::Response,
+        rect: Rect,
+        index: usize,
+    ) -> ViewportInput {
+        if index != self.active {
+            let pane = &mut self.panes[index];
+            pane.right_was_held = false;
+            pane.middle_was_held = false;
+            return ViewportInput {
+                size: Vec2::new(rect.width(), rect.height()),
+                dt: ui.input(|i| i.stable_dt),
+                ..ViewportInput::default()
+            };
+        }
         let pressed_here = response.is_pointer_button_down_on();
         let (right_down, middle_down, pointer_delta, dt, keys) = ui.input(|i| {
             let keys = FlyKeys {
@@ -343,12 +369,19 @@ impl ViewportPanel {
                 keys,
             )
         });
-        let right_held = right_down && (pressed_here || self.right_was_held);
-        let middle_held = middle_down && (pressed_here || self.middle_was_held);
-        let right_pressed = right_held && !self.right_was_held;
-        let middle_pressed = middle_held && !self.middle_was_held;
-        self.right_was_held = right_held;
-        self.middle_was_held = middle_held;
+        let pane = &mut self.panes[index];
+        let right_held = right_down && (pressed_here || pane.right_was_held);
+        let middle_held = middle_down && (pressed_here || pane.middle_was_held);
+        let right_pressed = right_held && !pane.right_was_held;
+        let middle_pressed = middle_held && !pane.middle_was_held;
+        pane.right_was_held = right_held;
+        pane.middle_was_held = middle_held;
+        // Flying is for the 3D view only.
+        let keys = if pane.view == PaneView::Perspective {
+            keys
+        } else {
+            FlyKeys::default()
+        };
 
         let scroll = if response.hovered() {
             let delta = ui.input(|i| i.smooth_scroll_delta.y);
@@ -389,7 +422,7 @@ impl ViewportPanel {
     }
 
     /// The camera mode buttons in the viewport's bottom-left corner.
-    fn mode_switcher(&mut self, ui: &mut Ui, rect: Rect) {
+    fn mode_switcher(&mut self, ui: &mut Ui, rect: Rect, index: usize) {
         let area = Rect::from_min_size(
             rect.left_bottom() + vec2(8.0, -38.0),
             vec2((rect.width() - 16.0).max(0.0), 30.0),
@@ -405,23 +438,36 @@ impl ViewportPanel {
             .inner_margin(4.0)
             .show(&mut child, |ui| {
                 ui.label("Camera:");
-                let current = self.controller.mode();
-                for mode in self.controller.available_modes() {
+                let controller = &mut self.panes[index].perspective;
+                let current = controller.mode();
+                for mode in controller.available_modes() {
                     if ui
                         .selectable_label(current == mode, mode.label())
                         .on_hover_text(mode.description())
                         .clicked()
                     {
-                        self.controller.set_mode(mode);
+                        controller.set_mode(mode);
                     }
                 }
                 if current == CameraMode::Fly {
-                    ui.label(format!("speed {:.0}", self.controller.fly_speed()))
+                    ui.label(format!("speed {:.0}", controller.fly_speed()))
                         .on_hover_text("Scroll while flying to change speed");
                 }
             });
     }
 }
+
+/// The accessible name of view `index`.
+fn view_label(index: usize) -> String {
+    if index == 0 {
+        VIEWPORT_LABEL.to_string()
+    } else {
+        format!("View {}", index + 1)
+    }
+}
+
+/// Outline of the view that gets the input, when there are several.
+const ACTIVE_VIEW_COLOR: Color32 = Color32::from_rgb(90, 120, 170);
 
 /// Where the player figure stands: beside the box being drawn, else beside
 /// the selection, on its floor and on the side facing the camera; with

@@ -11,10 +11,10 @@ use glam::{Vec2, Vec3};
 use halberd_doc::{Command, Document};
 use halberd_geom::{Aabb, Brush};
 use halberd_render::{
-    BACKGROUND, FrameParams, PlayerOutline, ViewportRenderer, ViewportTarget, best_sample_count,
-    read_pixels,
+    BACKGROUND, FrameParams, GridPlane, PlayerOutline, ViewportRenderer, ViewportTarget,
+    best_sample_count, read_pixels,
 };
-use halberd_tools::Camera;
+use halberd_tools::{Camera, Side, SideCamera};
 
 struct Gpu {
     adapter: wgpu::Adapter,
@@ -119,12 +119,33 @@ fn render_full(
         grid_size: 16.0,
         preview,
         player,
+        grid: grid_for(&camera),
     };
     renderer.render(&gpu.device, &gpu.queue, target, &params);
     Shot {
         pixels: read_pixels(&gpu.device, &gpu.queue, target).unwrap(),
         size,
         camera,
+    }
+}
+
+/// The ground for a perspective camera; for a side view's camera, the
+/// plane behind what it shows, as the editor draws it.
+fn grid_for(camera: &Camera) -> GridPlane {
+    if camera.ortho.is_none() {
+        return GridPlane::default();
+    }
+    let side = Side::ALL
+        .into_iter()
+        .find(|s| SideCamera::new(*s).camera().forward().dot(camera.forward()) > 0.999)
+        .unwrap();
+    let mut view = SideCamera::new(side);
+    view.center = camera.position + camera.forward() * 200_000.0;
+    let (axis, offset) = view.grid_plane();
+    GridPlane {
+        axis,
+        offset,
+        fade: false,
     }
 }
 
@@ -255,6 +276,7 @@ fn rendering_many_frames_is_stable() {
             grid_size: 16.0,
             preview: None,
             player: None,
+            grid: GridPlane::default(),
         };
         renderer.render(&gpu.device, &gpu.queue, &target, &params);
     }
@@ -407,4 +429,28 @@ fn the_player_figure_is_drawn_and_hidden_behind_brushes() {
         shot.best_near(hidden_edge, light_blue) < 40,
         "the box hides it"
     );
+}
+
+#[test]
+fn side_views_show_the_grid_behind_the_map_in_every_direction() {
+    let Some(gpu) = gpu() else { return };
+    let (renderer, target, _) = box_scene(&gpu, false);
+    let background = background_srgb();
+    let background = i32::from(background[0]) + i32::from(background[1]) + i32::from(background[2]);
+    for side in Side::ALL {
+        let mut view = SideCamera::new(side);
+        view.center = Vec3::new(0.0, 0.0, 64.0);
+        view.height = 600.0;
+        let shot = render(&gpu, &renderer, &target, view.camera());
+        // The box fills the middle, lit.
+        assert!(
+            brightness(shot.pixel(200, 150).unwrap()) > background + 60,
+            "{side:?}: the box is drawn"
+        );
+        // Grid lines show around it, all the way to the edges (no fading).
+        let lines = (0..400)
+            .filter(|&x| brightness(shot.pixel(x, 10).unwrap()) > background + 6)
+            .count();
+        assert!(lines >= 4, "{side:?}: grid lines across the top: {lines}");
+    }
 }

@@ -27,6 +27,32 @@ pub struct FrameParams {
     pub preview: Option<Aabb>,
     /// A player-sized figure for scale, hidden behind solid brushes.
     pub player: Option<PlayerOutline>,
+    /// Where the grid is drawn.
+    pub grid: GridPlane,
+}
+
+/// Where the grid is drawn: flat across one world axis, at a position along
+/// it, fading into the distance or not.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GridPlane {
+    /// The axis the grid is flat across (0 X, 1 Y, 2 Z).
+    pub axis: usize,
+    /// Its position along that axis.
+    pub offset: f32,
+    /// Whether it fades towards the horizon (the 3D view); side views show
+    /// it evenly.
+    pub fade: bool,
+}
+
+impl Default for GridPlane {
+    /// The ground: flat across Z at height 0, fading into the distance.
+    fn default() -> Self {
+        Self {
+            axis: 2,
+            offset: 0.0,
+            fade: true,
+        }
+    }
 }
 
 /// The three grid levels drawn: minor (the editor grid), major and super.
@@ -52,6 +78,7 @@ pub(crate) struct FrameUniforms {
     view_projection: [[f32; 4]; 4],
     camera: [f32; 4],
     grid: [f32; 4],
+    plane: [f32; 4],
 }
 
 impl FrameUniforms {
@@ -62,6 +89,16 @@ impl FrameUniforms {
             view_projection: params.view_projection.to_cols_array_2d(),
             camera: [p.x, p.y, p.z, 1.0],
             grid: [minor, major, super_level, GRID_HALF_EXTENT],
+            plane: [
+                params.grid.axis.min(2) as f32,
+                if params.grid.offset.is_finite() {
+                    params.grid.offset
+                } else {
+                    0.0
+                },
+                if params.grid.fade { 1.0 } else { 0.0 },
+                0.0,
+            ],
         }
     }
 }
@@ -72,8 +109,8 @@ mod tests {
 
     #[test]
     fn uniforms_match_the_shader_layout() {
-        // mat4x4<f32> + vec4<f32> + vec4<f32>, no padding.
-        assert_eq!(std::mem::size_of::<FrameUniforms>(), 96);
+        // mat4x4<f32> + three vec4<f32>, no padding.
+        assert_eq!(std::mem::size_of::<FrameUniforms>(), 112);
         assert_eq!(std::mem::size_of::<FrameUniforms>() % 16, 0);
     }
 
@@ -105,7 +142,13 @@ mod tests {
             grid_size: 32.0,
             preview: None,
             player: None,
+            grid: GridPlane {
+                axis: 1,
+                offset: -50.0,
+                fade: false,
+            },
         });
+        assert_eq!(u.plane, [1.0, -50.0, 0.0, 0.0]);
         assert_eq!(u.camera, [1.0, 2.0, 3.0, 1.0]);
         assert_eq!(u.grid, [32.0, 256.0, 1024.0, GRID_HALF_EXTENT]);
         assert_eq!(u.view_projection, Mat4::IDENTITY.to_cols_array_2d());

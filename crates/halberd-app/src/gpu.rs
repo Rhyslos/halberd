@@ -5,18 +5,26 @@ use eframe::egui;
 use eframe::egui_wgpu::RenderState;
 use eframe::wgpu;
 use halberd_doc::Document;
-use halberd_render::{FrameParams, PlayerOutline, ViewportRenderer as GpuRenderer, ViewportTarget};
+use halberd_render::{
+    FrameParams, GridPlane, PlayerOutline, ViewportRenderer as GpuRenderer, ViewportTarget,
+};
 use halberd_tools::PLAYER_EYE_HEIGHT;
 use halberd_ui::{ViewportRenderer, ViewportView};
 
-/// Draws the viewport with the same GPU device the window uses.
+/// Draws the viewport's views with the same GPU device the window uses.
 pub(crate) struct GpuViewport {
     state: RenderState,
     renderer: GpuRenderer,
-    target: Option<ViewportTarget>,
+    /// An image for each view, made when the view is first drawn.
+    views: Vec<Option<ViewImage>>,
+}
+
+/// One view's image and the egui texture showing it.
+struct ViewImage {
+    target: ViewportTarget,
     /// The size last asked for (the target may be clamped smaller).
     requested_size: [u32; 2],
-    texture: Option<egui::TextureId>,
+    texture: egui::TextureId,
 }
 
 impl GpuViewport {
@@ -26,9 +34,7 @@ impl GpuViewport {
         Self {
             renderer: GpuRenderer::new(&state.device, samples),
             state: state.clone(),
-            target: None,
-            requested_size: [0, 0],
-            texture: None,
+            views: Vec::new(),
         }
     }
 
@@ -43,22 +49,28 @@ impl GpuViewport {
         )
     }
 
-    /// Makes sure a target of the requested size exists and is registered
-    /// with egui. Returns the egui texture showing it.
-    fn prepare_target(&mut self, size: [u32; 2]) -> egui::TextureId {
+    /// Makes sure view `id` has an image of the requested size, registered
+    /// with egui. Returns where it is kept.
+    fn prepare_target(&mut self, id: usize, size: [u32; 2]) -> usize {
+        let id = id.min(halberd_ui::MAX_VIEWS - 1);
+        if self.views.len() <= id {
+            self.views.resize_with(id + 1, || None);
+        }
         let device = &self.state.device;
-        if self.target.is_none() || self.requested_size != size {
+        let slot = &mut self.views[id];
+        let stale = slot.as_ref().is_none_or(|v| v.requested_size != size);
+        if stale {
             let target = self.renderer.create_target(device, size);
             let mut egui_renderer = self.state.renderer.write();
-            let id = match self.texture {
-                Some(id) => {
+            let texture = match slot.as_ref() {
+                Some(old) => {
                     egui_renderer.update_egui_texture_from_wgpu_texture(
                         device,
                         target.display_view(),
                         wgpu::FilterMode::Nearest,
-                        id,
+                        old.texture,
                     );
-                    id
+                    old.texture
                 }
                 None => egui_renderer.register_native_texture(
                     device,
@@ -66,25 +78,20 @@ impl GpuViewport {
                     wgpu::FilterMode::Nearest,
                 ),
             };
-            self.texture = Some(id);
-            self.target = Some(target);
-            self.requested_size = size;
-            return id;
+            *slot = Some(ViewImage {
+                target,
+                requested_size: size,
+                texture,
+            });
         }
-        // Both are always set together above.
-        self.texture.unwrap_or_default()
+        id
     }
 }
 
 impl ViewportRenderer for GpuViewport {
     fn render(&mut self, view: &ViewportView, doc: &Document) -> Result<egui::TextureId, String> {
-        let texture = self.prepare_target(view.size_px);
         self.renderer.update_scene(&self.state.device, doc);
         self.renderer.set_preview_shape(&view.preview_shape);
-        let target = self
-            .target
-            .as_ref()
-            .ok_or("the viewport image could not be created")?;
         let params = FrameParams {
             view_projection: view.view_projection,
             camera_position: view.camera_position,
@@ -94,9 +101,24 @@ impl ViewportRenderer for GpuViewport {
                 bounds,
                 eye_height: PLAYER_EYE_HEIGHT,
             }),
+            grid: GridPlane {
+                axis: view.grid_axis,
+                offset: view.grid_offset,
+                fade: view.grid_fade,
+            },
         };
-        self.renderer
-            .render(&self.state.device, &self.state.queue, target, &params);
-        Ok(texture)
+        let slot = self.prepare_target(view.id, view.size_px);
+        let image = self
+            .views
+            .get(slot)
+            .and_then(Option::as_ref)
+            .ok_or("the viewport image could not be created")?;
+        self.renderer.render(
+            &self.state.device,
+            &self.state.queue,
+            &image.target,
+            &params,
+        );
+        Ok(image.texture)
     }
 }
