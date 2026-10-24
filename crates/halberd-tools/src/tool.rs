@@ -149,6 +149,8 @@ pub struct ToolController {
     marquee: Option<(Vec2, Vec2)>,
     /// A floor plan being drawn, corner by corner.
     plan: Option<plan::PlanDraft>,
+    /// The material new brushes get (`None`: the default).
+    material: Option<String>,
 }
 
 /// What a shape is built from.
@@ -175,6 +177,7 @@ impl ToolController {
             hovered_element: None,
             marquee: None,
             plan: None,
+            material: None,
         }
     }
 
@@ -691,7 +694,7 @@ impl ToolController {
 
     fn finish_box(&self, drag: BoxDrag) -> Option<ToolAction> {
         Some(match self.build(drag) {
-            Ok(brushes) => ToolAction::Execute(Command::AddBrushes(brushes)),
+            Ok(brushes) => ToolAction::Execute(self.new_brushes(brushes)),
             Err(None) => return None,
             Err(Some(e)) => ToolAction::Refused(self.explain(e)),
         })
@@ -715,6 +718,7 @@ fn sane_grid(grid: f32) -> f32 {
     }
 }
 
+mod material;
 mod operations;
 mod plan;
 

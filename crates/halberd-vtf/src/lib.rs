@@ -1,8 +1,21 @@
 //! Read VTF textures and VMT materials.
 //!
-//! Materials are VMT text files pointing at VTF textures. This crate reads both into plain data: texture pixels or compressed blocks, and material parameters.
+//! Materials are VMT text files pointing at VTF textures. [`Vtf::parse`]
+//! reads a texture's header and finds its images; [`Vtf::decode`] turns one
+//! of its sizes into plain RGBA pixels. [`Material::parse`] reads a VMT's
+//! shader and parameters, such as its base texture.
 //!
-//! Status: skeleton. See this crate's README for what it must never do.
+//! Everything here treats its input as hostile: sizes are checked before
+//! anything is allocated, and bad files give plain-language errors.
+
+mod decode;
+mod error;
+mod vmt;
+mod vtf;
+
+pub use error::VtfError;
+pub use vmt::Material;
+pub use vtf::{ImageFormat, MAX_DIMENSION, RgbaImage, Vtf};
 
 /// The name of this crate, used in logs and diagnostics.
 pub const CRATE_NAME: &str = "halberd-vtf";

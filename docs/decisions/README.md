@@ -29,3 +29,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0020](0020-multiple-views.md) | Several views in one viewport panel | Accepted |
 | [0021](0021-render-modes.md) | Render modes, and textures before textures exist | Accepted |
 | [0022](0022-game-content.md) | Reading game content from VPK archives | Accepted |
+| [0023](0023-materials.md) | Materials: reading textures, the browser and per-face materials | Accepted |

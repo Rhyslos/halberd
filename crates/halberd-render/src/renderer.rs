@@ -12,6 +12,7 @@ use crate::scene::{
     PLAYER_OUTLINE_VERTICES, PREVIEW_COLOR, SceneGeometry, box_outline, player_outline,
     shape_outline,
 };
+use crate::textures::MaterialTextures;
 use halberd_doc::Document;
 use halberd_geom::Brush;
 use wgpu::util::DeviceExt;
@@ -92,7 +93,10 @@ impl ViewportTarget {
 pub struct ViewportRenderer {
     sample_count: u32,
     uniform_buffer: wgpu::Buffer,
+    bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
+    /// Material textures for the Textured mode.
+    textures: MaterialTextures,
     grid_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
     overlay_pipeline: wgpu::RenderPipeline,
@@ -191,27 +195,41 @@ impl ViewportRenderer {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let uniform = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("halberd frame layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                uniform(0),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                uniform(3),
+            ],
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("halberd frame bind group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
+        let textures = MaterialTextures::new(device);
+        let bind_group = make_bind_group(device, &bind_group_layout, &uniform_buffer, &textures);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("halberd viewport layout"),
             bind_group_layouts: &[Some(&bind_group_layout)],
@@ -253,7 +271,9 @@ impl ViewportRenderer {
         Self {
             sample_count,
             uniform_buffer,
+            bind_group_layout,
             bind_group,
+            textures,
             grid_pipeline,
             line_pipeline,
             overlay_pipeline,
@@ -275,8 +295,42 @@ impl ViewportRenderer {
         if self.scene.shows == Some(state) {
             return;
         }
-        self.set_scene(device, &SceneGeometry::from_document(doc));
+        let textures = &mut self.textures;
+        let geometry = SceneGeometry::from_document_with(doc, &mut |name| textures.layer_for(name));
+        self.set_scene(device, &geometry);
         self.scene.shows = Some(state);
+    }
+
+    /// Materials whose textures the Textured mode wants and has not asked
+    /// for yet (upper case). Each is asked for once: hand them over with
+    /// [`Self::upload_texture`] or [`Self::texture_missing`].
+    pub fn wanted_textures(&mut self) -> Vec<String> {
+        self.textures.wanted()
+    }
+
+    /// Material `name`'s texture: RGBA pixels, `width` × `height`, and the
+    /// texture's real size (`real`, which texture coordinates use).
+    pub fn upload_texture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        name: &str,
+        image: (u32, u32, &[u8]),
+        real: (u32, u32),
+    ) {
+        if self.textures.upload(device, queue, name, image, real) {
+            self.bind_group = make_bind_group(
+                device,
+                &self.bind_group_layout,
+                &self.uniform_buffer,
+                &self.textures,
+            );
+        }
+    }
+
+    /// Material `name` has no texture that can be shown; its pattern stays.
+    pub fn texture_missing(&mut self, name: &str) {
+        self.textures.missing(name);
     }
 
     /// Replaces the drawn map geometry. [`Self::update_scene`] is the usual
@@ -458,4 +512,36 @@ impl ViewportRenderer {
         }
         queue.submit([encoder.finish()]);
     }
+}
+
+/// The bind group: frame values, material textures, their sampler and
+/// their sizes.
+fn make_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    uniforms: &wgpu::Buffer,
+    textures: &MaterialTextures,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("halberd frame bind group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniforms.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(textures.view()),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(&textures.sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: textures.table.as_entire_binding(),
+            },
+        ],
+    })
 }

@@ -1,17 +1,18 @@
 //! The editor window: opens it with eframe (winit + wgpu) and hands each
 //! frame to the workbench from `halberd-ui`.
 
-use crate::content::{ContentLoader, Mounting};
+use crate::content::{ContentLoader, Mounted, Mounting};
 use crate::files;
 use crate::gpu::GpuViewport;
 use crate::logging::LogBook;
 use crate::preferences::PreferenceSaver;
 use eframe::egui;
-use halberd_assets::{GameContent, GmodInstall};
+use halberd_assets::{GameContent, GmodInstall, MaterialLoader};
 use halberd_config::{Settings, SettingsStore};
+use halberd_render::MATERIAL_TEXTURE_SIZE;
 use halberd_ui::{
-    AppInfo, ContentStatus, FileIntent, LogEntry, NoRenderer, ViewSetup, ViewportOptions,
-    ViewportPanel, ViewportRenderer, Workbench,
+    AppInfo, ContentStatus, FileIntent, LogEntry, NoRenderer, THUMBNAIL_SIZE, ViewSetup,
+    ViewportOptions, ViewportPanel, ViewportRenderer, Workbench,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,7 +35,9 @@ const MIN_SIZE: [f32; 2] = [960.0, 600.0];
 /// The running editor.
 struct HalberdApp {
     workbench: Workbench,
-    renderer: Box<dyn ViewportRenderer>,
+    /// The GPU renderer, or `None` (then `no_renderer` explains why).
+    gpu: Option<GpuViewport>,
+    no_renderer: NoRenderer,
     preferences: PreferenceSaver,
     /// The window may close: the user confirmed (or had nothing unsaved).
     allow_close: bool,
@@ -44,9 +47,10 @@ struct HalberdApp {
     log: Arc<LogBook>,
     /// The game's content, while it is being mounted.
     loading: Option<ContentLoader>,
-    /// The game's content, once mounted (the material and prop browsers
-    /// will read from it).
+    /// The game's content, once mounted.
     content: Option<Arc<GameContent>>,
+    /// Reads material pictures for the browser, once content is mounted.
+    materials: Option<MaterialLoader>,
 }
 
 impl eframe::App for HalberdApp {
@@ -56,15 +60,21 @@ impl eframe::App for HalberdApp {
             self.workbench.console_mut().push_logged(entry);
         }
         match self.loading.as_ref().map(ContentLoader::poll) {
-            Some(Mounting::Ready(content)) => {
+            Some(Mounting::Ready(Mounted { content, materials })) => {
                 self.loading = None;
+                self.workbench.materials_mut().set_names(materials);
                 self.workbench.push_console(content.summary());
                 for problem in content.problems() {
                     self.workbench.push_warning(problem.clone());
                 }
                 self.workbench
                     .set_content_status(ContentStatus::Mounted(content.summary()));
-                self.content = Some(Arc::new(content));
+                let content = Arc::new(content);
+                let wake = ctx.clone();
+                self.materials = Some(MaterialLoader::new(Arc::clone(&content), move || {
+                    wake.request_repaint();
+                }));
+                self.content = Some(content);
             }
             Some(Mounting::Failed) => {
                 self.loading = None;
@@ -76,6 +86,31 @@ impl eframe::App for HalberdApp {
             }
             Some(Mounting::Busy) | None => {}
         }
+        if let Some(loader) = &mut self.materials {
+            for name in self.workbench.materials_mut().take_wanted() {
+                loader.request(&name, THUMBNAIL_SIZE);
+            }
+            if let Some(gpu) = &mut self.gpu {
+                for name in gpu.wanted_textures() {
+                    loader.request(&name, MATERIAL_TEXTURE_SIZE);
+                }
+            }
+            for picture in loader.poll() {
+                if picture.max_size == MATERIAL_TEXTURE_SIZE {
+                    if let Some(gpu) = &mut self.gpu {
+                        gpu.texture_arrived(&picture);
+                    }
+                    continue;
+                }
+                let result = match picture.image {
+                    Some(image) => Ok((image.width, image.height, image.pixels)),
+                    None => Err(picture.problem.unwrap_or_else(|| "no picture".into())),
+                };
+                self.workbench
+                    .materials_mut()
+                    .add_picture(&picture.name, result);
+            }
+        }
         // The window's close button: with unsaved changes, ask first.
         let close_requested = ctx.input(|i| i.viewport().close_requested());
         if close_requested && !self.allow_close && self.workbench.is_modified() {
@@ -84,7 +119,11 @@ impl eframe::App for HalberdApp {
                 files::handle(action, &mut self.workbench, &ctx, &mut self.allow_close);
             }
         }
-        for action in self.workbench.show(ui, self.renderer.as_mut()) {
+        let renderer: &mut dyn ViewportRenderer = match &mut self.gpu {
+            Some(gpu) => gpu,
+            None => &mut self.no_renderer,
+        };
+        for action in self.workbench.show(ui, renderer) {
             files::handle(action, &mut self.workbench, &ctx, &mut self.allow_close);
         }
         let title = self.workbench.window_title();
@@ -180,25 +219,25 @@ pub(crate) fn run(
                 if let Some(path) = &map {
                     files::open_path(&mut workbench, path);
                 }
-                let renderer: Box<dyn ViewportRenderer> = match cc.wgpu_render_state.as_ref() {
-                    Some(state) => {
-                        let gpu = GpuViewport::new(state);
-                        workbench.push_console(gpu.describe());
-                        Box::new(gpu)
-                    }
-                    None => Box::new(NoRenderer {
-                        reason: "the window has no GPU device".to_string(),
-                    }),
+                let gpu = cc.wgpu_render_state.as_ref().map(|state| {
+                    let gpu = GpuViewport::new(state);
+                    workbench.push_console(gpu.describe());
+                    gpu
+                });
+                let no_renderer = NoRenderer {
+                    reason: "the window has no GPU device".to_string(),
                 };
                 Ok(Box::new(HalberdApp {
                     workbench,
-                    renderer,
+                    gpu,
+                    no_renderer,
                     preferences: PreferenceSaver::new(settings, store),
                     allow_close: false,
                     title: String::new(),
                     log,
                     loading,
                     content: None,
+                    materials: None,
                 }))
             }),
         )

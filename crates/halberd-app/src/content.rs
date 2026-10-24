@@ -2,13 +2,20 @@
 //! at once: reading the archives' file lists takes a moment on a slow
 //! disk.
 
-use halberd_assets::{GameContent, GmodInstall};
+use halberd_assets::{GameContent, GmodInstall, material_names};
 use std::sync::mpsc;
 
 /// Content being mounted in the background.
 pub(crate) struct ContentLoader {
     /// `None` if the background thread could not be started.
-    done: Option<mpsc::Receiver<GameContent>>,
+    done: Option<mpsc::Receiver<Mounted>>,
+}
+
+/// Mounted content, with the names of its materials (listing them takes
+/// a moment too).
+pub(crate) struct Mounted {
+    pub(crate) content: GameContent,
+    pub(crate) materials: Vec<String>,
 }
 
 /// How mounting is going.
@@ -16,7 +23,7 @@ pub(crate) enum Mounting {
     /// Still reading.
     Busy,
     /// Done.
-    Ready(GameContent),
+    Ready(Mounted),
     /// The background work stopped without a result (it could not start,
     /// or it failed).
     Failed,
@@ -31,8 +38,12 @@ impl ContentLoader {
             .name("halberd-mount".into())
             .spawn(move || {
                 let content = GameContent::mount(&install);
+                let materials = material_names(&content);
                 // The window may already be gone; then nobody needs it.
-                send.send(content).ok();
+                send.send(Mounted { content, materials }).ok();
+                // Let go of the channel before waking the window, so a poll
+                // after the result never sees the work as still going.
+                drop(send);
                 wake();
             });
         Self {
@@ -78,8 +89,9 @@ mod tests {
         waker.recv_timeout(Duration::from_secs(10)).unwrap();
         let start = Instant::now();
         let content = loop {
-            if let Mounting::Ready(content) = loader.poll() {
-                break content;
+            if let Mounting::Ready(mounted) = loader.poll() {
+                assert!(mounted.materials.is_empty());
+                break mounted.content;
             }
             assert!(start.elapsed() < Duration::from_secs(10), "never arrived");
         };
@@ -93,7 +105,7 @@ mod tests {
     #[test]
     fn work_that_stops_without_a_result_is_reported_as_failed() {
         // As when the mounting thread panics: its end of the channel goes.
-        let (send, done) = mpsc::channel::<GameContent>();
+        let (send, done) = mpsc::channel::<Mounted>();
         drop(send);
         let loader = ContentLoader { done: Some(done) };
         assert!(matches!(loader.poll(), Mounting::Failed));

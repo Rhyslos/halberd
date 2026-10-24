@@ -39,6 +39,26 @@ impl GpuViewport {
         }
     }
 
+    /// Materials whose textures the Textured mode wants (each asked for
+    /// once).
+    pub(crate) fn wanted_textures(&mut self) -> Vec<String> {
+        self.renderer.wanted_textures()
+    }
+
+    /// A material texture read for the Textured mode.
+    pub(crate) fn texture_arrived(&mut self, picture: &halberd_assets::MaterialImage) {
+        match &picture.image {
+            Some(image) => self.renderer.upload_texture(
+                &self.state.device,
+                &self.state.queue,
+                &picture.name,
+                (image.width, image.height, &image.pixels),
+                picture.texture_size,
+            ),
+            None => self.renderer.texture_missing(&picture.name),
+        }
+    }
+
     /// A short description of the GPU, for the Console.
     pub(crate) fn describe(&self) -> String {
         let info = self.state.adapter.get_info();
