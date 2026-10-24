@@ -8,7 +8,7 @@ use halberd_doc::Document;
 use halberd_tools::ShapeOp;
 
 /// The key for each shape operation that has one.
-pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 8] = [
+pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 11] = [
     (
         ShapeOp::Extrude,
         KeyboardShortcut::new(Modifiers::NONE, Key::E),
@@ -41,7 +41,19 @@ pub const SHAPE_OP_KEYS: [(ShapeOp, KeyboardShortcut); 8] = [
         ShapeOp::MirrorAcrossView,
         KeyboardShortcut::new(Modifiers::COMMAND, Key::M),
     ),
+    (ShapeOp::Union, KeyboardShortcut::new(CTRL_SHIFT, Key::U)),
+    (ShapeOp::Subtract, KeyboardShortcut::new(CTRL_SHIFT, Key::C)),
+    (
+        ShapeOp::Intersect,
+        KeyboardShortcut::new(CTRL_SHIFT, Key::I),
+    ),
 ];
+
+/// Ctrl and Shift together (Cmd and Shift on macOS).
+const CTRL_SHIFT: Modifiers = Modifiers {
+    shift: true,
+    ..Modifiers::COMMAND
+};
 
 /// The key for `op`, if it has one.
 fn shape_op_key(op: ShapeOp) -> Option<KeyboardShortcut> {
@@ -70,19 +82,20 @@ impl ViewportPanel {
     /// The shape operation keys pressed this frame, carried out.
     pub(super) fn shape_op_keys(&mut self, ui: &Ui, doc: &mut Document) -> Vec<String> {
         let pressed: Vec<ShapeOp> = ui.input(|i| {
-            SHAPE_OP_KEYS
+            let mut ops: Vec<ShapeOp> = SHAPE_OP_KEYS
                 .iter()
                 .filter(|(_, key)| {
-                    first_press(i, key.logical_key, |m| {
-                        if key.modifiers.command {
-                            m.command_only()
-                        } else {
-                            m.is_none()
-                        }
-                    })
+                    first_press(i, key.logical_key, |m| m.matches_exact(key.modifiers))
                 })
                 .map(|(op, _)| *op)
-                .collect()
+                .collect();
+            // The window system turns Ctrl+C, with Shift too, into Copy
+            // and sends no key: Ctrl+Shift+C arrives as a Copy.
+            let copy = i.events.iter().any(|e| matches!(e, egui::Event::Copy));
+            if copy && i.modifiers.matches_exact(CTRL_SHIFT) && !ops.contains(&ShapeOp::Subtract) {
+                ops.push(ShapeOp::Subtract);
+            }
+            ops
         });
         pressed
             .into_iter()
@@ -100,7 +113,7 @@ pub(crate) fn shape_menu(
 ) -> Vec<String> {
     let mut notes = Vec::new();
     for op in ShapeOp::MENU {
-        if op == ShapeOp::MirrorAcrossView {
+        if matches!(op, ShapeOp::MirrorAcrossView | ShapeOp::Union) {
             ui.separator();
         }
         let mut button = egui::Button::new(op.label());

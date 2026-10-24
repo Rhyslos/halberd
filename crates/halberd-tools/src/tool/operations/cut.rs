@@ -60,6 +60,7 @@ impl ToolController {
             changed,
             added,
             removed: Vec::new(),
+            select_added: true,
         }))
     }
 

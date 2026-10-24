@@ -6,6 +6,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Added
 
+- **Boolean operations** in the Shape menu: **Subtract** (Ctrl+Shift+C) cuts the selected brushes' space out of every brush they overlap, like Hammer's Carve (cut a doorway with a box); **Union** (Ctrl+Shift+U) makes overlapping brushes fill their space without overlap, as one brush when it has no dents; **Intersect** (Ctrl+Shift+I) keeps only the space they share. Results are convex brushes, pieces stay in their `func_detail`, and cut faces copy the cutter's look.
 - **Shape operations**, in a new **Shape** menu and on keys. Each is one undo step and always leaves valid convex brushes:
   - **Extrude faces (E):** a new brush on each picked face, one grid step deep, with its far face picked and the Move gizmo on, so you can pull it further (E again stacks another).
   - **Bevel edges (Ctrl+B):** cuts picked edges off with a slanted face, one grid step back.

@@ -52,6 +52,9 @@ pub enum Command {
         added: Vec<AddedBrush>,
         /// Objects taken out.
         removed: Vec<ObjectId>,
+        /// True if the added brushes join the selection (and, on undo, the
+        /// objects brought back do); false leaves the selection alone.
+        select_added: bool,
     },
 }
 
@@ -166,8 +169,14 @@ pub(crate) enum Change {
     Removed(Vec<(ObjectId, Object)>),
     /// These objects changed: each with how it was before and after.
     Modified(Vec<(ObjectId, Object, Object)>),
-    /// Several changes, in order.
-    Several(Vec<Change>),
+    /// Several changes, in order. Objects they insert join the selection
+    /// if `select_added`, else the selection is left alone.
+    Several {
+        /// The changes.
+        parts: Vec<Change>,
+        /// Whether inserted objects join the selection.
+        select_added: bool,
+    },
 }
 
 impl Change {
@@ -182,9 +191,13 @@ impl Change {
                     .map(|(id, before, after)| (id, after, before))
                     .collect(),
             ),
-            Self::Several(parts) => {
-                Self::Several(parts.into_iter().rev().map(Self::inverse).collect())
-            }
+            Self::Several {
+                parts,
+                select_added,
+            } => Self::Several {
+                parts: parts.into_iter().rev().map(Self::inverse).collect(),
+                select_added,
+            },
         }
     }
 
@@ -194,7 +207,7 @@ impl Change {
         match self {
             Self::Modified(objects) => objects.iter().all(|(_, before, after)| before == after),
             Self::Inserted(objects) | Self::Removed(objects) => objects.is_empty(),
-            Self::Several(parts) => parts.iter().all(Self::is_noop),
+            Self::Several { parts, .. } => parts.iter().all(Self::is_noop),
         }
     }
 

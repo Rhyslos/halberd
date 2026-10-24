@@ -486,6 +486,7 @@ fn a_brush_split_in_two_saves_with_unique_ids() {
         changed: vec![(id, first)],
         added: vec![(second, None)],
         removed: Vec::new(),
+        select_added: true,
     })
     .unwrap();
     let text = saved_text(&doc);
