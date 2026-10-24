@@ -24,6 +24,7 @@ mod draw_options;
 mod elements;
 mod gizmo;
 mod layout;
+mod leak;
 mod panes;
 mod plan;
 mod player;
@@ -32,6 +33,7 @@ mod shape_ops;
 mod tools;
 
 pub use layout::{MAX_VIEWS, PaneView, RenderMode, ViewLayout, ViewSetup};
+pub use leak::{GO_TO_LEAK_LABEL, HIDE_LEAK_LABEL, LEAK_BANNER_TEXT};
 pub use panes::LAYOUT_PICKER_LABEL;
 pub use shape_ops::SHAPE_OP_KEYS;
 pub(crate) use shape_ops::shape_menu;
@@ -166,6 +168,8 @@ pub struct ViewportPanel {
     text_focus_was: bool,
     length_unit: LengthUnit,
     show_player: bool,
+    /// The leak path the last compile found, if any.
+    leak: Option<leak::LeakPath>,
 }
 
 impl ViewportPanel {
@@ -198,6 +202,7 @@ impl ViewportPanel {
             text_focus_was: false,
             length_unit: LengthUnit::Units,
             show_player: true,
+            leak: None,
         }
     }
 
@@ -348,6 +353,7 @@ impl ViewportPanel {
         }
         self.tool_switcher(ui, rects[0]);
         self.layout_picker(ui, full);
+        self.leak_banner(ui, full);
         notes
     }
 

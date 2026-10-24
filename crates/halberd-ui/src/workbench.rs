@@ -7,7 +7,10 @@ use crate::layout::{default_layout, restore_or_default};
 use crate::panel::Panel;
 use crate::panels::{about_contents, placeholder, properties_contents, scene_contents};
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
-pub use compile::{COMPILE_LABEL, COMPILE_SHORTCUT, CompileLine, STOP_COMPILE_LABEL};
+pub use compile::{
+    COMPILE_LABEL, COMPILE_SHORTCUT, CompileLine, LEAK_CHECK_LABEL, SHOW_LEAK_LABEL,
+    STOP_COMPILE_LABEL,
+};
 use egui::{Align2, Id, Key, KeyboardShortcut, Modifiers, Ui, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 pub use entity_list::{DEFAULT_SKY, ENTITIES_TAB, SKY_PICKER_NAME, sky_names};
@@ -76,6 +79,10 @@ pub enum WorkbenchAction {
     /// with [`Workbench::compile_started`] and the other `compile_`
     /// calls.
     Compile,
+    /// Check the map for leaks (only the first compiler runs; nothing is
+    /// installed or played); report as for [`WorkbenchAction::Compile`],
+    /// starting with [`Workbench::leak_check_started`].
+    CheckLeaks,
     /// Stop the compile that is running.
     CancelCompile,
 }
@@ -477,6 +484,7 @@ impl Workbench {
             {
                 self.viewport.set_player_follows(follows);
             }
+            self.leak_menu_item(ui);
         });
         if ui
             .button(KEYBINDS_TITLE)

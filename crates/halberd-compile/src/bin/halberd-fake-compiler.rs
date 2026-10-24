@@ -28,7 +28,7 @@ fn main() {
             }
             if text.contains("LEAK") {
                 writeln!(out, "**** leaked ****").ok();
-                std::fs::write(map.with_extension("lin"), "0 0 0\n64 0 0\n").ok();
+                std::fs::write(map.with_extension("lin"), "-512 0 64\n0 0 64\n0 128 64\n").ok();
                 std::process::exit(0);
             }
             writeln!(out, "WARNING: a brush has a texture missing").ok();

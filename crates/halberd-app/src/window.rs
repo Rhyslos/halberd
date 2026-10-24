@@ -10,6 +10,7 @@ use crate::preferences::PreferenceSaver;
 use crate::props::PropFeed;
 use eframe::egui;
 use halberd_assets::{GameContent, GmodInstall, MaterialLoader};
+use halberd_compile::Profile;
 use halberd_config::{Settings, SettingsStore};
 use halberd_render::MATERIAL_TEXTURE_SIZE;
 use halberd_ui::{
@@ -141,10 +142,19 @@ impl eframe::App for HalberdApp {
         };
         for action in self.workbench.show(ui, renderer) {
             match action {
-                WorkbenchAction::Compile => {
+                WorkbenchAction::Compile | WorkbenchAction::CheckLeaks => {
+                    let profile = if matches!(action, WorkbenchAction::CheckLeaks) {
+                        Profile::LeakCheck
+                    } else {
+                        Profile::Quick
+                    };
                     if self.compile.is_none() {
-                        self.compile =
-                            compile::start(&mut self.workbench, self.install.as_ref(), &ctx);
+                        self.compile = compile::start(
+                            &mut self.workbench,
+                            self.install.as_ref(),
+                            profile,
+                            &ctx,
+                        );
                     }
                 }
                 WorkbenchAction::CancelCompile => {

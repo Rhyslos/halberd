@@ -1,6 +1,10 @@
 //! Compile and play: File → Compile and play (F9) asks the program to
 //! compile the map and start Garry's Mod on it; while it runs, a small
 //! window shows which step it is on, with a button to stop it.
+//!
+//! File → Check for leaks runs only the first compiler, which is enough to
+//! find out whether the map is sealed. A leak found either way is drawn in
+//! the views (see the viewport's `leak` module).
 
 use super::{Workbench, WorkbenchAction};
 use crate::console::LogEntry;
@@ -11,6 +15,10 @@ use std::time::Instant;
 pub const COMPILE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F9);
 /// The menu entry.
 pub const COMPILE_LABEL: &str = "Compile and play";
+/// File → Check for leaks.
+pub const LEAK_CHECK_LABEL: &str = "Check for leaks";
+/// View → show the leak path (after hiding it).
+pub const SHOW_LEAK_LABEL: &str = "Show leak path";
 /// The button that stops a compile.
 pub const STOP_COMPILE_LABEL: &str = "Stop compiling";
 
@@ -33,6 +41,8 @@ pub(super) struct CompileProgress {
     total: usize,
     label: String,
     started: Instant,
+    /// Only checking for leaks (nothing is installed or played).
+    check: bool,
 }
 
 impl Workbench {
@@ -43,14 +53,40 @@ impl Workbench {
 
     /// A compile of `map` started.
     pub fn compile_started(&mut self, map: &str) {
+        self.start_progress(map, false);
+        self.push_console(format!("Compiling {map} (quick test)…"));
+    }
+
+    /// A leak check of `map` started (reported like a compile).
+    pub fn leak_check_started(&mut self, map: &str) {
+        self.start_progress(map, true);
+        self.push_console(format!("Checking {map} for leaks…"));
+    }
+
+    fn start_progress(&mut self, map: &str, check: bool) {
         self.compiling = Some(CompileProgress {
             map: map.to_string(),
             step: 0,
             total: 0,
             label: "Starting".into(),
             started: Instant::now(),
+            check,
         });
-        self.push_console(format!("Compiling {map} (quick test)…"));
+    }
+
+    /// The compile found a leak: `points` run from outside the map to the
+    /// leaking entity. The views draw it until a compile succeeds, another
+    /// map is opened, or it is hidden.
+    pub fn set_leak_path(&mut self, points: &[[f32; 3]]) {
+        let points: Vec<glam::Vec3> = points.iter().map(|p| glam::Vec3::from(*p)).collect();
+        self.viewport.set_leak_path(Some(points));
+        if self.viewport.leak_path().is_some() {
+            self.push_entry(LogEntry::warning(
+                "The map has a leak: it isn't sealed from the empty space around it. The red \
+                 line in the views runs from outside to the entity that leaks; close the gap \
+                 where it passes through a wall.",
+            ));
+        }
     }
 
     /// The compile is on step `index` (from 0) of `total`, doing `label`.
@@ -75,14 +111,67 @@ impl Workbench {
     /// The compile is over: `Ok` with a note (such as "Starting Garry's
     /// Mod…"), or why it failed.
     pub fn compile_finished(&mut self, outcome: Result<String, String>) {
-        let took = self
-            .compiling
-            .take()
-            .map(|p| p.started.elapsed().as_secs())
-            .unwrap_or(0);
-        match outcome {
-            Ok(note) => self.push_console(format!("Compiled in {took} s. {note}")),
-            Err(why) => self.push_entry(LogEntry::error(format!("The compile failed: {why}"))),
+        let progress = self.compiling.take();
+        let took = progress
+            .as_ref()
+            .map_or(0, |p| p.started.elapsed().as_secs());
+        let check = progress.is_some_and(|p| p.check);
+        match (outcome, check) {
+            (Ok(note), check) => {
+                // Sealed now: an old leak line would only mislead.
+                self.viewport.set_leak_path(None);
+                let done = if check { "Checked" } else { "Compiled" };
+                self.push_console(format!("{done} in {took} s. {note}"));
+            }
+            (Err(why), false) => {
+                self.push_entry(LogEntry::error(format!("The compile failed: {why}")));
+            }
+            (Err(why), true) => {
+                self.push_entry(LogEntry::error(format!("The leak check failed: {why}")));
+            }
+        }
+    }
+
+    /// The compile or leak check stopped because the map leaks. For a
+    /// check that is its answer, not a failure.
+    pub fn compile_found_leak(&mut self) {
+        let progress = self.compiling.take();
+        let took = progress
+            .as_ref()
+            .map_or(0, |p| p.started.elapsed().as_secs());
+        let check = progress.is_some_and(|p| p.check);
+        let shown = self.viewport.leak_path().is_some();
+        let where_ = if shown {
+            "Follow the red line in the views from outside to the gap, close it"
+        } else {
+            "The compiler didn't say where; look for a gap in the outer walls (or an entity \
+             outside them), close it"
+        };
+        let message = if check {
+            format!("Leak found (checked in {took} s). {where_} and check again.")
+        } else {
+            format!("The compile stopped: the map leaks. {where_} and compile again.")
+        };
+        self.push_entry(if check {
+            LogEntry::warning(message)
+        } else {
+            LogEntry::error(message)
+        });
+    }
+
+    /// The View menu's entry that shows a hidden leak path again.
+    pub(super) fn leak_menu_item(&mut self, ui: &mut Ui) {
+        let mut shown = self.viewport.leak_path().is_some();
+        if ui
+            .add_enabled(
+                self.viewport.has_leak(),
+                egui::Checkbox::new(&mut shown, SHOW_LEAK_LABEL),
+            )
+            .on_hover_text("The red line from the last compile that found a leak")
+            .on_disabled_hover_text("No leak found by the last compile")
+            .changed()
+        {
+            self.viewport.set_leak_shown(shown);
         }
     }
 
@@ -111,6 +200,15 @@ impl Workbench {
         if item.clicked() {
             actions.push(WorkbenchAction::Compile);
         }
+        let check = ui
+            .add_enabled(!self.is_compiling(), egui::Button::new(LEAK_CHECK_LABEL))
+            .on_hover_text(
+                "Find out whether the map is sealed, without compiling all of it. A leak is \
+                 drawn in the views as a red line.",
+            );
+        if check.clicked() {
+            actions.push(WorkbenchAction::CheckLeaks);
+        }
     }
 
     /// The progress window, while compiling.
@@ -118,7 +216,13 @@ impl Workbench {
         let Some(progress) = &self.compiling else {
             return;
         };
-        egui::Window::new("Compiling")
+        let title = if progress.check {
+            "Checking for leaks"
+        } else {
+            "Compiling"
+        };
+        egui::Window::new(title)
+            .id(egui::Id::new("halberd_compile_progress"))
             .anchor(Align2::RIGHT_TOP, [-12.0, 40.0])
             .resizable(false)
             .collapsible(false)
