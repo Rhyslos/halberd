@@ -343,6 +343,14 @@ impl ViewportRenderer {
         self.textures.wanted()
     }
 
+    /// Keeps at most `most` material textures on the GPU (from the memory
+    /// budget; never more than [`crate::MAX_MATERIAL_TEXTURES`]). Call it
+    /// before the first texture is uploaded. Returns the number in effect.
+    pub fn limit_textures(&mut self, most: u32) -> u32 {
+        self.textures.limit(most);
+        self.textures.capacity()
+    }
+
     /// Material `name`'s texture: RGBA pixels, `width` × `height`, and the
     /// texture's real size (`real`, which texture coordinates use).
     pub fn upload_texture(

@@ -4,8 +4,10 @@
 //! shortcuts in it match the ones the code uses, so the viewer cannot
 //! drift from what the keys really do.
 
-use KeyCap::{Alt, Ctrl, Shift};
+use crate::{Bindings, Command};
+use KeyCap::Shift;
 use egui::{Key, KeyboardShortcut, Modifiers};
+use std::borrow::Cow;
 
 /// A key on the keyboard as the viewer draws it: an ordinary key, or one
 /// of the modifier keys (which egui does not count as keys).
@@ -91,10 +93,12 @@ impl KeyContext {
 }
 
 /// One thing a key (or key combination) does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Keybind {
     /// The keys held together, modifiers first.
-    pub keys: &'static [KeyCap],
+    pub keys: Cow<'static, [KeyCap]>,
+    /// The command whose key this is, when Settings can change it.
+    pub command: Option<Command>,
     /// What happens, in plain words.
     pub action: &'static str,
     /// When it applies.
@@ -116,7 +120,7 @@ impl Keybind {
     pub fn shortcut(&self) -> Option<KeyboardShortcut> {
         let mut modifiers = Modifiers::NONE;
         let mut key = None;
-        for cap in self.keys {
+        for cap in self.keys.iter() {
             match cap {
                 KeyCap::Shift => modifiers.shift = true,
                 KeyCap::Ctrl => modifiers |= Modifiers::COMMAND,
@@ -177,9 +181,9 @@ fn normalise(text: &str) -> String {
 /// character counts, so typing a letter asks about that key).
 fn is_key_name(query: &str) -> bool {
     query.chars().count() == 1
-        || KEYBINDS
+        || crate::drawn_keys()
             .iter()
-            .flat_map(|b| b.keys)
+            .chain(KEYBINDS.iter().flat_map(|b| b.keys.iter()))
             .any(|k| normalise(k.name()) == query)
 }
 
@@ -199,230 +203,40 @@ fn starts_words(text: &str, query: &str) -> bool {
     })
 }
 
-const fn k(key: Key) -> KeyCap {
-    KeyCap::Key(key)
-}
+mod list;
+pub use list::KEYBINDS;
 
-/// Every key binding, grouped by when it applies.
-pub const KEYBINDS: &[Keybind] = &[
-    // Anywhere.
-    bind(&[Ctrl, k(Key::N)], "New map", KeyContext::Anywhere),
-    bind(&[Ctrl, k(Key::O)], "Open a map", KeyContext::Anywhere),
-    bind(&[Ctrl, k(Key::S)], "Save", KeyContext::Anywhere),
-    bind(&[Ctrl, Shift, k(Key::S)], "Save as…", KeyContext::Anywhere),
-    bind(&[Ctrl, k(Key::Q)], "Quit", KeyContext::Anywhere),
-    bind(
-        &[k(Key::F9)],
-        "Compile and play (quick test in Garry's Mod)",
-        KeyContext::Anywhere,
-    ),
-    bind(&[Ctrl, k(Key::Z)], "Undo", KeyContext::Anywhere),
-    bind(&[Ctrl, k(Key::Y)], "Redo", KeyContext::Anywhere),
-    bind(&[Ctrl, Shift, k(Key::Z)], "Redo", KeyContext::Anywhere),
-    bind(
-        &[k(Key::Delete)],
-        "Delete the selection",
-        KeyContext::Anywhere,
-    ),
-    bind(
-        &[k(Key::Backspace)],
-        "Delete the selection",
-        KeyContext::Anywhere,
-    ),
-    // Viewport.
-    bind(&[k(Key::Q)], "Select tool", KeyContext::Viewport),
-    bind(
-        &[k(Key::B)],
-        "Draw tool; again: open or close the shape list",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::W)],
-        "Move gizmo (again: off)",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::R)],
-        "Rotate gizmo (again: off)",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::S)],
-        "Scale gizmo (again: off)",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::T)],
-        "All gizmos at once (again: off)",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, k(Key::W)],
-        "Pick single brushes inside entities (on/off)",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::Num1)],
-        "Object mode: clicks pick whole objects",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::Num2)],
-        "Vertex mode: pick corners of the selected brushes",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::Num3)],
-        "Edge mode: pick edges of the selected brushes",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::Num4)],
-        "Face mode: pick faces of the selected brushes",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::Escape)],
-        "Let go of picked corners, edges or faces; again: deselect. Also cancels a drag",
-        KeyContext::Viewport,
-    ),
-    // Shape operations.
-    bind(
-        &[k(Key::E)],
-        "Extrude: a new brush on each picked face",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, k(Key::B)],
-        "Bevel the picked edges",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::F)],
-        "Bridge: fill the space spanned by the picked parts",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::K)],
-        "Split the selected brushes along the picked parts",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::X)],
-        "Clip: cut along the picked parts, keep the bigger part",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, k(Key::J)],
-        "Join the selected brushes into one",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::M)],
-        "Merge the picked corners into one",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, k(Key::M)],
-        "Mirror the selected brushes left to right",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, Shift, k(Key::U)],
-        "Union: the selected brushes fill their space together, without overlap",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, Shift, k(Key::C)],
-        "Subtract: cut the selected brushes' space out of the brushes they overlap",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, Shift, k(Key::I)],
-        "Intersect: keep only the space the selected brushes share",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[Ctrl, Shift, k(Key::B)],
-        "Make ordinary brushes from the selected floor plan shapes",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::Delete)],
-        "In Vertex or Face mode: delete the picked corners or faces",
-        KeyContext::Viewport,
-    ),
-    bind(
-        &[k(Key::Backspace)],
-        "In Vertex or Face mode: delete the picked corners or faces",
-        KeyContext::Viewport,
-    ),
-    // While drawing.
-    bind(
-        &[k(Key::R)],
-        "Turn the shape a quarter turn clockwise",
-        KeyContext::Drawing,
-    ),
-    bind(
-        &[Shift],
-        "As wide, deep and tall as the longest side",
-        KeyContext::Drawing,
-    ),
-    bind(
-        &[Alt],
-        "As wide, deep and tall, around where you started",
-        KeyContext::Drawing,
-    ),
-    bind(
-        &[k(Key::Enter)],
-        "Floor plan: finish the outline",
-        KeyContext::Drawing,
-    ),
-    bind(
-        &[k(Key::Backspace)],
-        "Floor plan: take back the last corner",
-        KeyContext::Drawing,
-    ),
-    bind(&[k(Key::Escape)], "Cancel the shape", KeyContext::Drawing),
-    bind(
-        &[k(Key::Q)],
-        "Cancel the shape and pick the Select tool",
-        KeyContext::Drawing,
-    ),
-    // Shape list.
-    bind(&[k(Key::ArrowUp)], "Previous shape", KeyContext::ShapeList),
-    bind(&[k(Key::ArrowDown)], "Next shape", KeyContext::ShapeList),
-    bind(&[k(Key::Enter)], "Pick the shape", KeyContext::ShapeList),
-    bind(&[k(Key::Space)], "Pick the shape", KeyContext::ShapeList),
-    bind(&[k(Key::Escape)], "Close the list", KeyContext::ShapeList),
-    // Flying.
-    bind(&[k(Key::W)], "Fly forward", KeyContext::Flying),
-    bind(&[k(Key::S)], "Fly back", KeyContext::Flying),
-    bind(&[k(Key::A)], "Fly left", KeyContext::Flying),
-    bind(&[k(Key::D)], "Fly right", KeyContext::Flying),
-    bind(&[k(Key::Space)], "Fly up", KeyContext::Flying),
-    bind(&[k(Key::C)], "Fly down", KeyContext::Flying),
-    bind(&[Shift], "Fly faster", KeyContext::Flying),
-    bind(&[Shift, k(Key::W)], "Move gizmo", KeyContext::RightMouse),
-    bind(&[Shift, k(Key::S)], "Scale gizmo", KeyContext::RightMouse),
-    // Save question.
-    bind(&[k(Key::Enter)], "Save", KeyContext::SaveQuestion),
-    bind(&[k(Key::N)], "Don't save", KeyContext::SaveQuestion),
-    bind(&[k(Key::Escape)], "Cancel", KeyContext::SaveQuestion),
-    // Message box.
-    bind(
-        &[k(Key::Escape)],
-        "Close the message",
-        KeyContext::MessageBox,
-    ),
-];
-
-const fn bind(keys: &'static [KeyCap], action: &'static str, context: KeyContext) -> Keybind {
-    Keybind {
-        keys,
-        action,
-        context,
-    }
+/// Every key binding with the keys in effect: changed keys in place of the
+/// defaults, and commands without a key left out. While holding right
+/// mouse, a gizmo whose plain key also flies is picked with Shift; that
+/// line is shown only while it applies.
+pub fn current_binds(bindings: &Bindings) -> Vec<Keybind> {
+    KEYBINDS
+        .iter()
+        .filter_map(|bind| {
+            let Some(command) = bind.command else {
+                return Some(bind.clone());
+            };
+            let key = bindings.key(command)?;
+            let keys = if bind.context == KeyContext::RightMouse {
+                let flies = bindings.key_down_commands().any(|f| {
+                    bindings
+                        .key(f)
+                        .is_some_and(|b| b.logical_key == key.logical_key)
+                });
+                if !key.modifiers.is_none() || !flies {
+                    return None;
+                }
+                vec![Shift, KeyCap::Key(key.logical_key)]
+            } else {
+                crate::bindings::caps(key)
+            };
+            Some(Keybind {
+                keys: Cow::Owned(keys),
+                ..bind.clone()
+            })
+        })
+        .collect()
 }
 
 /// What the mouse does, for the viewer's list under the keyboard.
@@ -462,9 +276,9 @@ pub fn mouse_binds() -> [(&'static str, String); 8] {
     ]
 }
 
-/// The bindings that involve `cap`.
-pub fn binds_with(cap: KeyCap) -> impl Iterator<Item = &'static Keybind> {
-    KEYBINDS.iter().filter(move |b| b.keys.contains(&cap))
+/// The bindings in `binds` that involve `cap`.
+pub fn binds_with(binds: &[Keybind], cap: KeyCap) -> impl Iterator<Item = &Keybind> {
+    binds.iter().filter(move |b| b.keys.contains(&cap))
 }
 
 #[cfg(test)]

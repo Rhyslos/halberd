@@ -1,7 +1,7 @@
 //! Tests for the viewport panel, driven with simulated mouse and keyboard input.
 
 use super::*;
-use egui::{Event, Modifiers};
+use egui::{Event, Key, Modifiers, PointerButton};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
@@ -1000,3 +1000,76 @@ mod plan;
 mod scale;
 
 mod views;
+
+/// Flies with right mouse and `key` held for a few frames; how far the
+/// camera moved.
+fn fly_with(h: &mut Harness<'_, State>, key: Key) -> f32 {
+    let start = h.state().panel.controller().camera().position;
+    let centre = egui::pos2(400.0, 300.0);
+    h.hover_at(centre);
+    press(h, PointerButton::Secondary, centre, true);
+    h.key_down(key);
+    for _ in 0..20 {
+        h.step();
+    }
+    h.key_up(key);
+    press(h, PointerButton::Secondary, centre, false);
+    h.step();
+    (h.state().panel.controller().camera().position - start).length()
+}
+
+#[test]
+fn flying_keys_follow_the_bindings() {
+    let mut h = harness(ViewportOptions::default());
+    let mut bindings = crate::Bindings::default();
+    bindings.set(
+        crate::Command::FlyForward,
+        Some(egui::KeyboardShortcut::new(Modifiers::NONE, Key::I)),
+    );
+    h.state_mut().panel.set_bindings(bindings);
+    h.run();
+    h.get_by_label("Fly").click();
+    h.run();
+    assert_eq!(fly_with(&mut h, Key::W), 0.0, "W no longer flies");
+    assert!(fly_with(&mut h, Key::I) > 1.0, "I flies forward");
+}
+
+#[test]
+fn turning_speed_scales_the_3d_camera_turn() {
+    let turn_with = |factor: f32| {
+        let mut h = harness(ViewportOptions::default());
+        h.state_mut().panel.set_camera_feel(factor, 1.0);
+        h.run();
+        let before = h.state().panel.controller().camera().yaw;
+        let from = egui::pos2(400.0, 300.0);
+        h.hover_at(from);
+        press(&h, PointerButton::Secondary, from, true);
+        h.run();
+        h.hover_at(egui::pos2(440.0, 300.0));
+        h.run();
+        press(
+            &h,
+            PointerButton::Secondary,
+            egui::pos2(440.0, 300.0),
+            false,
+        );
+        h.run();
+        (h.state().panel.controller().camera().yaw - before).abs()
+    };
+    let normal = turn_with(1.0);
+    let double = turn_with(2.0);
+    assert!(normal > 0.0);
+    assert!((double / normal - 2.0).abs() < 0.05, "{normal} {double}");
+}
+
+#[test]
+fn turning_wasd_off_in_the_viewport_leaves_fly_mode() {
+    let mut h = harness(ViewportOptions::default());
+    h.run();
+    h.get_by_label("Fly").click();
+    h.run();
+    h.state_mut().panel.set_wasd_enabled(false);
+    h.run();
+    assert_eq!(h.state().panel.controller().mode(), CameraMode::Default);
+    assert!(h.query_by_label("Fly").is_none());
+}

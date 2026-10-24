@@ -5,7 +5,8 @@
 //! finds actions or keys ("save", "ctrl+s", "drawing") and lights up the
 //! keys involved.
 
-use crate::keymap::{KEYBINDS, KeyCap, Keybind, binds_with, mouse_binds};
+use crate::Bindings;
+use crate::keymap::{KeyCap, Keybind, binds_with, current_binds, mouse_binds};
 use egui::{Align2, FontId, Key, Rect, RichText, Sense, Stroke, Ui, Vec2, pos2, vec2};
 
 /// Width of one ordinary key, in points.
@@ -200,18 +201,35 @@ pub fn drawn_keys() -> Vec<KeyCap> {
 }
 
 /// The Keybinds window's state.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct KeybindsViewer {
     /// The text in the search box.
     pub search: String,
     /// The key clicked last, whose actions are listed.
     pub picked: Option<KeyCap>,
+    /// Every binding with the keys in effect.
+    binds: Vec<Keybind>,
+}
+
+impl Default for KeybindsViewer {
+    fn default() -> Self {
+        Self {
+            search: String::new(),
+            picked: None,
+            binds: current_binds(&Bindings::default()),
+        }
+    }
 }
 
 impl KeybindsViewer {
+    /// Shows the keys in `bindings` from now on.
+    pub fn set_bindings(&mut self, bindings: &Bindings) {
+        self.binds = current_binds(bindings);
+    }
+
     /// The bindings the search finds.
-    pub fn found(&self) -> Vec<&'static Keybind> {
-        KEYBINDS
+    pub fn found(&self) -> Vec<&Keybind> {
+        self.binds
             .iter()
             .filter(|b| b.matches(&self.search))
             .collect()
@@ -235,7 +253,7 @@ impl KeybindsViewer {
         });
         ui.add_space(6.0);
         let searching = !self.search.trim().is_empty();
-        let found = self.found();
+        let found: Vec<Keybind> = self.found().into_iter().cloned().collect();
         let lit: Vec<KeyCap> = found.iter().flat_map(|b| b.keys.iter().copied()).collect();
         let picked = if searching { None } else { self.picked };
         self.keyboard(ui, &lit, picked);
@@ -254,7 +272,8 @@ impl KeybindsViewer {
                         bind_list(ui, &found);
                     } else if let Some(picked) = picked {
                         ui.label(RichText::new(picked.name()).strong());
-                        let binds: Vec<_> = binds_with(picked).collect();
+                        let binds: Vec<Keybind> =
+                            binds_with(&self.binds, picked).cloned().collect();
                         if binds.is_empty() {
                             ui.label(RichText::new("Not used yet.").weak());
                         }
@@ -321,7 +340,10 @@ impl KeybindsViewer {
         c: &Cap,
         (lit, picked): (&[KeyCap], Option<KeyCap>),
     ) {
-        let binds: Vec<&Keybind> = c.key.map(|k| binds_with(k).collect()).unwrap_or_default();
+        let binds: Vec<Keybind> = c
+            .key
+            .map(|k| binds_with(&self.binds, k).cloned().collect())
+            .unwrap_or_default();
         let response = ui.interact(rect, id, Sense::click());
         let name = format!("Key {}", c.label);
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
@@ -372,7 +394,7 @@ impl KeybindsViewer {
 }
 
 /// Bindings as a table: keys, what they do, and when.
-fn bind_list(ui: &mut Ui, binds: &[&Keybind]) {
+fn bind_list(ui: &mut Ui, binds: &[Keybind]) {
     if binds.is_empty() {
         return;
     }

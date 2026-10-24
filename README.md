@@ -32,9 +32,9 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 17 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 18 of 19
 
-`███████████░░` 84%
+`████████████░` 95%
 
 <details>
 <summary>Milestones</summary>
@@ -55,7 +55,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Map sizer and engine limit meters
 - [x] Quick-test compile, then launch GMod
 - [x] Leak detection with a visual leak path
-- [ ] Settings page: key bindings, WASD toggle, camera speeds, memory budget
+- [x] Settings page: key bindings, WASD toggle, camera speeds, memory budget
 - [x] Keybinds viewer: a visual keyboard showing every bound key, with hover and search
 - [ ] Signed Windows release and first public announcement
 
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-24 | Settings page: change any key, WASD on or off, camera speeds and the memory budget, saved at once |
 | 2026-10-24 | Leak detection: a leak is drawn as a red line through the gap in every view, with Go to leak, and File → Check for leaks |
 | 2026-10-24 | Compile and play: F9 compiles a quick test with Garry's Mod's tools and starts the game on the map |
 | 2026-10-24 | Map size and engine limits: the map's size and live meters for Source's limits in Properties, with objects past the edge found |

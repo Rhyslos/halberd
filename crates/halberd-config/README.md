@@ -28,5 +28,7 @@ Settings file implemented: game folder, memory budget, worker threads, autosave 
 - Out-of-range values are corrected on load, with a note. An unknown `length_unit` falls back to `"units"`.
 - `LengthUnit` converts and formats lengths: 1 Hammer unit = 2.54 cm (Source's character scale), so a 72-unit player is 1.83 m. Maps are always stored in Hammer units.
 - A damaged file is renamed to `settings.toml.damaged-N` and defaults are used.
-- Key bindings and camera speeds arrive with the viewport milestones.
+- **Camera** (`CameraSettings`, `[camera]`): flying speed at start (32 to 16,384 units/s), turning and wheel zoom speed (10 to 400 %); out-of-range values corrected with a note.
+- **Keys** (`[keys]`): keys changed from their defaults, command name to key text (`"file.save" = "Ctrl+Alt+S"`, `""` for none). This crate doesn't know the commands; `halberd-ui` reads and checks them.
+- **Budgets** (`Settings::budgets`, `Budgets::for_memory`): what the memory budget allows: pictures per browser (600 at 2 GB, 150 to 4,000) and material textures on the GPU (256 at 2 GB, 64 to 256). See [decision 0030](../../docs/decisions/0030-settings-page.md).
 - **Feet** (`LengthUnit::Feet`, `UNITS_PER_FOOT`): a Hammer unit is an inch; `drag_speed` gives how much a number field moves per point dragged in each unit.

@@ -108,6 +108,17 @@ fn pictures_are_asked_for_once_and_shown_when_they_arrive() {
 }
 
 #[test]
+fn the_memory_budget_sets_how_many_pictures_are_kept() {
+    let mut browser = MaterialBrowser::default();
+    browser.set_picture_limit(150);
+    for i in 0..200 {
+        browser.add_picture(&format!("M/{i}"), Err("none".into()));
+    }
+    assert_eq!(browser.pictures.len(), 150);
+    assert!(browser.pictures.contains_key("M/199"));
+}
+
+#[test]
 fn only_so_many_pictures_are_kept() {
     let mut browser = MaterialBrowser::default();
     for i in 0..MAX_PICTURES + 50 {

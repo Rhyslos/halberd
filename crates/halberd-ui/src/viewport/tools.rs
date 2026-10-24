@@ -2,6 +2,8 @@
 //! they ask, and the tool switcher.
 
 use super::{ViewportPanel, layout};
+use crate::Command;
+use crate::bindings::pressed;
 use egui::{Align, Color32, Key, Layout, Modifiers, PointerButton, Rect, Ui, UiBuilder, vec2};
 use glam::Vec2;
 use halberd_doc::Document;
@@ -30,11 +32,31 @@ pub(super) fn first_press(
 }
 
 /// The button that picks single brushes inside brush entities (its label
-/// also shows the key: Ctrl+W, or Cmd+W on macOS).
+/// also shows the key: Ctrl+W, or Cmd+W on macOS, unless changed).
 pub const INSIDE_ENTITIES_LABEL: &str = "Inside entities";
-/// The key for [`INSIDE_ENTITIES_LABEL`].
-const INSIDE_ENTITIES_SHORTCUT: egui::KeyboardShortcut =
-    egui::KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
+
+/// The gizmo mode each command picks.
+const GIZMO_COMMANDS: [(Command, GizmoMode); 4] = [
+    (Command::MoveGizmo, GizmoMode::Move),
+    (Command::RotateGizmo, GizmoMode::Rotate),
+    (Command::ScaleGizmo, GizmoMode::Scale),
+    (Command::AllGizmos, GizmoMode::All),
+];
+/// The pick mode each command picks.
+const SELECT_MODE_COMMANDS: [(Command, SelectMode); 4] = [
+    (Command::ObjectMode, SelectMode::Object),
+    (Command::VertexMode, SelectMode::Vertex),
+    (Command::EdgeMode, SelectMode::Edge),
+    (Command::FaceMode, SelectMode::Face),
+];
+
+/// "Move W": a button's name and its key, if it has one.
+pub(super) fn with_key(ui: &Ui, label: &str, key: Option<egui::KeyboardShortcut>) -> String {
+    match key {
+        Some(key) => format!("{label} {}", ui.ctx().format_shortcut(&key)),
+        None => label.to_string(),
+    }
+}
 
 impl ViewportPanel {
     /// Reads this frame's left-mouse and tool keys, runs the active tool and
@@ -52,14 +74,22 @@ impl ViewportPanel {
         // was open when the frame began.
         let popup_open =
             egui::Popup::is_any_open(ui.ctx()) || self.popup_was_open || self.shape_menu.is_some();
+        let key = |command| self.bindings.key(command);
+        let (draw, inside, select) = (
+            key(Command::DrawTool),
+            key(Command::InsideEntities),
+            key(Command::SelectTool),
+        );
         let (left_down, additive, escape, box_key, inside_key, select_key) = ui.input(|i| {
+            let hit =
+                |k: Option<egui::KeyboardShortcut>| !typing && k.is_some_and(|k| pressed(i, k));
             (
                 i.pointer.button_down(PointerButton::Primary),
                 i.modifiers.command,
                 !typing && !popup_open && !self.text_focus_was && i.key_pressed(Key::Escape),
-                !typing && first_press(i, Key::B, |m| m.is_none()),
-                !typing && first_press(i, Key::W, |m| m.command_only()),
-                !typing && first_press(i, Key::Q, |m| m.is_none()),
+                hit(draw),
+                hit(inside),
+                hit(select),
             )
         });
         let (uniform, centered) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
@@ -88,7 +118,17 @@ impl ViewportPanel {
         if !typing {
             if self.tools.is_drawing() {
                 // While drawing, R turns the shape; the gizmo keys wait.
-                let turn = ui.input(|i| first_press(i, Key::R, |m| !m.command));
+                // Shift and Alt may be held (they shape the box).
+                let turn_key = self.bindings.key(Command::TurnShape);
+                let turn = turn_key.is_some_and(|k| {
+                    ui.input(|i| {
+                        if k.modifiers.is_none() {
+                            first_press(i, k.logical_key, |m| !m.command && !m.ctrl)
+                        } else {
+                            pressed(i, k)
+                        }
+                    })
+                });
                 if turn {
                     self.tools.turn_drawing();
                 }
@@ -210,43 +250,51 @@ impl ViewportPanel {
         notes
     }
 
-    /// The gizmo keys. W, R, S and T pick Move, Rotate, Scale and All, and
-    /// pressing the same key again returns to plain selection. While the
-    /// right button is held (flying uses W and S), Shift+W and Shift+S pick
-    /// Move and Scale instead; R and T work either way.
+    /// The gizmo keys (W, R, S and T unless changed) pick Move, Rotate,
+    /// Scale and All, and pressing the same key again returns to plain
+    /// selection. While the right button is held in the 3D view (flying), a
+    /// plain key that also flies (W, S) needs Shift, and other plain keys
+    /// work with or without it.
     fn gizmo_keys(&mut self, ui: &Ui) {
         let pane = &self.panes[self.camera_view];
         let flying = pane.view == layout::PaneView::Perspective && pane.right_was_held;
-        let move_or_scale_ok = move |m: Modifiers| {
-            if flying { m.shift_only() } else { m.is_none() }
+        let bindings = &self.bindings;
+        let flies = |k: Key| {
+            bindings
+                .key_down_commands()
+                .any(|f| bindings.key(f).is_some_and(|b| b.logical_key == k))
         };
-        let rotate_or_all_ok = move |m: Modifiers| m.is_none() || (flying && m.shift_only());
         let picked = ui.input(|i| {
-            [
-                (Key::W, GizmoMode::Move),
-                (Key::R, GizmoMode::Rotate),
-                (Key::S, GizmoMode::Scale),
-                (Key::T, GizmoMode::All),
-            ]
-            .into_iter()
-            .find(|(key, mode)| match mode {
-                GizmoMode::Move | GizmoMode::Scale => first_press(i, *key, move_or_scale_ok),
-                GizmoMode::Rotate | GizmoMode::All => first_press(i, *key, rotate_or_all_ok),
-            })
-            .map(|(_, mode)| mode)
+            GIZMO_COMMANDS
+                .into_iter()
+                .find(|(command, _)| {
+                    let Some(key) = bindings.key(*command) else {
+                        return false;
+                    };
+                    if flying && key.modifiers.is_none() {
+                        let needs_shift = flies(key.logical_key);
+                        first_press(i, key.logical_key, |m| {
+                            m.shift_only() || (!needs_shift && m.is_none())
+                        })
+                    } else {
+                        pressed(i, key)
+                    }
+                })
+                .map(|(_, mode)| mode)
         });
         if let Some(mode) = picked {
             self.tools.toggle_gizmo_mode(mode);
         }
     }
 
-    /// The keys 1 to 4: what clicks pick (objects, corners, edges, faces).
+    /// The pick mode keys (1 to 4 unless changed): what clicks pick
+    /// (objects, corners, edges, faces).
     fn select_mode_keys(&mut self, ui: &Ui) {
-        let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4];
+        let bindings = &self.bindings;
         let picked = ui.input(|i| {
-            keys.into_iter()
-                .zip(SelectMode::ALL)
-                .find(|(key, _)| first_press(i, *key, |m| m.is_none()))
+            SELECT_MODE_COMMANDS
+                .into_iter()
+                .find(|(command, _)| bindings.key(*command).is_some_and(|k| pressed(i, k)))
                 .map(|(_, mode)| mode)
         });
         if let Some(mode) = picked {
@@ -287,8 +335,8 @@ impl ViewportPanel {
                 }
                 ui.separator();
                 let gizmo = self.tools.gizmo_mode();
-                for mode in GizmoMode::ALL {
-                    let text = format!("{} {}", mode.label(), mode.key());
+                for (command, mode) in GIZMO_COMMANDS {
+                    let text = with_key(ui, mode.label(), self.bindings.key(command));
                     if ui
                         .selectable_label(gizmo == Some(mode), text)
                         .on_hover_text(mode.description())
@@ -302,9 +350,10 @@ impl ViewportPanel {
                 if ui
                     .toggle_value(
                         &mut inside,
-                        format!(
-                            "{INSIDE_ENTITIES_LABEL} {}",
-                            ui.ctx().format_shortcut(&INSIDE_ENTITIES_SHORTCUT)
+                        with_key(
+                            ui,
+                            INSIDE_ENTITIES_LABEL,
+                            self.bindings.key(Command::InsideEntities),
                         ),
                     )
                     .on_hover_text(
@@ -373,8 +422,8 @@ impl ViewportPanel {
             .show(&mut child, |ui| {
                 ui.label("Pick:");
                 let current = self.tools.select_mode();
-                for mode in SelectMode::ALL {
-                    let text = format!("{} {}", mode.label(), mode.key());
+                for (command, mode) in SELECT_MODE_COMMANDS {
+                    let text = with_key(ui, mode.label(), self.bindings.key(command));
                     if ui
                         .selectable_label(current == mode, text)
                         .on_hover_text(mode.description())

@@ -284,6 +284,24 @@ fn oversized_targets_are_clamped_to_the_gpu_limit() {
 }
 
 #[test]
+fn the_memory_budget_limits_material_textures_until_the_first_arrives() {
+    let Some(gpu) = gpu() else { return };
+    let mut renderer = ViewportRenderer::new(&gpu.device, 1);
+    let most = gpu
+        .device
+        .limits()
+        .max_texture_array_layers
+        .min(halberd_render::MAX_MATERIAL_TEXTURES);
+    assert_eq!(
+        renderer.limit_textures(u32::MAX),
+        most,
+        "never more than before"
+    );
+    assert_eq!(renderer.limit_textures(64), 64.min(most));
+    assert_eq!(renderer.limit_textures(0), 1, "at least one");
+}
+
+#[test]
 fn rendering_many_frames_is_stable() {
     let Some(gpu) = gpu() else { return };
     let renderer = ViewportRenderer::new(&gpu.device, best_sample_count(&gpu.adapter));
