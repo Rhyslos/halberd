@@ -1,7 +1,7 @@
 //! The editor window: opens it with eframe (winit + wgpu) and hands each
 //! frame to the workbench from `halberd-ui`.
 
-use crate::content::ContentLoader;
+use crate::content::{ContentLoader, Mounting};
 use crate::files;
 use crate::gpu::GpuViewport;
 use crate::logging::LogBook;
@@ -55,15 +55,26 @@ impl eframe::App for HalberdApp {
         for entry in self.log.take() {
             self.workbench.console_mut().push_logged(entry);
         }
-        if let Some(content) = self.loading.as_ref().and_then(ContentLoader::poll) {
-            self.loading = None;
-            self.workbench.push_console(content.summary());
-            for problem in content.problems() {
-                self.workbench.push_warning(problem.clone());
+        match self.loading.as_ref().map(ContentLoader::poll) {
+            Some(Mounting::Ready(content)) => {
+                self.loading = None;
+                self.workbench.push_console(content.summary());
+                for problem in content.problems() {
+                    self.workbench.push_warning(problem.clone());
+                }
+                self.workbench
+                    .set_content_status(ContentStatus::Mounted(content.summary()));
+                self.content = Some(Arc::new(content));
             }
-            self.workbench
-                .set_content_status(ContentStatus::Mounted(content.summary()));
-            self.content = Some(Arc::new(content));
+            Some(Mounting::Failed) => {
+                self.loading = None;
+                let why = "Garry's Mod's content could not be read (the reading stopped \
+                           unexpectedly; the log file may say more).";
+                self.workbench.push_warning(why);
+                self.workbench
+                    .set_content_status(ContentStatus::Mounted(why.into()));
+            }
+            Some(Mounting::Busy) | None => {}
         }
         // The window's close button: with unsaved changes, ask first.
         let close_requested = ctx.input(|i| i.viewport().close_requested());

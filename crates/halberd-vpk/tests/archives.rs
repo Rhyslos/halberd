@@ -214,3 +214,93 @@ fn a_large_file_list_opens_quickly() {
     // Generous, for slow test machines and unoptimised builds.
     assert!(took.as_secs_f32() < 5.0, "opening took {took:?}");
 }
+
+/// A single-file version 1 archive written by hand, for names
+/// `VpkBuilder` would never write: (folder, name, extension, contents).
+/// (folder, name, extension, contents), as raw bytes.
+type RawFile<'a> = (&'a [u8], &'a [u8], &'a [u8], &'a [u8]);
+
+fn raw_archive(path: &Path, files: &[RawFile<'_>]) {
+    let mut tree = Vec::new();
+    let mut data = Vec::new();
+    for (folder, name, extension, contents) in files {
+        for part in [*extension, *folder, *name] {
+            tree.extend_from_slice(part);
+            tree.push(0);
+        }
+        tree.extend_from_slice(&halberd_vpk::crc32(contents).to_le_bytes());
+        tree.extend_from_slice(&0u16.to_le_bytes());
+        tree.extend_from_slice(&0x7FFFu16.to_le_bytes());
+        tree.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        tree.extend_from_slice(&(contents.len() as u32).to_le_bytes());
+        tree.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        data.extend_from_slice(contents);
+        tree.extend_from_slice(&[0, 0]); // end of names, then of folders
+    }
+    tree.push(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&0x55AA_1234u32.to_le_bytes());
+    out.extend_from_slice(&1u32.to_le_bytes());
+    out.extend_from_slice(&(tree.len() as u32).to_le_bytes());
+    out.extend_from_slice(&tree);
+    out.extend_from_slice(&data);
+    std::fs::write(path, out).unwrap();
+}
+
+#[test]
+fn backslash_folders_and_odd_bytes_in_names_still_work() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("odd.vpk");
+    raw_archive(
+        &path,
+        &[
+            (b"Materials\\Brick", b"Wall", b"vmt", b"wall"),
+            (b"sound", b"caf\xe9", b"wav", b"latin-1 name"),
+        ],
+    );
+    let vpk = Vpk::open(&path).unwrap();
+    assert_eq!(vpk.read("materials/brick/wall.vmt").unwrap(), b"wall");
+    assert!(vpk.contains("MATERIALS\\BRICK\\WALL.VMT"));
+    assert_eq!(vpk.entries()[0].path, "Materials/Brick/Wall.vmt");
+    assert_eq!(
+        vpk.entries().len(),
+        2,
+        "the odd name doesn't spoil the archive"
+    );
+}
+
+#[test]
+fn very_long_names_are_refused_before_using_much_memory() {
+    // Regression: one huge folder name shared by many entries was copied
+    // into every path (a 1 MB file took 2 GB).
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("long.vpk");
+    let folder = vec![b'a'; 1024 * 1024];
+    raw_archive(&path, &[(&folder, b"x", b"txt", b"")]);
+    let err = Vpk::open(&path).unwrap_err().to_string();
+    assert!(err.contains("too long"), "{err}");
+}
+
+#[test]
+fn directory_names_in_any_case_find_their_numbered_archives() {
+    let dir = tempfile::tempdir().unwrap();
+    for (dir_name, archive_name) in [
+        ("pak01_Dir.vpk", "pak01_000.vpk"),
+        ("PAK02_DIR.VPK", "PAK02_000.VPK"),
+    ] {
+        let lower = dir.path().join("tmp_dir.vpk");
+        sample().write_split(&lower).unwrap();
+        std::fs::rename(&lower, dir.path().join(dir_name)).unwrap();
+        std::fs::rename(
+            dir.path().join("tmp_000.vpk"),
+            dir.path().join(archive_name),
+        )
+        .unwrap();
+        let vpk = Vpk::open(&dir.path().join(dir_name)).unwrap();
+        assert_eq!(
+            vpk.read("readme").unwrap(),
+            b"no folder, no extension",
+            "{dir_name}"
+        );
+    }
+}

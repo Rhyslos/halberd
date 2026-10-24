@@ -24,6 +24,12 @@ pub const MAX_TREE_SIZE: u64 = 256 * 1024 * 1024;
 pub const MAX_ENTRIES: usize = 2_000_000;
 /// Largest single file read from an archive.
 pub const MAX_FILE_SIZE: u64 = 1024 * 1024 * 1024;
+/// Longest folder, name or extension in a file list (real paths are under
+/// 260 characters).
+pub const MAX_NAME_LENGTH: usize = 1024;
+/// Most bytes all listed paths may take together (Half-Life 2's largest
+/// archive lists a few megabytes).
+pub const MAX_PATH_BYTES: usize = 256 * 1024 * 1024;
 
 /// One file listed in an archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,7 +104,7 @@ impl Vpk {
         let mut index = HashMap::with_capacity(entries.len());
         for (i, entry) in entries.iter().enumerate() {
             // The first listing of a path wins, as in the engine.
-            index.entry(entry.path.to_ascii_lowercase()).or_insert(i);
+            index.entry(normalize(&entry.path)).or_insert(i);
         }
         Ok(Self {
             dir_path: path.to_path_buf(),
@@ -149,8 +155,9 @@ impl Vpk {
         if entry.size() > MAX_FILE_SIZE {
             return Err(VpkError::TooLarge("a file in it"));
         }
-        let mut data = Vec::with_capacity(entry.size() as usize);
-        data.extend_from_slice(&entry.preload);
+        // Nothing is allocated for the rest until the archive is known to
+        // hold it.
+        let mut data = entry.preload.clone();
         if entry.length > 0 {
             let (archive_path, base) = if entry.archive == IN_DIRECTORY {
                 (self.dir_path.clone(), self.data_start)
@@ -181,15 +188,21 @@ impl Vpk {
             .file_name()
             .and_then(|n| n.to_str())
             .ok_or(VpkError::Damaged("its name is not readable"))?;
-        let stem = name
-            .strip_suffix("_dir.vpk")
-            .or_else(|| name.strip_suffix("_DIR.VPK"))
-            .ok_or(VpkError::Damaged(
-                "a file is in a numbered archive, but this is not a _dir.vpk",
-            ))?;
+        // "_dir.vpk" in any case; the numbered archives keep the extension's
+        // case ("pak01_DIR.VPK" goes with "pak01_000.VPK").
+        let split = name.len().checked_sub("_dir.vpk".len());
+        let (stem, suffix) = match split.and_then(|at| Some((name.get(..at)?, name.get(at..)?))) {
+            Some((stem, suffix)) if suffix.eq_ignore_ascii_case("_dir.vpk") => (stem, suffix),
+            _ => {
+                return Err(VpkError::Damaged(
+                    "a file is in a numbered archive, but this is not a _dir.vpk",
+                ));
+            }
+        };
+        let extension = &suffix[4..];
         Ok(self
             .dir_path
-            .with_file_name(format!("{stem}_{number:03}.vpk")))
+            .with_file_name(format!("{stem}_{number:03}{extension}")))
     }
 }
 
@@ -220,17 +233,22 @@ struct Cursor<'a> {
 }
 
 impl<'a> Cursor<'a> {
-    fn string(&mut self) -> Result<&'a str, VpkError> {
+    /// A folder, name or extension. Names that are not valid UTF-8 (old
+    /// tools wrote Latin-1) are read with stand-ins for the odd bytes.
+    fn string(&mut self) -> Result<String, VpkError> {
         let rest = self
             .data
             .get(self.at..)
             .ok_or(VpkError::Damaged("the file list is cut short"))?;
         let end = rest
             .iter()
+            .take(MAX_NAME_LENGTH + 1)
             .position(|&b| b == 0)
-            .ok_or(VpkError::Damaged("a name in the file list never ends"))?;
+            .ok_or(VpkError::Damaged(
+                "a name in the file list is too long or never ends",
+            ))?;
         self.at += end + 1;
-        std::str::from_utf8(&rest[..end]).map_err(|_| VpkError::Damaged("a name is not valid text"))
+        Ok(String::from_utf8_lossy(&rest[..end]).into_owned())
     }
 
     fn bytes(&mut self, n: usize) -> Result<&'a [u8], VpkError> {
@@ -257,6 +275,7 @@ impl<'a> Cursor<'a> {
 fn parse_tree(tree: &[u8]) -> Result<Vec<VpkEntry>, VpkError> {
     let mut cursor = Cursor { data: tree, at: 0 };
     let mut entries = Vec::new();
+    let mut path_bytes = 0usize;
     loop {
         let extension = cursor.string()?;
         if extension.is_empty() {
@@ -284,8 +303,13 @@ fn parse_tree(tree: &[u8]) -> Result<Vec<VpkEntry>, VpkError> {
                     return Err(VpkError::Damaged("an entry does not end where it should"));
                 }
                 let preload = cursor.bytes(usize::from(preload_len))?.to_vec();
+                let path = join(&folder, &name, &extension);
+                path_bytes += path.len();
+                if path_bytes > MAX_PATH_BYTES {
+                    return Err(VpkError::TooLarge("the length of its file names"));
+                }
                 entries.push(VpkEntry {
-                    path: join(folder, name, extension),
+                    path,
                     crc,
                     preload,
                     archive,
@@ -302,7 +326,7 @@ fn parse_tree(tree: &[u8]) -> Result<Vec<VpkEntry>, VpkError> {
 fn join(folder: &str, name: &str, extension: &str) -> String {
     let mut path = String::new();
     if folder != " " {
-        path.push_str(folder);
+        path.push_str(&folder.replace('\\', "/"));
         path.push('/');
     }
     path.push_str(name);

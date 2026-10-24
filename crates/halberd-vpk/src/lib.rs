@@ -16,7 +16,9 @@ mod write;
 
 pub use crc::crc32;
 pub use error::VpkError;
-pub use read::{MAX_ENTRIES, MAX_FILE_SIZE, MAX_TREE_SIZE, Vpk, VpkEntry};
+pub use read::{
+    MAX_ENTRIES, MAX_FILE_SIZE, MAX_NAME_LENGTH, MAX_PATH_BYTES, MAX_TREE_SIZE, Vpk, VpkEntry,
+};
 pub use write::VpkBuilder;
 
 /// The name of this crate, used in logs and diagnostics.

@@ -15,8 +15,9 @@ use std::path::{Component, Path, PathBuf};
 
 /// Largest loose file read.
 const MAX_LOOSE_FILE: u64 = 1024 * 1024 * 1024;
-/// Most places mounted (a damaged `gameinfo.txt` can't make thousands).
-const MAX_SOURCES: usize = 512;
+/// Most places one `*` search path mounts (addons): more are skipped, but
+/// the search paths after it are still mounted.
+const MAX_EXPANDED: usize = 4096;
 /// Largest `gameinfo.txt` read.
 const MAX_GAMEINFO: u64 = 1024 * 1024;
 
@@ -66,7 +67,7 @@ impl GameContent {
         let gameinfo = install.game_dir.join("gameinfo.txt");
         let text = std::fs::metadata(&gameinfo)
             .ok()
-            .filter(|m| m.len() <= MAX_GAMEINFO)
+            .filter(|m| m.is_file() && m.len() <= MAX_GAMEINFO)
             .and_then(|_| std::fs::read(&gameinfo).ok())
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
         let Some(text) = text else {
@@ -76,7 +77,7 @@ impl GameContent {
                 .push(format!("{} could not be read.", gameinfo.display()));
             return content;
         };
-        match halberd_kv::parse(&text) {
+        match halberd_kv::parse_game_file(&text) {
             Ok(entries) => {
                 Self::from_search_paths(&install.root, &install.game_dir, &search_paths(&entries))
             }
@@ -98,17 +99,16 @@ impl GameContent {
         let mut content = Self::default();
         let mut seen = BTreeSet::new();
         for value in paths {
-            for place in expand(root, game_dir, value) {
-                if content.sources.len() >= MAX_SOURCES {
-                    content.problems.push(
-                        "Too many places to look for game content; the rest are skipped.".into(),
-                    );
-                    return content;
+            let (places, cut_short) = expand(root, game_dir, value);
+            if cut_short {
+                content.problems.push(format!(
+                    "\"{value}\" holds more than {MAX_EXPANDED} addons; the rest are not read."
+                ));
+            }
+            for place in places {
+                if seen.insert(place.clone()) {
+                    content.add(place);
                 }
-                if !seen.insert(place.clone()) {
-                    continue;
-                }
-                content.add(place);
             }
         }
         content
@@ -119,7 +119,8 @@ impl GameContent {
     fn add(&mut self, place: PathBuf) {
         let is_vpk = place
             .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("vpk"));
+            .is_some_and(|e| e.eq_ignore_ascii_case("vpk"))
+            && !place.is_dir();
         if !is_vpk {
             if place.is_dir() {
                 self.sources.push(Source::Folder(place));
@@ -193,8 +194,9 @@ impl GameContent {
         let Some(relative) = relative_path(path) else {
             return false;
         };
+        let key = relative.to_string_lossy().replace('\\', "/");
         self.sources.iter().any(|source| match source {
-            Source::Archive(vpk) => vpk.contains(path),
+            Source::Archive(vpk) => vpk.contains(&key),
             Source::Folder(folder) => find_in_folder(folder, &relative).is_some(),
         })
     }
@@ -204,24 +206,30 @@ impl GameContent {
     pub fn read(&self, path: &str) -> Result<Vec<u8>, ContentError> {
         let relative =
             relative_path(path).ok_or_else(|| ContentError::BadPath(path.to_string()))?;
+        let key = relative.to_string_lossy().replace('\\', "/");
+        // A copy that can't be read (damaged, checksum wrong) gives way to
+        // the next place that has the file.
+        let mut problem = None;
         for source in &self.sources {
-            match source {
-                Source::Archive(vpk) => {
-                    if vpk.contains(path) {
-                        return vpk.read(path).map_err(|e| {
-                            ContentError::Unreadable(path.to_string(), e.to_string())
-                        });
-                    }
+            let found = match source {
+                Source::Archive(vpk) if vpk.contains(&key) => {
+                    Some(vpk.read(&key).map_err(|e| e.to_string()))
                 }
-                Source::Folder(folder) => {
-                    if let Some(file) = find_in_folder(folder, &relative) {
-                        return read_loose(&file)
-                            .map_err(|e| ContentError::Unreadable(path.to_string(), e));
-                    }
+                Source::Archive(_) => None,
+                Source::Folder(folder) => find_in_folder(folder, &relative).map(|f| read_loose(&f)),
+            };
+            match found {
+                Some(Ok(bytes)) => return Ok(bytes),
+                Some(Err(why)) => {
+                    problem.get_or_insert(why);
                 }
+                None => {}
             }
         }
-        Err(ContentError::NotFound(path.to_string()))
+        Err(match problem {
+            Some(why) => ContentError::Unreadable(path.to_string(), why),
+            None => ContentError::NotFound(path.to_string()),
+        })
     }
 
     /// Every archived file whose path starts with `prefix` and ends with
@@ -277,8 +285,10 @@ pub fn search_paths(entries: &[Entry]) -> Vec<String> {
 }
 
 /// The places one search path names: its macros replaced, and a trailing
-/// `*` (every folder inside, as for addons) expanded.
-fn expand(root: &Path, game_dir: &Path, value: &str) -> Vec<PathBuf> {
+/// `*` (as for addons) expanded to every folder and VPK archive inside, as
+/// the engine does. Also says whether a `*` held more than
+/// [`MAX_EXPANDED`] and was cut short.
+fn expand(root: &Path, game_dir: &Path, value: &str) -> (Vec<PathBuf>, bool) {
     let value = value.trim().replace('\\', "/");
     let (base, rest) = if let Some(rest) = strip_prefix_ci(&value, "|gameinfo_path|") {
         (game_dir.to_path_buf(), rest)
@@ -287,26 +297,49 @@ fn expand(root: &Path, game_dir: &Path, value: &str) -> Vec<PathBuf> {
     } else {
         (root.to_path_buf(), value.as_str())
     };
-    // Only paths that stay inside the install are mounted.
-    let Some(relative) = relative_path(rest.trim_end_matches('*').trim_end_matches('/')) else {
-        if rest == "." || rest.is_empty() {
-            return vec![base];
+    let every = rest.ends_with('*');
+    let inner = rest.trim_end_matches('*').trim_end_matches('/');
+    let inner = inner.trim_start_matches("./");
+    // "." and "" are the base itself; anything else must stay inside it.
+    let place = if inner.is_empty() || inner == "." {
+        base
+    } else {
+        match relative_path(inner) {
+            Some(relative) => base.join(relative),
+            None => return (Vec::new(), false),
         }
-        return Vec::new();
     };
-    let place = base.join(relative);
-    if rest.ends_with('*') {
-        let mut folders: Vec<PathBuf> = std::fs::read_dir(&place)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.is_dir())
-            .collect();
-        folders.sort();
-        return folders;
+    if !every {
+        return (vec![place], false);
     }
-    vec![place]
+    let mut found = Vec::new();
+    let mut cut_short = false;
+    for entry in std::fs::read_dir(&place).into_iter().flatten().flatten() {
+        if found.len() >= MAX_EXPANDED {
+            cut_short = true;
+            break;
+        }
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+        let is_archive = !is_dir && name.ends_with(".vpk") && !is_numbered_archive(&name);
+        if is_dir || is_archive {
+            found.push(path);
+        }
+    }
+    found.sort();
+    (found, cut_short)
+}
+
+/// True for `name_000.vpk`-style numbered archives (read through their
+/// `_dir.vpk`, never mounted on their own).
+fn is_numbered_archive(name: &str) -> bool {
+    let Some(stem) = name.strip_suffix(".vpk") else {
+        return false;
+    };
+    stem.len() > 4
+        && stem.as_bytes()[stem.len() - 4] == b'_'
+        && stem[stem.len() - 3..].bytes().all(|b| b.is_ascii_digit())
 }
 
 fn strip_prefix_ci<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
