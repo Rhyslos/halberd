@@ -24,6 +24,6 @@ mod parse;
 mod tree;
 mod write;
 
-pub use parse::{KvError, MAX_DEPTH, parse};
+pub use parse::{KvError, MAX_DEPTH, parse, parse_game_file};
 pub use tree::{Block, Entry};
 pub use write::{LineEnding, write, write_with};

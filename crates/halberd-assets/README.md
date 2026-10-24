@@ -28,4 +28,11 @@ GMod install detection implemented:
 4. The compile tools (vbsp, vvis, vrad, bspzip) are looked up in `bin/win64` first, then `bin`.
 5. The Workshop content folder is found next to the install when it exists.
 
-Mounting, indexing and caching arrive in Phase 1.
+Mounting game content (`content.rs`, `GameContent`):
+
+1. `gameinfo.txt`'s `game` search paths are read in order (`search_paths`); `|gameinfo_path|` and `|all_source_engine_paths|` are filled in, platform conditions such as `[$WIN32]` are skipped, and a trailing `*` (addons) mounts every folder and VPK archive inside (at most 4096 per `*`; the search paths after it are still mounted). Paths that would leave the install are skipped; `.`, `./` and `` name the base folder.
+2. Each place is a folder or a VPK archive (`.vpk` paths mount their `_dir.vpk`). Places that don't exist are skipped; archives that can't be read become notes (`problems`).
+3. `read` and `contains` look in each place in turn; the first that has the file wins, as in the engine; a copy that can't be read (damaged) gives way to the next place that has it. Archive lists are in memory; folders are only looked into when asked, matching names without regard to case. Paths that would leave the game (`..`, absolute) are refused.
+4. `archived_files` lists archived files by folder and extension (for the material browser); `summary` gives a line for the Console.
+
+Indexing loose files and caching decoded assets arrive with the browsers.
