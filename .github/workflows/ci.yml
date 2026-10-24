@@ -103,11 +103,12 @@ jobs:
         run: cargo install cargo-deny --version 0.20.2 --locked
       - name: Check licenses, advisories, bans and sources
         run: |
-          if ! cargo deny --all-features check > deny.log 2>&1; then
+          if ! cargo deny --color never --all-features check > deny.log 2>&1; then
             cat deny.log
-            grep -E '^error' -A3 deny.log | head -60 | while IFS= read -r line; do
-              echo "::error title=cargo-deny::${line}"
-            done
+            { grep -E 'error' -A3 deny.log || tail -n 20 deny.log; } | head -60 |
+              while IFS= read -r line; do
+                echo "::error title=cargo-deny::${line}"
+              done
             exit 1
           fi
           cat deny.log
