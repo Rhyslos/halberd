@@ -81,6 +81,7 @@ All notable changes to Halberd are listed here, newest first. The format follows
 
 ### Fixed
 
+- Faces whose texture no longer fit them (after turning a brush, or on the new faces of an extruded loaded wall) were saved with their texture smeared into streaks; they are now saved world-aligned, keeping their scale.
 - A very quick click in the viewport (down and up before the next frame, common with touchpads or on slow machines) was missed by the tools; it now counts.
 - Pressing Escape to leave a text box (the Console's or Keybinds' search, a Properties field) no longer also deselects everything in the map.
 - Ctrl+W released quickly no longer also counts as W, and other shortcut keys check the modifier keys held when the key went down.

@@ -76,6 +76,9 @@ impl ViewportPanel {
         self.set_layout(setup.layout);
         for (pane, view) in self.panes.iter_mut().zip(setup.views) {
             pane.set_view(view);
+            // Settings saved before render modes existed: start as the
+            // restored view would.
+            pane.mode = RenderMode::default_for(view);
         }
         for (pane, mode) in self.panes.iter_mut().zip(setup.modes) {
             pane.mode = mode;

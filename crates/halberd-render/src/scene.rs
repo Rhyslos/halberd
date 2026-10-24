@@ -17,6 +17,12 @@ pub const POINT_ENTITY_COLOR: [f32; 4] = [0.42, 0.12, 0.52, 1.0];
 pub const SELECTED_COLOR: [f32; 4] = [0.55, 0.10, 0.08, 1.0];
 /// Brush outline colour, linear space (dark, so faces read as solid).
 pub const EDGE_COLOR: [f32; 4] = [0.02, 0.02, 0.025, 1.0];
+/// Outline of brushes that belong to an entity: as dark, with a hint of
+/// teal that the Wireframe mode brightens.
+pub const ENTITY_EDGE_COLOR: [f32; 4] = [0.0, 0.06, 0.06, 1.0];
+/// Outline of point entity markers: as dark, with a hint of purple that
+/// the Wireframe mode brightens.
+pub const POINT_ENTITY_EDGE_COLOR: [f32; 4] = [0.06, 0.0, 0.07, 1.0];
 /// Selected brush outline colour, linear space; drawn on top of everything.
 pub const SELECTED_EDGE_COLOR: [f32; 4] = [1.0, 0.22, 0.12, 1.0];
 /// Outline of a box being drawn, linear space (warm yellow).
@@ -183,7 +189,14 @@ impl SceneGeometry {
                 SELECTED_EDGE_COLOR,
             )
         } else {
-            (base, &mut self.edges, EDGE_COLOR)
+            let edge = if base == ENTITY_BRUSH_COLOR {
+                ENTITY_EDGE_COLOR
+            } else if base == POINT_ENTITY_COLOR {
+                POINT_ENTITY_EDGE_COLOR
+            } else {
+                EDGE_COLOR
+            };
+            (base, &mut self.edges, edge)
         };
         for (k, face) in brush.faces().iter().enumerate() {
             let normal = face.plane().normal.to_array();
@@ -470,6 +483,21 @@ mod tests {
         let scene = SceneGeometry::from_document(&doc);
         assert_eq!(count(&scene, SELECTED_COLOR), 36);
         assert_eq!(count(&scene, ENTITY_BRUSH_COLOR), 36);
+    }
+
+    #[test]
+    fn entity_outlines_carry_their_kind_for_the_wireframe_mode() {
+        let mut doc = doc_with_entities();
+        doc.clear_selection();
+        let scene = SceneGeometry::from_document(&doc);
+        let count = |color| scene.edges.iter().filter(|v| v.color == color).count();
+        assert_eq!(count(ENTITY_EDGE_COLOR), 2 * 48, "func_detail's brushes");
+        assert_eq!(count(POINT_ENTITY_EDGE_COLOR), 48, "the light");
+        assert_eq!(count(EDGE_COLOR), 0);
+        // All still dark, so solid faces read the same in the Flat mode.
+        for color in [EDGE_COLOR, ENTITY_EDGE_COLOR, POINT_ENTITY_EDGE_COLOR] {
+            assert!(color[..3].iter().all(|c| *c < 0.08));
+        }
     }
 
     #[test]

@@ -314,12 +314,21 @@ fn render_modes_are_saved_and_older_saves_without_them_still_load() {
         modes: Vec::new(),
         ..setup
     };
-    let back = ViewportPanel::new(None, ViewportOptions::default()).with_view_setup(old);
+    let back = ViewportPanel::new(None, ViewportOptions::default()).with_view_setup(old.clone());
     assert_eq!(
         back.render_mode(1),
         RenderMode::Wireframe,
         "the default for Top"
     );
+    // Regression: views restored into other slots started with the slot's
+    // mode, so a 3D view in slot 1 came back as a wireframe.
+    let swapped = ViewSetup {
+        views: vec![PaneView::Side(Side::Top), PaneView::Perspective],
+        ..old
+    };
+    let back = ViewportPanel::new(None, ViewportOptions::default()).with_view_setup(swapped);
+    assert_eq!(back.render_mode(0), RenderMode::Wireframe);
+    assert_eq!(back.render_mode(1), RenderMode::Flat);
     let text = "(layout: Four, views: [Perspective], sides: [])";
     let parsed: ViewSetup = ron::from_str(text).unwrap();
     assert!(parsed.modes.is_empty());

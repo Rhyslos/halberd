@@ -102,10 +102,13 @@ fn line_vs(in: LineIn) -> LineOut {
     out.clip = frame.view_proj * vec4<f32>(in.position, 1.0);
     out.color = in.color;
     // Without faces, the dark outlines that frame solid faces would vanish
-    // into the background: draw them light instead.
+    // into the background: draw them light instead, keeping the hint of
+    // colour entity outlines carry (teal for brush entities, purple for
+    // point entities).
     let dark = max(max(in.color.r, in.color.g), in.color.b) < 0.08;
     if frame.plane.w > 1.5 && dark {
-        out.color = vec4<f32>(0.55, 0.57, 0.62, 1.0);
+        let tint = (in.color.rgb - vec3<f32>(0.02, 0.02, 0.025)) * 5.0;
+        out.color = vec4<f32>(vec3<f32>(0.55, 0.57, 0.62) + tint, 1.0);
     }
     return out;
 }
@@ -157,8 +160,9 @@ fn material_pattern(texture: vec4<f32>) -> vec3<f32> {
     let base = hue_color(texture.z);
     let uv = texture.xy;
     let quarter = floor(uv * 4.0);
-    let checker = (i32(quarter.x) + i32(quarter.y)) & 1;
-    var color = base * select(1.0, 0.86, checker == 1);
+    // fract instead of integers: no overflow however far the coordinates go.
+    let checker = fract((quarter.x + quarter.y) * 0.5) > 0.25;
+    var color = base * select(1.0, 0.86, checker);
     let per_pixel = max(fwidth(uv), vec2<f32>(1e-6));
     let edge = abs(fract(uv - 0.5) - 0.5) / per_pixel;
     let on_edge = 1.0 - min(min(edge.x, edge.y), 1.0);
