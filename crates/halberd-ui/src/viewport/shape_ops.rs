@@ -71,7 +71,7 @@ impl ViewportPanel {
     /// Carries out `op` on `doc` as one undo step. Returns messages for
     /// the Console: why it could not be done, or something worth knowing.
     pub fn run_shape_op(&mut self, op: ShapeOp, doc: &mut Document) -> Vec<String> {
-        let camera = *self.controller.camera();
+        let camera = self.active_camera();
         match self.tools.apply_shape_op(op, doc, &camera) {
             Ok(note) => note.into_iter().collect(),
             Err(reason) => vec![reason],

@@ -63,7 +63,7 @@ See [decision 0009](docs/decisions/0009-document-commands-and-brushes.md).
 | VDF (Steam config) | Yes | No |
 | `.halberd` (Halberd projects, versioned) | Yes | Yes |
 | `settings.toml` (editor settings; View menu choices are saved back to it) | Yes | Yes |
-| `app.ron` (window size, panel layout, viewport camera; written by eframe) | Yes | Yes |
+| `app.ron` (window size, panel layout, viewport camera and views; written by eframe) | Yes | Yes |
 
 Compiled `.bsp` maps are written by Valve's compilers (vbsp, vvis, vrad) from the user's own GMod install. Halberd never ships them.
 
@@ -90,11 +90,13 @@ The Console (`halberd-ui`) holds messages with a time and a level (information, 
 
 Coordinates follow Hammer: **Z is up**, units are Hammer units, right-handed.
 
-Each frame, for each viewport:
+The viewport panel shows up to six views in a preset layout (one, two side by side or stacked, three, four as in Hammer, or six). Each view shows the 3D perspective or one of the six flat side views (Top, Bottom, Front, Back, Left, Right), and keeps its own cameras. The view under the pointer gets the input, and keeps it while a button is held or a tool is busy. The tools are shared: a selection or drag shows in every view. See [decision 0020](docs/decisions/0020-multiple-views.md).
 
-1. **Input** (`halberd-ui`): the panel turns egui's mouse and keyboard state into a plain `ViewportInput`.
-2. **Camera and tools** (`halberd-tools`): the `CameraController` applies it in the current mode (Default, Orbit or Fly), asking the map what is under the pointer through `SceneQuery` (`DocumentScene`); the active tool turns left-mouse input into a `ToolAction`.
-3. **Render** (`halberd-render`, called through `halberd-app`'s `GpuViewport`): brushes, the grid and axes are drawn into the viewport's own offscreen image on the window's GPU device.
+Each frame, for each view:
+
+1. **Input** (`halberd-ui`): the panel turns egui's mouse and keyboard state into a plain `ViewportInput` (other views get an empty one).
+2. **Camera and tools** (`halberd-tools`): a 3D view's `CameraController` applies it in the current mode (Default, Orbit or Fly), asking the map what is under the pointer through `SceneQuery` (`DocumentScene`); a side view's `SideCamera` pans and zooms. Only the active view's input reaches the tool, which turns left-mouse input into a `ToolAction`.
+3. **Render** (`halberd-render`, called through `halberd-app`'s `GpuViewport`): brushes, the grid and axes are drawn into the view's own offscreen image on the window's GPU device. Side views draw their grid flat behind the map.
 4. **Show** (`halberd-ui`): the image is drawn into the panel as an egui texture, with the pivot marker and the camera mode switcher on top.
 
 Rendering sits behind the `ViewportRenderer` trait, so the panel runs in tests with no GPU. See [decision 0008](docs/decisions/0008-viewport-rendering-and-camera.md).

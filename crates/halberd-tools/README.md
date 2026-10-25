@@ -47,6 +47,10 @@ The viewport camera and the first left-mouse tools are implemented.
 
 `DocumentScene` is what the camera and tools see of an open map: brush surfaces first, the grid plane elsewhere, and the selection's centre for Orbit mode.
 
+### Side views
+
+`SideCamera` (`side_view.rs`) is a flat view looking along one axis (`Side`: Top, Bottom, Front, Back, Left, Right, with Hammer's axes: Top shows X right and Y up, Front Y/Z, Right X/Z). Its `Camera` has `ortho` set (half the height shown), stands far back so the whole map is in front, and starts its rays at the edge of the map (`MAP_EDGE`) so picking reaches everything. `update` pans with the right or middle button and zooms around the pointer; `frame` shows a box; `grid_plane` says where the view's grid lies (flat behind the map). `Camera::units_per_point` sizes things on screen (the gizmo) in both kinds of view.
+
 ### Player size
 
 `PLAYER_HEIGHT` (72), `PLAYER_WIDTH` (32), `PLAYER_EYE_HEIGHT` (64) and `player_bounds`: the standard Half-Life 2 player that GMod uses, for the scale figure in the viewport.

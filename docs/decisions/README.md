@@ -26,3 +26,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0017](0017-shape-operations.md) | Shape operations | Accepted |
 | [0018](0018-boolean-operations.md) | Boolean operations | Accepted |
 | [0019](0019-floor-plan-shapes.md) | Floor plan shapes, split into convex brushes on save | Accepted |
+| [0020](0020-multiple-views.md) | Several views in one viewport panel | Accepted |
