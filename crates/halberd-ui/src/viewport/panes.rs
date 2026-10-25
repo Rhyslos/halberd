@@ -189,6 +189,7 @@ impl ViewportPanel {
         );
 
         self.draw_links(&painter, rect, &camera, size);
+        self.draw_sculpt_brush(&painter, rect, &camera, size);
         self.draw_leak(&painter, rect, &camera, size);
 
         let first = index == 0;

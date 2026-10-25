@@ -75,10 +75,11 @@ impl ViewportPanel {
         let popup_open =
             egui::Popup::is_any_open(ui.ctx()) || self.popup_was_open || self.shape_menu.is_some();
         let key = |command| self.bindings.key(command);
-        let (draw, inside, select) = (
+        let (draw, inside, select, sculpt) = (
             key(Command::DrawTool),
             key(Command::InsideEntities),
             key(Command::SelectTool),
+            key(Command::SculptTool),
         );
         let (left_down, additive, escape, box_key, inside_key, select_key) = ui.input(|i| {
             let hit =
@@ -92,6 +93,7 @@ impl ViewportPanel {
                 hit(select),
             )
         });
+        let sculpt_key = ui.input(|i| !typing && sculpt.is_some_and(|k| pressed(i, k)));
         let (uniform, centered) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
         if inside_key {
             let on = !self.tools.inside_entities();
@@ -152,6 +154,10 @@ impl ViewportPanel {
             self.shape_menu = None;
             self.tools.set_tool(Tool::Select);
         }
+        if sculpt_key {
+            self.shape_menu = None;
+            self.tools.set_tool(Tool::Sculpt);
+        }
         // A left press while the right or middle button is moving the camera
         // belongs to the camera, not the tool.
         let pane = &self.panes[self.camera_view];
@@ -208,6 +214,7 @@ impl ViewportPanel {
             cancel: escape,
             uniform,
             centered,
+            dt: ui.input(|i| i.stable_dt),
         };
         let camera = self.active_camera();
         let mut input = input;
@@ -228,6 +235,11 @@ impl ViewportPanel {
             input.held = false;
         }
         let action = plan_action.or_else(|| self.tools.update(&input, &camera, doc));
+        if self.tools.tool() == Tool::Sculpt && self.tools.is_busy() {
+            // Holding the button still keeps sculpting: draw the next frame
+            // even though nothing moved.
+            ui.ctx().request_repaint();
+        }
         match action {
             Some(ToolAction::Select(id)) => doc.set_selection(id),
             Some(ToolAction::ToggleSelected(id)) => doc.toggle_selected(id),
@@ -369,6 +381,7 @@ impl ViewportPanel {
             Tool::Box => self.draw_options(ui, rect),
             Tool::Place => self.place_options(ui, rect),
             Tool::Select => self.pick_options(ui, rect),
+            Tool::Sculpt => self.sculpt_options(ui, rect),
         }
     }
 

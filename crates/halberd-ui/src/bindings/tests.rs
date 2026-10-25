@@ -76,7 +76,7 @@ fn changes_load_from_and_save_to_the_settings_file() {
 #[test]
 fn choosing_the_default_again_removes_the_change() {
     let mut bindings = Bindings::default();
-    bindings.set(Command::Extrude, Some(key(NONE, Key::G)));
+    bindings.set(Command::Extrude, Some(key(NONE, Key::H)));
     assert!(bindings.is_changed(Command::Extrude));
     bindings.set(Command::Extrude, Command::Extrude.default_key());
     assert!(!bindings.is_changed(Command::Extrude));
@@ -116,9 +116,9 @@ fn too_many_entries_are_capped() {
 #[test]
 fn clashes_count_only_where_both_keys_work() {
     let mut bindings = Bindings::default();
-    // G for Extrude and for Bridge: both in the viewport.
-    bindings.set(Command::Extrude, Some(key(NONE, Key::G)));
-    bindings.set(Command::Bridge, Some(key(NONE, Key::G)));
+    // H for Extrude and for Bridge: both in the viewport.
+    bindings.set(Command::Extrude, Some(key(NONE, Key::H)));
+    bindings.set(Command::Bridge, Some(key(NONE, Key::H)));
     assert_eq!(bindings.clashes(Command::Extrude), [Command::Bridge]);
     // Ctrl+S for Save (anywhere) clashes with a viewport command on it.
     bindings.set(Command::Split, Some(key(CTRL, Key::S)));

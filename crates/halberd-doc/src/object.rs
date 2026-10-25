@@ -135,11 +135,14 @@ impl BrushObject {
 
     /// The same brush with a new shape made from this one's faces (moved,
     /// turned or resized), keeping each face's material and file data.
+    /// Displacements go along with their faces.
     pub fn with_shape(&self, brush: Brush) -> Self {
-        Self {
+        let mut shaped = Self {
             entity: self.entity,
             ..Self::from_parts(brush, &self.faces, self.file_data.clone())
-        }
+        };
+        crate::displacement::follow_shape(&self.brush, &shaped.brush, &mut shaped.faces);
+        shaped
     }
 
     /// The same brush with a new shape from editing its corners, edges or

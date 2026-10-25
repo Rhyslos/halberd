@@ -63,16 +63,16 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a blockout map built only in Halberd compiles, loads in GMod, and is walkable at the correct scale.
 
-### Phase 2 · Production (v0.5, beta) — 2 of 14
+### Phase 2 · Production (v0.5, beta) — 3 of 14
 
-`██░░░░░░░░░░░` 14%
+`███░░░░░░░░░░` 21%
 
 <details>
 <summary>Milestones</summary>
 
 - [x] Full entity list from GMod's FGD files, with keyvalue editing
 - [x] Entity inputs and outputs with a visual connection view
-- [ ] Displacements: create, sculpt, paint blend textures
+- [x] Displacements: create, sculpt, paint blend textures
 - [ ] Lighting preview toggle
 - [ ] Compile profiles: geometry only, quick test, final
 - [ ] Incremental compiles
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-24 | Displacements: picked faces become terrain, sculpted, smoothed and blend-painted with the Sculpt tool, drawn as real terrain and saved as Hammer does |
 | 2026-10-24 | Inputs and outputs: outputs edited in Properties with lists and warnings, what reaches an entity, and connection lines in the views |
 | 2026-10-24 | Full entity list: every entity from Garry's Mod's FGD files placed from the Library, keyvalues edited by type in Properties, brushes tied to brush entities |
 | 2026-10-24 | Settings page: change any key, WASD on or off, camera speeds and the memory budget, saved at once |

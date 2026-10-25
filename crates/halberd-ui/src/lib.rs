@@ -47,8 +47,8 @@ pub use settings_page::{
 pub use viewport::{
     ConnectionView, GO_TO_LEAK_LABEL, HIDE_LEAK_LABEL, INSIDE_ENTITIES_LABEL, LAYOUT_PICKER_LABEL,
     LEAK_BANNER_TEXT, MAX_VIEWS, NoRenderer, PLACING_LABEL, PaneView, RenderMode,
-    SHAPE_OP_COMMANDS, VIEWPORT_LABEL, ViewLayout, ViewSetup, ViewportOptions, ViewportPanel,
-    ViewportRenderer, ViewportView,
+    SCULPT_RADIUS_NAME, SCULPT_STRENGTH_NAME, SHAPE_OP_COMMANDS, VIEWPORT_LABEL, ViewLayout,
+    ViewSetup, ViewportOptions, ViewportPanel, ViewportRenderer, ViewportView,
 };
 pub use workbench::{
     AppInfo, CANCEL_BUTTON, COMPILE_LABEL, COMPILE_SHORTCUT, CompileLine, ContentStatus,

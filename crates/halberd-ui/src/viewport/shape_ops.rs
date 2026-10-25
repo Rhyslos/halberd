@@ -76,7 +76,10 @@ pub(crate) fn shape_menu(
     for op in ShapeOp::MENU {
         if matches!(
             op,
-            ShapeOp::MirrorAcrossView | ShapeOp::Union | ShapeOp::MakeBrushes
+            ShapeOp::MirrorAcrossView
+                | ShapeOp::Union
+                | ShapeOp::MakeBrushes
+                | ShapeOp::MakeDisplacement
         ) {
             ui.separator();
         }

@@ -337,8 +337,9 @@ impl Change {
         }
     }
 
-    /// This change followed by `later`, as one change, when both modify the
-    /// same objects. Used to make a whole drag one undo step.
+    /// This change followed by `later`, as one change, when both modify
+    /// objects (or both set the same world setting). Used to make a whole
+    /// drag one undo step.
     pub(crate) fn merged_with(&self, later: &Change) -> Option<Change> {
         if let (
             Self::World {
@@ -360,16 +361,24 @@ impl Change {
         let (Self::Modified(first), Self::Modified(second)) = (self, later) else {
             return None;
         };
-        let same_objects =
-            first.len() == second.len() && first.iter().zip(second).all(|(a, b)| a.0 == b.0);
-        same_objects.then(|| {
-            Self::Modified(
-                first
-                    .iter()
-                    .zip(second)
-                    .map(|((id, before, _), (_, _, after))| (*id, before.clone(), after.clone()))
-                    .collect(),
-            )
-        })
+        // Each object keeps how it was before the first change and how it
+        // is after the last; one changed by only one of them keeps that
+        // change (a sculpt stroke can run onto further brushes).
+        let mut merged = first.clone();
+        let mut places: std::collections::HashMap<ObjectId, usize> = merged
+            .iter()
+            .enumerate()
+            .map(|(k, (id, ..))| (*id, k))
+            .collect();
+        for (id, before, after) in second {
+            match places.get(id).and_then(|k| merged.get_mut(*k)) {
+                Some(entry) => entry.2 = after.clone(),
+                None => {
+                    places.insert(*id, merged.len());
+                    merged.push((*id, before.clone(), after.clone()));
+                }
+            }
+        }
+        Some(Self::Modified(merged))
     }
 }
