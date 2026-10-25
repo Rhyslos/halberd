@@ -649,3 +649,30 @@ fn ctrl_shift_c_arriving_as_copy_still_carves() {
         Some("Subtract from one brush")
     );
 }
+
+#[test]
+fn the_library_says_how_far_game_content_has_got() {
+    let mut harness = harness_for(Workbench::new(info(), None));
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains("Garry's Mod was not found")
+            .is_some()
+    );
+    harness
+        .state_mut()
+        .set_content_status(crate::ContentStatus::Mounting);
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains("Reading Garry's Mod's content")
+            .is_some()
+    );
+    harness
+        .state_mut()
+        .set_content_status(crate::ContentStatus::Mounted(
+            "Game content mounted: 41,203 files in 6 archives, and 2 folders.".into(),
+        ));
+    harness.run();
+    assert!(harness.query_by_label_contains("41,203 files").is_some());
+}

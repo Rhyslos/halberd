@@ -17,6 +17,8 @@ pub(crate) struct Startup {
     pub(crate) settings: Settings,
     /// Where settings are saved, if the settings folder could be found.
     pub(crate) store: Option<SettingsStore>,
+    /// The Garry's Mod install found, if any.
+    pub(crate) install: Option<GmodInstall>,
 }
 
 /// Runs the startup steps.
@@ -81,6 +83,7 @@ pub(crate) fn run(options: &Options) -> Startup {
         report,
         settings,
         store,
+        install,
     }
 }
 

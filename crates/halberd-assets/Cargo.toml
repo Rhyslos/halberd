@@ -16,6 +16,7 @@ layer = 2
 
 [dependencies]
 halberd-config.workspace = true
+halberd-kv.workspace = true
 halberd-vpk.workspace = true
 halberd-gma.workspace = true
 halberd-mdl.workspace = true

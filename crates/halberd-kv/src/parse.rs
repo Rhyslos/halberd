@@ -29,12 +29,16 @@ enum Token<'a> {
     Text(&'a str),
     Open,
     Close,
+    /// A platform condition (`[$WIN32]`), when they are skipped.
+    Condition,
 }
 
 struct Lexer<'a> {
     text: &'a str,
     pos: usize,
     line: usize,
+    /// Skip unquoted `[$WIN32]`-style platform conditions.
+    skip_conditions: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -89,7 +93,11 @@ impl<'a> Lexer<'a> {
                     .find(|c: char| c.is_ascii_whitespace() || matches!(c, '{' | '}' | '"'))
                     .map_or(self.text.len(), |n| start + n);
                 self.pos = end;
-                Ok(Some(Token::Text(&self.text[start..end])))
+                let word = &self.text[start..end];
+                if self.skip_conditions && word.starts_with('[') && word.ends_with(']') {
+                    return Ok(Some(Token::Condition));
+                }
+                Ok(Some(Token::Text(word)))
             }
         }
     }
@@ -97,18 +105,33 @@ impl<'a> Lexer<'a> {
 
 /// Reads KeyValues text into a list of top-level entries.
 pub fn parse(text: &str) -> Result<Vec<Entry>, KvError> {
+    parse_with(text, false)
+}
+
+/// Reads KeyValues text as the game does for its own files (`gameinfo.txt`,
+/// materials): unquoted platform conditions such as `[$WIN32]` after a
+/// value or block name are skipped. Not for files Halberd writes back.
+pub fn parse_game_file(text: &str) -> Result<Vec<Entry>, KvError> {
+    parse_with(text, true)
+}
+
+fn parse_with(text: &str, skip_conditions: bool) -> Result<Vec<Entry>, KvError> {
     // A byte-order mark at the start is not part of the text.
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut lexer = Lexer {
         text,
         pos: 0,
         line: 1,
+        skip_conditions,
     };
     // Each open block: its name, its entries, and the line it began on.
     let mut stack: Vec<(Block, usize)> = Vec::new();
     let mut top: Vec<Entry> = Vec::new();
     let mut pending: Option<&str> = None;
     while let Some(token) = lexer.next()? {
+        if token == Token::Condition {
+            continue;
+        }
         match (token, pending.take()) {
             (Token::Open, Some(name)) => {
                 if stack.len() >= MAX_DEPTH {
@@ -129,6 +152,7 @@ pub fn parse(text: &str) -> Result<Vec<Entry>, KvError> {
                     None => top.push(Entry::Block(block)),
                 }
             }
+            (Token::Condition, key) => pending = key,
             (Token::Text(text), None) => pending = Some(text),
             (Token::Text(value), Some(key)) => {
                 let pair = Entry::Pair(key.to_string(), value.to_string());
@@ -149,4 +173,31 @@ pub fn parse(text: &str) -> Result<Vec<Entry>, KvError> {
         });
     }
     Ok(top)
+}
+
+#[cfg(test)]
+mod condition_tests {
+    use super::*;
+
+    #[test]
+    fn game_files_skip_platform_conditions_and_others_keep_them() {
+        let text = "\"SearchPaths\"\n{\n  game+mod garrysmod/addons/* [$WIN32]\n  game \"|gameinfo_path|.\" [!$X360]\n}\n";
+        let entries = parse_game_file(text).unwrap();
+        let Entry::Block(block) = &entries[0] else {
+            panic!("{entries:?}")
+        };
+        assert_eq!(block.entries.len(), 2);
+        assert_eq!(block.get("game"), Some("|gameinfo_path|."));
+        // The plain reader keeps every word, so the pairs shift.
+        assert_ne!(parse(text).ok(), Some(entries.clone()));
+        // A quoted "[...]" is a real value.
+        let quoted = parse_game_file("\"key\" \"[1 0 0 0] 0.25\"").unwrap();
+        assert_eq!(
+            quoted,
+            vec![Entry::Pair("key".into(), "[1 0 0 0] 0.25".into())]
+        );
+        // Thousands of conditions in a row are no trouble.
+        let many = format!("\"a\" \"b\" {}", "[$X] ".repeat(100_000));
+        assert_eq!(parse_game_file(&many).unwrap().len(), 1);
+    }
 }

@@ -1450,6 +1450,7 @@ version = "0.0.1"
 dependencies = [
  "halberd-config",
  "halberd-gma",
+ "halberd-kv",
  "halberd-mdl",
  "halberd-vpk",
  "halberd-vtf",
@@ -1568,6 +1569,9 @@ dependencies = [
 [[package]]
 name = "halberd-vpk"
 version = "0.0.1"
+dependencies = [
+ "tempfile",
+]
 
 [[package]]
 name = "halberd-vtf"

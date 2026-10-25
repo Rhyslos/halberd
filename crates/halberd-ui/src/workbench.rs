@@ -99,6 +99,20 @@ pub struct Workbench {
     asking_to_save: Option<FileIntent>,
     /// A problem to show in a message box.
     error: Option<String>,
+    /// What the Library panel says about the game's content.
+    content_status: ContentStatus,
+}
+
+/// How far mounting the game's content has got, for the Library panel.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ContentStatus {
+    /// Garry's Mod was not found, so there is no content to mount.
+    #[default]
+    NoGame,
+    /// Its content is being mounted.
+    Mounting,
+    /// Mounted, with a one-line summary.
+    Mounted(String),
 }
 
 impl Workbench {
@@ -120,6 +134,7 @@ impl Workbench {
             file_path: None,
             asking_to_save: None,
             error: None,
+            content_status: ContentStatus::NoGame,
         };
         if let Some(note) = note {
             workbench.push_warning(note);
@@ -194,6 +209,16 @@ impl Workbench {
     /// Edit → Redo.
     pub fn redo(&mut self) {
         self.doc.redo();
+    }
+
+    /// Tells the Library panel how far mounting the game's content has got.
+    pub fn set_content_status(&mut self, status: ContentStatus) {
+        self.content_status = status;
+    }
+
+    /// What the Library panel says about the game's content.
+    pub fn content_status(&self) -> &ContentStatus {
+        &self.content_status
     }
 
     /// Edit → Delete: removes the selected objects (an undoable edit).
@@ -280,6 +305,7 @@ impl Workbench {
             doc: &mut self.doc,
             notes: &mut notes,
             length_unit: self.length_unit,
+            content_status: &self.content_status,
         };
         DockArea::new(&mut self.dock)
             .style(Style::from_egui(ui.style().as_ref()))
@@ -456,6 +482,7 @@ struct PanelViewer<'a> {
     /// Messages for the Console, added after the panels are drawn.
     notes: &'a mut Vec<String>,
     length_unit: LengthUnit,
+    content_status: &'a ContentStatus,
 }
 
 impl TabViewer for PanelViewer<'_> {
@@ -513,11 +540,22 @@ impl TabViewer for PanelViewer<'_> {
                 let notes = self.viewport.show(ui, self.renderer, self.doc);
                 self.notes.extend(notes);
             }
-            Panel::Library => placeholder(
-                ui,
-                "Props, materials and entities",
-                "The asset library arrives in Phase 1.",
-            ),
+            Panel::Library => {
+                let content = match self.content_status {
+                    ContentStatus::NoGame => {
+                        "Garry's Mod was not found, so its materials and models can't be \
+                         shown. Start Halberd with --gmod-dir to point at it."
+                            .to_string()
+                    }
+                    ContentStatus::Mounting => "Reading Garry's Mod's content…".to_string(),
+                    ContentStatus::Mounted(summary) => summary.clone(),
+                };
+                placeholder(
+                    ui,
+                    "Props, materials and entities",
+                    &format!("{content}\n\nBrowsing materials and props arrives next."),
+                );
+            }
             Panel::Scene => scene_contents(ui, self.doc),
             Panel::Layers => placeholder(
                 ui,
