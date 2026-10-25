@@ -35,6 +35,8 @@ pub struct Document {
     /// Goes up whenever a model's box is learnt or changes (which moves
     /// props' boxes without being an edit).
     model_box_revision: u64,
+    /// Goes up whenever an entity's name or connections may have changed.
+    logic_revision: u64,
 }
 
 impl Default for Document {
@@ -52,6 +54,7 @@ impl Default for Document {
             file_data: MapFileData::default(),
             model_boxes: HashMap::new(),
             model_box_revision: 0,
+            logic_revision: 0,
         }
     }
 }
@@ -72,6 +75,7 @@ impl Clone for Document {
             file_data: self.file_data.clone(),
             model_boxes: self.model_boxes.clone(),
             model_box_revision: self.model_box_revision,
+            logic_revision: self.logic_revision,
         }
     }
 }
@@ -502,6 +506,9 @@ impl Document {
             Command::SetWorldSetting { key, value } => self.prepare_world_setting(&key, &value),
             Command::TieToEntity { objects, entity } => self.prepare_tie(&objects, entity),
             Command::MoveToWorld(objects) => self.prepare_move_to_world(&objects),
+            Command::SetConnections { id, connections } => {
+                self.prepare_connections(id, &connections)
+            }
             Command::SetEntityClass { id, classname } => self.prepare_entity_class(id, &classname),
             Command::RemoveEntitySettings { id, keys } => self.prepare_remove_settings(id, &keys),
             Command::AddShape(shape) => {
@@ -543,6 +550,9 @@ impl Document {
 
     /// Carries out a checked change and returns it (for the history).
     fn apply(&mut self, change: Change) -> Change {
+        if change.touches_logic() {
+            self.logic_revision += 1;
+        }
         self.apply_part(&change, false);
         self.revision += 1;
         self.selection_revision += 1;
@@ -726,6 +736,7 @@ impl Document {
     }
 }
 
+mod connections;
 mod entities;
 #[cfg(test)]
 mod map_tests;

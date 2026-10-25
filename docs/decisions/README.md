@@ -38,3 +38,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0029](0029-leak-path.md) | Showing where a map leaks | Accepted |
 | [0030](0030-settings-page.md) | The Settings page: keys, camera and memory | Accepted |
 | [0031](0031-entity-definitions.md) | The full entity list and keyvalue editing | Accepted |
+| [0032](0032-entity-io.md) | Entity inputs and outputs | Accepted |
