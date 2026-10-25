@@ -10,7 +10,16 @@ impl Document {
     /// read, so props showing it are picked and framed by their real size.
     /// Not an edit: nothing to undo, and the map is not changed.
     pub fn set_model_box(&mut self, name: &str, local: Aabb) {
-        self.model_boxes.insert(name.to_ascii_lowercase(), local);
+        let old = self.model_boxes.insert(name.to_ascii_lowercase(), local);
+        if old != Some(local) {
+            self.model_box_revision += 1;
+        }
+    }
+
+    /// Goes up whenever a model's box is learnt or changes, so anything
+    /// worked out from props' sizes (the map's size) can be redone.
+    pub fn model_box_revision(&self) -> u64 {
+        self.model_box_revision
     }
 
     /// Model `name`'s box in its own space, if it has been read.
@@ -67,6 +76,7 @@ mod tests {
         assert_eq!(doc.pick(from, Vec3::Y).map(|(hit, _)| hit), Some(id));
         assert_eq!(doc.bounds_of(id).unwrap().max.z, 176.0);
         assert_eq!(doc.revision(), revision);
+        assert_eq!(doc.model_box_revision(), 1);
         let light = Command::AddEntity(EntityObject::point("light", Vec3::ZERO, &[]));
         assert_eq!(light.describe(), "Add light");
     }

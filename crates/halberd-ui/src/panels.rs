@@ -10,6 +10,7 @@ use halberd_geom::{Aabb, Brush, MIN_SIZE, Plane};
 use std::collections::BTreeSet;
 
 mod entity_settings;
+pub(crate) mod map_summary;
 #[cfg(test)]
 pub(crate) use entity_settings::{
     BRIGHTNESS_NAME, COLOUR_NAME, CONE_NAME, FACING_NAME, PITCH_NAME,
@@ -164,7 +165,12 @@ fn scene_rows(doc: &Document, folding: &SceneFolding) -> Vec<SceneRow> {
 /// The Properties panel: the selection's size and position. A single box
 /// can be resized and moved by typing or dragging the numbers; several
 /// objects show a summary.
-pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthUnit) {
+pub(crate) fn properties_contents(
+    ui: &mut Ui,
+    doc: &mut Document,
+    unit: LengthUnit,
+    stats: &mut map_summary::StatsCache,
+) {
     let count = doc.selection().len();
     let single = (count == 1)
         .then(|| doc.selection().iter().next().copied())
@@ -189,6 +195,10 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthU
             "Nothing selected",
             "Select something to see its properties.",
         );
+        if doc.selection().is_empty() {
+            ui.separator();
+            map_summary::show(ui, doc, unit, stats);
+        }
         return;
     };
     ui.add_space(8.0);
