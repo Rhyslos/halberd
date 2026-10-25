@@ -2,7 +2,7 @@
 //! at once: reading the archives' file lists takes a moment on a slow
 //! disk.
 
-use halberd_assets::{GameContent, GmodInstall, material_names};
+use halberd_assets::{GameContent, GmodInstall, material_names, model_names};
 use std::sync::mpsc;
 
 /// Content being mounted in the background.
@@ -11,11 +11,12 @@ pub(crate) struct ContentLoader {
     done: Option<mpsc::Receiver<Mounted>>,
 }
 
-/// Mounted content, with the names of its materials (listing them takes
-/// a moment too).
+/// Mounted content, with the names of its materials and models (listing
+/// them takes a moment too).
 pub(crate) struct Mounted {
     pub(crate) content: GameContent,
     pub(crate) materials: Vec<String>,
+    pub(crate) models: Vec<String>,
 }
 
 /// How mounting is going.
@@ -39,8 +40,14 @@ impl ContentLoader {
             .spawn(move || {
                 let content = GameContent::mount(&install);
                 let materials = material_names(&content);
+                let models = model_names(&content);
                 // The window may already be gone; then nobody needs it.
-                send.send(Mounted { content, materials }).ok();
+                send.send(Mounted {
+                    content,
+                    materials,
+                    models,
+                })
+                .ok();
                 // Let go of the channel before waking the window, so a poll
                 // after the result never sees the work as still going.
                 drop(send);
@@ -91,6 +98,7 @@ mod tests {
         let content = loop {
             if let Mounting::Ready(mounted) = loader.poll() {
                 assert!(mounted.materials.is_empty());
+                assert!(mounted.models.is_empty());
                 break mounted.content;
             }
             assert!(start.elapsed() < Duration::from_secs(10), "never arrived");

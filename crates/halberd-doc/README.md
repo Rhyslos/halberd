@@ -36,6 +36,7 @@ The document, commands and undo are implemented (see [decision 0009](../../docs/
 - **Saved state**: `is_modified` and `mark_saved`, for the title bar's dot and the "save changes?" question.
 - **Selection**: `set_selection`, `toggle_selected`, `clear_selection`. Not an edit, so not undone, as in Hammer; an undo selects what it brings back.
 - **Materials** (`document/materials.rs`): `SetMaterial` puts a material on whole objects or on chosen faces ("Apply material", "Apply material to 3 faces"); an entity passes it to its brushes, a shape sets its one look. `AddBrushObjects` adds brushes with their face data (new brushes drawn with a chosen material). `BrushObject::set_material` and `as_new` help build them.
+- **Entities** (`entity.rs`, `document/entities.rs`): `EntityObject::point` makes a point entity with its settings; `setting`, `set_setting`, `model`, `angles`, `rotation` (Source's pitch, yaw, roll; `rotation_of`), `with_origin` and `with_rotation` (both keep the saved settings in step) and `placed_box`. `AddEntity` adds one ("Place prop", "Add light"); `TransformBrushes` moves and turns point entities too (`entities`; "Move entity"). `set_model_box` records a model's box once it is read, so props are picked and framed by their real size (not an edit).
 - **Queries**: `pick` (nearest object along a ray), `selection_bounds`.
 
 Tests include a stress test of 3,000 random adds, deletes, undos and redos.

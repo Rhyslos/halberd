@@ -2,9 +2,13 @@
 //! outlines, and the outline of a box being drawn.
 
 use crate::lines::LineVertex;
+use crate::models::PropModel;
 use bytemuck::{Pod, Zeroable};
 use halberd_doc::{Document, Object};
 use halberd_geom::{Aabb, Brush};
+
+mod props;
+pub use props::{NORMALIZED_UV_FLAG, PROP_COLOR};
 
 /// Brush face colour, linear space (neutral grey with a hint of blue).
 pub const BRUSH_COLOR: [f32; 4] = [0.30, 0.31, 0.34, 1.0];
@@ -116,19 +120,27 @@ pub struct SceneGeometry {
     /// Outlines of selected brushes as a line list, drawn on top of
     /// everything so the selection is always visible.
     pub selected_edges: Vec<LineVertex>,
+    /// Outlines of props' triangles, shown only in the Wireframe mode
+    /// (solid props would look scribbled over).
+    pub prop_edges: Vec<LineVertex>,
+    /// The same for selected props, drawn on top in the Wireframe mode.
+    pub selected_prop_edges: Vec<LineVertex>,
 }
 
 impl SceneGeometry {
     /// Builds the geometry for every object in `doc`.
     pub fn from_document(doc: &Document) -> Self {
-        Self::from_document_with(doc, &mut |_| None)
+        Self::from_document_with(doc, &mut |_| None, &|_| None)
     }
 
     /// Builds the geometry, asking `layer_of` which texture layer each
-    /// material's real texture is in (`None`: none, the pattern is shown).
-    pub fn from_document_with(
+    /// material's real texture is in (`None`: none, the pattern is shown),
+    /// and `model_of` for the model a prop shows (`None`: not read yet,
+    /// or unreadable; the prop is drawn as a marker box).
+    pub fn from_document_with<'m>(
         doc: &Document,
         layer_of: &mut dyn FnMut(&str) -> Option<u32>,
+        model_of: &dyn Fn(&str) -> Option<&'m PropModel>,
     ) -> Self {
         let mut scene = Self::default();
         for (id, object) in doc.objects() {
@@ -146,6 +158,9 @@ impl SceneGeometry {
                 }
                 // A brush entity is drawn as its brushes, even with an origin.
                 Object::Entity(_) if doc.has_brushes(id) => {}
+                Object::Entity(entity) if let Some(model) = entity.model().and_then(model_of) => {
+                    scene.add_prop(entity, model, selected, layer_of);
+                }
                 Object::Entity(entity) => {
                     if let Some(marker) = entity.marker().and_then(|m| Brush::cuboid(m).ok()) {
                         scene.add_brush(

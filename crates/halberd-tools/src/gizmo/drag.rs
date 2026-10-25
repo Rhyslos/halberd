@@ -9,8 +9,10 @@
 use super::{Frame, Handle, ROTATE_SNAP_DEGREES};
 use crate::ToolAction;
 use crate::elements::{PickedElement, Targets};
-use glam::{DMat4, DVec3, Vec2, Vec3};
-use halberd_doc::{Command, Document, ElementKind, ObjectId, ShapeObject, TransformKind};
+use glam::{DMat4, DVec3, Quat, Vec2, Vec3};
+use halberd_doc::{
+    Command, Document, ElementKind, EntityObject, ObjectId, ShapeObject, TransformKind,
+};
 use halberd_geom::{Aabb, Brush, GeomError};
 
 /// Pixels of pointer movement that double (or halve) the size when
@@ -66,6 +68,19 @@ impl Motion {
         }
     }
 
+    /// A point entity after the motion: moved, and turned along with a
+    /// rotation (scaling moves it only).
+    fn entity(self, entity: &EntityObject) -> Option<EntityObject> {
+        let moved = entity.with_origin(self.point(entity.origin?));
+        Some(match self {
+            Self::Rotate { axis, angle, .. } => {
+                let turn = Quat::from_axis_angle(axis.normalize_or(Vec3::Z), angle);
+                moved.with_rotation(turn * entity.rotation())
+            }
+            Self::Move(_) | Self::Scale { .. } => moved,
+        })
+    }
+
     /// Where the motion takes `p` (worked in double precision, as brushes).
     fn point(self, p: Vec3) -> Vec3 {
         let matrix = match self {
@@ -95,8 +110,12 @@ impl Motion {
 /// What a drag holds.
 #[derive(Debug, Clone)]
 enum Held {
-    /// Whole brushes, as they were.
-    Brushes(Vec<(ObjectId, Brush)>, Vec<(ObjectId, ShapeObject)>),
+    /// Whole brushes, shapes and point entities, as they were.
+    Brushes(
+        Vec<(ObjectId, Brush)>,
+        Vec<(ObjectId, ShapeObject)>,
+        Vec<(ObjectId, EntityObject)>,
+    ),
     /// Picked parts of brushes: the brushes as they were with the corners
     /// to move, and the picked parts as they were.
     Parts {
@@ -174,11 +193,20 @@ impl Drag {
                     .iter()
                     .filter_map(|id| Some((*id, doc.get(*id)?.as_shape()?.clone())))
                     .collect();
-                if originals.is_empty() && shapes.is_empty() {
+                let entities: Vec<(ObjectId, EntityObject)> = doc
+                    .selection()
+                    .iter()
+                    .filter(|id| !doc.has_brushes(**id))
+                    .filter_map(|id| {
+                        let entity = doc.get(*id)?.as_entity()?;
+                        entity.origin.map(|_| (*id, entity.clone()))
+                    })
+                    .collect();
+                if originals.is_empty() && shapes.is_empty() && entities.is_empty() {
                     return None;
                 }
                 (
-                    Held::Brushes(originals, shapes),
+                    Held::Brushes(originals, shapes, entities),
                     super::selected_brush_bounds(doc)?,
                 )
             }
@@ -241,7 +269,7 @@ impl Drag {
         let motion = self.motion(cursor, frame, grid)?;
         let kind = motion.kind();
         match &self.held {
-            Held::Brushes(originals, held_shapes) => {
+            Held::Brushes(originals, held_shapes, held_entities) => {
                 let brushes = originals
                     .iter()
                     .map(|(id, brush)| Some((*id, motion.brush(brush).ok()?)))
@@ -255,12 +283,17 @@ impl Drag {
                     .iter()
                     .map(|(id, shape)| Some((*id, shape.mapped(|p| motion.point(p)).ok()?)))
                     .collect::<Option<Vec<_>>>()?;
+                let entities = held_entities
+                    .iter()
+                    .map(|(id, entity)| Some((*id, motion.entity(entity)?)))
+                    .collect::<Option<Vec<_>>>()?;
                 Some((
                     ToolAction::ExecuteMerging(
                         Command::TransformBrushes {
                             kind,
                             brushes,
                             shapes,
+                            entities,
                         },
                         self.key,
                     ),

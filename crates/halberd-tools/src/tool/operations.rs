@@ -684,6 +684,7 @@ fn mirror(doc: &Document, axis: usize) -> Result<ShapeOpOutcome, String> {
         kind: TransformKind::Mirror,
         brushes: mirrored,
         shapes: Vec::new(),
+        entities: Vec::new(),
     }))
 }
 

@@ -10,6 +10,7 @@ mod files;
 mod gpu;
 mod logging;
 mod preferences;
+mod props;
 mod startup;
 mod window;
 

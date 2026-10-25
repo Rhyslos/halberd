@@ -74,3 +74,95 @@ fn applying_with_nothing_selected_warns_instead() {
     assert_eq!(wb.viewport().tools().material(), Some(BRICK));
     assert!(face_materials(wb.document()).iter().all(|m| m != BRICK));
 }
+
+fn barrel() -> halberd_tools::PropChoice {
+    halberd_tools::PropChoice {
+        model: "models/props_c17/oildrum001.mdl".into(),
+        local: Aabb::from_corners(Vec3::new(-14.0, -14.0, 0.0), Vec3::new(14.0, 14.0, 46.0)),
+        static_prop: true,
+    }
+}
+
+#[test]
+fn picking_a_prop_starts_placing_it_once_its_model_is_read() {
+    let mut wb = Workbench::new(info(), None);
+    wb.materials_mut().set_names(vec![BRICK.to_string()]);
+    wb.props_mut()
+        .set_names(vec!["models/props_c17/oildrum001.mdl".to_string()]);
+    let mut h = harness_for(wb);
+    h.run();
+    h.get_by_label(PROPS_TAB).click();
+    h.run();
+    assert!(h.query_by_label("1 of 1 props").is_some());
+    h.get_by_label("models/props_c17/oildrum001.mdl").click();
+    h.run();
+    // Not read yet: nothing to place until it arrives.
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Select
+    );
+    h.state_mut().add_prop_info(barrel());
+    h.run();
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Place
+    );
+    assert!(h.query_by_label_contains(crate::PLACING_LABEL).is_some());
+    // Picking it again, now known, starts placing at once.
+    h.state_mut().viewport_mut().tools_mut().set_prop(None);
+    // The tile (the picked name is shown above the grid too).
+    h.query_all_by_label("models/props_c17/oildrum001.mdl")
+        .last()
+        .unwrap()
+        .click();
+    h.run();
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Place
+    );
+    h.get_by_label("Stop").click();
+    h.run();
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Select
+    );
+}
+
+#[test]
+fn a_newly_opened_map_knows_the_boxes_of_models_already_read() {
+    // Regression: model boxes lived only in the old document, so after
+    // opening a map props were picked by a tiny marker box.
+    let mut wb = Workbench::new(info(), None);
+    wb.add_prop_info(barrel());
+    let mut doc = Document::new();
+    doc.execute(Command::AddEntity(halberd_doc::EntityObject::point(
+        "prop_static",
+        Vec3::ZERO,
+        &[("model", "models/props_c17/oildrum001.mdl")],
+    )))
+    .unwrap();
+    wb.set_document(doc, None);
+    let id = wb.document().objects().next().unwrap().0;
+    assert_eq!(wb.document().bounds_of(id).unwrap().max.z, 46.0);
+}
+
+#[test]
+fn a_picked_prop_that_cant_be_read_says_why() {
+    let mut wb = Workbench::new(info(), None);
+    wb.props_mut()
+        .set_names(vec!["models/broken.mdl".to_string()]);
+    let mut h = harness_for(wb);
+    h.run();
+    h.get_by_label(PROPS_TAB).click();
+    h.run();
+    h.get_by_label("models/broken.mdl").click();
+    h.run();
+    h.state_mut()
+        .prop_failed("models/broken.mdl", "its vertices (.vvd file) are missing");
+    h.run();
+    assert!(h.query_by_label_contains("can't be placed").is_some());
+    assert_eq!(
+        h.state().viewport().tools().tool(),
+        halberd_tools::Tool::Select
+    );
+}

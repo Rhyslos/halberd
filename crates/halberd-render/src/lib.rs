@@ -12,6 +12,7 @@
 
 mod frame;
 mod lines;
+mod models;
 mod pipelines;
 mod readback;
 mod renderer;
@@ -22,16 +23,17 @@ pub use frame::{
     FrameParams, GRID_HALF_EXTENT, GridPlane, MAJOR_EVERY, RenderMode, SUPER_SPACING, grid_spacings,
 };
 pub use lines::{LineVertex, X_AXIS_COLOR, Y_AXIS_COLOR, Z_AXIS_COLOR, Z_AXIS_HEIGHT, axis_lines};
+pub use models::{PropMesh, PropModel};
 pub use readback::read_pixels;
 pub use renderer::{
     BACKGROUND, COLOR_FORMAT, DEPTH_FORMAT, DISPLAY_FORMAT, SHADER_SOURCE, ViewportRenderer,
     ViewportTarget, best_sample_count,
 };
 pub use scene::{
-    BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, ENTITY_EDGE_COLOR, FaceVertex, PLAYER_COLOR,
-    PLAYER_OUTLINE_VERTICES, POINT_ENTITY_COLOR, POINT_ENTITY_EDGE_COLOR, PREVIEW_COLOR,
-    PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR, SceneGeometry, TEXTURE_SIZE, box_outline,
-    material_hue, player_outline, shape_outline, texture_flag,
+    BRUSH_COLOR, EDGE_COLOR, ENTITY_BRUSH_COLOR, ENTITY_EDGE_COLOR, FaceVertex, NORMALIZED_UV_FLAG,
+    PLAYER_COLOR, PLAYER_OUTLINE_VERTICES, POINT_ENTITY_COLOR, POINT_ENTITY_EDGE_COLOR,
+    PREVIEW_COLOR, PROP_COLOR, PlayerOutline, SELECTED_COLOR, SELECTED_EDGE_COLOR, SceneGeometry,
+    TEXTURE_SIZE, box_outline, material_hue, player_outline, shape_outline, texture_flag,
 };
 pub use textures::{MATERIAL_TEXTURE_SIZE, MAX_MATERIAL_TEXTURES};
 

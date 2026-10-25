@@ -49,6 +49,7 @@ fn a_moved_shape_moves_its_pieces_and_undo_puts_it_back() {
         kind: TransformKind::Move,
         brushes: Vec::new(),
         shapes: vec![(id, moved)],
+        entities: Vec::new(),
     })
     .unwrap();
     assert_eq!(doc.undo_label(), Some("Move shape"));
@@ -70,6 +71,7 @@ fn a_shape_is_not_a_brush_to_brush_edits() {
         kind: TransformKind::Move,
         brushes: vec![(id, shape.pieces()[0].clone())],
         shapes: Vec::new(),
+        entities: Vec::new(),
     });
     assert!(result.is_err(), "a shape can't be replaced by a brush");
     only_shape(&doc);

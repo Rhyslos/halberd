@@ -526,9 +526,12 @@ pub(crate) fn selected_brush_bounds(doc: &Document) -> Option<Aabb> {
         .iter()
         .filter_map(|id| {
             let object = doc.get(*id)?;
-            match object.as_shape() {
-                Some(shape) => Some(shape.bounds()),
-                None => Some(object.as_brush()?.brush().bounds()),
+            match object {
+                halberd_doc::Object::Shape(shape) => Some(shape.bounds()),
+                halberd_doc::Object::Brush(brush) => Some(brush.brush().bounds()),
+                // Point entities (props) move with the gizmo too.
+                halberd_doc::Object::Entity(_) if !doc.has_brushes(*id) => doc.bounds_of(*id),
+                halberd_doc::Object::Entity(_) => None,
             }
         })
         .reduce(Aabb::union)

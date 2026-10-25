@@ -5,7 +5,7 @@ use crate::history::{Entry, History};
 use crate::{BrushObject, DocError, MapFileData, MapObject, Object, ObjectId};
 use glam::Vec3;
 use halberd_geom::Aabb;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Most objects a map may hold. Far beyond what Source can compile; it only
@@ -29,6 +29,9 @@ pub struct Document {
     selection_revision: u64,
     saved_revision: u64,
     file_data: MapFileData,
+    /// Each model's box in its own space, by lower-case name, as far as
+    /// models have been read (for picking and framing props).
+    model_boxes: HashMap<String, Aabb>,
 }
 
 impl Default for Document {
@@ -44,6 +47,7 @@ impl Default for Document {
             selection_revision: 0,
             saved_revision: 0,
             file_data: MapFileData::default(),
+            model_boxes: HashMap::new(),
         }
     }
 }
@@ -62,6 +66,7 @@ impl Clone for Document {
             selection_revision: self.selection_revision,
             saved_revision: self.saved_revision,
             file_data: self.file_data.clone(),
+            model_boxes: self.model_boxes.clone(),
         }
     }
 }
@@ -286,7 +291,7 @@ impl Document {
                 .filter_map(|b| self.objects.get(&b)?.bounds())
                 .reduce(Aabb::union);
         }
-        object.bounds()
+        self.object_box(object)
     }
 
     /// How many objects the map holds.
@@ -375,7 +380,7 @@ impl Document {
             .iter()
             // A brush entity is hit through its brushes, not its origin.
             .filter(|(id, _)| !self.has_brushes(**id))
-            .filter_map(|(id, object)| Some((*id, object.ray_hit(origin, direction)?)))
+            .filter_map(|(id, object)| Some((*id, self.object_hit(object, origin, direction)?)))
             .min_by(|a, b| a.1.total_cmp(&b.1))
     }
 
@@ -420,7 +425,10 @@ impl Document {
                 Ok(Change::Modified(vec![(id, before.clone(), after)]))
             }
             Command::TransformBrushes {
-                brushes, shapes, ..
+                brushes,
+                shapes,
+                entities,
+                ..
             } => {
                 // Every brush is kept, changed or not, so the edits of one
                 // drag always list the same objects and merge into one step.
@@ -442,6 +450,16 @@ impl Document {
                     before.as_shape().ok_or(DocError::NotABrush(id))?;
                     objects.push((id, before.clone(), Object::Shape(shape)));
                 }
+                for (id, entity) in entities {
+                    if !seen.insert(id) {
+                        continue;
+                    }
+                    let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
+                    if !matches!(before, Object::Entity(_)) {
+                        return Err(DocError::NotAnEntity(id));
+                    }
+                    objects.push((id, before.clone(), Object::Entity(entity)));
+                }
                 if objects.iter().all(|(_, before, after)| before == after) {
                     return Err(DocError::NothingToDo);
                 }
@@ -461,6 +479,18 @@ impl Document {
                 Ok(Change::Inserted(objects))
             }
             Command::SetMaterial { material, faces } => self.prepare_set_material(&material, faces),
+            Command::AddEntity(entity) => {
+                if self.objects.len() >= MAX_OBJECTS {
+                    return Err(DocError::TooManyObjects);
+                }
+                if entity.origin.is_none() {
+                    return Err(DocError::NothingToDo);
+                }
+                Ok(Change::Inserted(vec![(
+                    self.new_id(),
+                    Object::Entity(entity),
+                )]))
+            }
             Command::AddShape(shape) => {
                 if self.objects.len() >= MAX_OBJECTS {
                     return Err(DocError::TooManyObjects);
@@ -679,6 +709,7 @@ impl Document {
     }
 }
 
+mod entities;
 #[cfg(test)]
 mod map_tests;
 mod materials;

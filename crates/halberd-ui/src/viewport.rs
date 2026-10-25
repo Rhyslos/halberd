@@ -33,7 +33,7 @@ pub use layout::{MAX_VIEWS, PaneView, RenderMode, ViewLayout, ViewSetup};
 pub use panes::LAYOUT_PICKER_LABEL;
 pub use shape_ops::SHAPE_OP_KEYS;
 pub(crate) use shape_ops::shape_menu;
-pub use tools::INSIDE_ENTITIES_LABEL;
+pub use tools::{INSIDE_ENTITIES_LABEL, PLACING_LABEL};
 
 /// What a renderer needs to draw one viewport frame.
 #[derive(Debug, Clone, PartialEq)]

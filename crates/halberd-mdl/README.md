@@ -20,4 +20,8 @@ none (no other Halberd crates)
 
 ## Status
 
-Skeleton only. The roadmap milestone that fills this crate in will replace this line.
+Models are read (see [decision 0024](../../docs/decisions/0024-props.md)).
+
+- **`Model::parse(mdl, vvd, vtx)`** reads a model's three files and checks that they belong together (matching checksums). It gives the model's name, whether it is a static prop (`$staticprop`), its material names and folders, its bounds, and its meshes: plain vertices (position, normal, texture coordinates) and triangle indices, with each mesh's material through the first skin. The full-detail level and the first model of each body part are read. MDL versions 44 to 49, VVD version 4 (fixups followed) and VTX version 7 (both strip group layouts) are supported.
+- Counts and offsets are checked before anything is read or allocated, including totals across the file (structures visited, vertices claimed by all meshes; `MAX_VERTICES`), since parts may point at the same data again and again; damaged files give a plain-language `MdlError`, never a crash (fuzz-tested in `tests/models.rs`).
+- **`example`**: writes small valid model files in code (`model_files`, `box_mesh`), for tests and for trying the prop browser without the game.
