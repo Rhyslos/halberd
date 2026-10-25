@@ -6,6 +6,7 @@
 //! the interface to carry out, so it is one undo step. Nothing here changes
 //! the map.
 
+mod boolean;
 mod cut;
 
 use super::ToolController;
@@ -42,11 +43,20 @@ pub enum ShapeOp {
     /// Mirror the selected brushes left to right as seen from the camera
     /// (Ctrl+M).
     MirrorAcrossView,
+    /// Make the selected brushes fill the space they cover together, without
+    /// overlapping (Ctrl+Shift+U).
+    Union,
+    /// Cut the space of the selected brushes out of every brush they
+    /// overlap (Ctrl+Shift+C, Hammer's Carve).
+    Subtract,
+    /// Keep only the space the selected brushes have in common
+    /// (Ctrl+Shift+I).
+    Intersect,
 }
 
 impl ShapeOp {
     /// The operations in the order the Shape menu lists them.
-    pub const MENU: [ShapeOp; 11] = [
+    pub const MENU: [ShapeOp; 14] = [
         Self::Extrude,
         Self::Bevel,
         Self::Bridge,
@@ -58,6 +68,9 @@ impl ShapeOp {
         Self::Mirror(Axis::X),
         Self::Mirror(Axis::Y),
         Self::Mirror(Axis::Z),
+        Self::Union,
+        Self::Subtract,
+        Self::Intersect,
     ];
 
     /// Name for the menu.
@@ -74,6 +87,9 @@ impl ShapeOp {
             Self::Mirror(Axis::X) => "Mirror along X",
             Self::Mirror(Axis::Y) => "Mirror along Y",
             Self::Mirror(Axis::Z) => "Mirror up and down",
+            Self::Union => "Union",
+            Self::Subtract => "Subtract (carve)",
+            Self::Intersect => "Intersect",
             Self::MirrorAcrossView => "Mirror left to right",
         }
     }
@@ -105,6 +121,15 @@ impl ShapeOp {
             Self::MirrorAcrossView => {
                 "Mirror the selected brushes left to right, as you see them, about their middle"
             }
+            Self::Union => {
+                "Make the selected brushes fill the space they cover together, without \
+                 overlapping (one brush if that space has no dents)"
+            }
+            Self::Subtract => {
+                "Cut the space of the selected brushes out of every other brush they overlap; \
+                 the cutting brushes stay"
+            }
+            Self::Intersect => "Keep only the space all the selected brushes share, as one brush",
         }
     }
 }
@@ -112,10 +137,13 @@ impl ShapeOp {
 /// What is selected after a shape operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectAfter {
-    /// The selection stays (less anything taken away).
+    /// The selection stays (less anything taken away), and what the
+    /// operation adds joins it.
     Unchanged,
     /// Only the brushes the operation added.
     Added,
+    /// Exactly what was selected before (less anything taken away).
+    Same,
 }
 
 /// What a shape operation asks the interface to do.
@@ -172,7 +200,12 @@ impl ToolController {
         let mode = self.select_mode;
         let needs_picks = !matches!(
             op,
-            ShapeOp::Join | ShapeOp::Mirror(_) | ShapeOp::MirrorAcrossView
+            ShapeOp::Join
+                | ShapeOp::Mirror(_)
+                | ShapeOp::MirrorAcrossView
+                | ShapeOp::Union
+                | ShapeOp::Subtract
+                | ShapeOp::Intersect
         );
         if needs_picks && self.tool != super::Tool::Select {
             return Err("Press Q for the Select tool, then pick parts with 2, 3 or 4.".into());
@@ -194,6 +227,15 @@ impl ToolController {
             ShapeOp::Split | ShapeOp::Clip => need(
                 !picks.is_empty(),
                 "Pick where to cut first: a face (4), an edge (3), or two or three corners (2).",
+            ),
+            ShapeOp::Union | ShapeOp::Intersect => need(
+                editable_brushes(doc).len() >= 2,
+                "Select two or more brushes first (Ctrl+click adds to the selection).",
+            ),
+            ShapeOp::Subtract => need(
+                !editable_brushes(doc).is_empty(),
+                "Select the brush to cut with first: its space is cut out of every brush it \
+                 overlaps.",
             ),
             ShapeOp::Join => need(
                 editable_brushes(doc).len() >= 2,
@@ -237,6 +279,9 @@ impl ToolController {
             ShapeOp::Split => self.cut(doc, camera, true),
             ShapeOp::Clip => self.cut(doc, camera, false),
             ShapeOp::Join => join(doc),
+            ShapeOp::Union => boolean::union(doc),
+            ShapeOp::Subtract => boolean::subtract(doc),
+            ShapeOp::Intersect => boolean::intersect(doc),
             ShapeOp::MergeCorners => self.merge_corners(doc),
             ShapeOp::DeleteParts => self.delete_parts(doc),
             ShapeOp::Mirror(axis) => mirror(doc, axis as usize),
@@ -259,6 +304,7 @@ impl ToolController {
         let outcome = self.shape_op(op, doc, camera)?;
         // New objects get ids above every id so far.
         let newest = doc.objects().map(|(id, _)| id).max();
+        let before = doc.selection().clone();
         doc.end_step();
         doc.execute(outcome.command.clone())
             .map_err(|e| format!("That edit could not be made: {e}."))?;
@@ -268,7 +314,7 @@ impl ToolController {
             .map(|(id, _)| id)
             .filter(|id| newest.is_none_or(|n| *id > n))
             .collect();
-        self.finish_shape_op(&outcome, doc, &added);
+        self.finish_shape_op(&outcome, doc, &added, &before);
         Ok(outcome.note)
     }
 
@@ -279,9 +325,19 @@ impl ToolController {
         outcome: &ShapeOpOutcome,
         doc: &mut Document,
         added: &[ObjectId],
+        before: &std::collections::BTreeSet<ObjectId>,
     ) {
-        if outcome.select == SelectAfter::Added {
-            doc.set_selection(added.iter().copied());
+        match outcome.select {
+            SelectAfter::Unchanged => {}
+            SelectAfter::Added => doc.set_selection(added.iter().copied()),
+            SelectAfter::Same => {
+                let still: Vec<ObjectId> = before
+                    .iter()
+                    .copied()
+                    .filter(|id| doc.get(*id).is_some())
+                    .collect();
+                doc.set_selection(still);
+            }
         }
         let brushes = editable_brushes(doc);
         self.elements.items = outcome
@@ -345,6 +401,7 @@ impl ToolController {
             changed: Vec::new(),
             added,
             removed: Vec::new(),
+            select_added: true,
         });
         outcome.pick_after = far_faces;
         outcome.select = SelectAfter::Added;
@@ -389,6 +446,7 @@ impl ToolController {
             changed,
             added: Vec::new(),
             removed: Vec::new(),
+            select_added: true,
         }))
     }
 
@@ -413,6 +471,7 @@ impl ToolController {
             changed: Vec::new(),
             added: vec![(brush, entity)],
             removed: Vec::new(),
+            select_added: true,
         });
         outcome.select = SelectAfter::Added;
         Ok(outcome)
@@ -512,7 +571,7 @@ fn matching_faces(brush: &Brush, sources: &[&BrushObject]) -> Vec<FaceInfo> {
         .collect()
 }
 
-fn join(doc: &Document) -> Result<ShapeOpOutcome, String> {
+pub(super) fn join(doc: &Document) -> Result<ShapeOpOutcome, String> {
     let ids: Vec<ObjectId> = editable_brushes(doc).iter().map(|(id, _)| *id).collect();
     let objects: Vec<&BrushObject> = ids.iter().filter_map(|id| brush_object(doc, *id)).collect();
     let points: Vec<Vec3> = objects.iter().flat_map(|b| b.brush().points()).collect();
@@ -545,6 +604,7 @@ fn join(doc: &Document) -> Result<ShapeOpOutcome, String> {
         changed: vec![(*keep, joined)],
         added: Vec::new(),
         removed: rest,
+        select_added: true,
     });
     if gaps {
         outcome.note = Some(

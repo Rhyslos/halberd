@@ -22,8 +22,10 @@ const EPSILON: f64 = 1e-3;
 /// Corners within this of a whole unit are moved onto it.
 const SNAP: f64 = 1e-2;
 
+mod boolean;
 mod edit;
 mod ops;
+pub use boolean::Subtracted;
 pub use edit::{FaceFate, Topology};
 
 /// One flat side of a brush.

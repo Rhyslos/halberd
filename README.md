@@ -4,7 +4,7 @@
 
 Halberd is a free, open-source level editor in the spirit of Unity and Godot: place and shape geometry in a 3D viewport, populate it with props, and compile it straight into a playable GMod map with Valve's own tools. Maps open in Hammer and Hammer++ too, through Export to Hammer.
 
-> **Status: pre-alpha.** You can open and save Hammer maps (VMF), draw boxes, wedges, cylinders, cones, spheres, arches and stairs, select, move, rotate, resize and delete them, reshape them by their corners, edges and faces, and extrude, bevel, split, clip, join, bridge and mirror them, with undo and redo. Textures are kept but not shown yet. Follow the progress tracker below.
+> **Status: pre-alpha.** You can open and save Hammer maps (VMF), draw boxes, wedges, cylinders, cones, spheres, arches and stairs, select, move, rotate, resize and delete them, reshape them by their corners, edges and faces, extrude, bevel, split, clip, join, bridge and mirror them, and cut, unite and intersect them, with undo and redo. Textures are kept but not shown yet. Follow the progress tracker below.
 
 Created by **Rhyslos**, built with AI assistance (Claude by Anthropic).
 
@@ -32,9 +32,9 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 
 **Gate:** a Hammer-made VMF opens, shows correctly, and re-saves with nothing lost. *Every milestone is done; the gate waits for the project lead's check.*
 
-### Phase 1 · Blockout (v0.1, public alpha) — 5 of 19
+### Phase 1 · Blockout (v0.1, public alpha) — 6 of 19
 
-`███░░░░░░░░░░` 26%
+`████░░░░░░░░░` 32%
 
 <details>
 <summary>Milestones</summary>
@@ -43,7 +43,7 @@ Halberd is built in four phases. Each ends with a gate that must pass in real GM
 - [x] Primitives: wedge, cylinder, cone, sphere, arch, stairs
 - [x] Face, edge and vertex selection modes
 - [x] Shape operations: extrude, bevel, join, split, bridge, clip, mirror
-- [ ] Boolean operations: union, subtract, intersect
+- [x] Boolean operations: union, subtract, intersect
 - [ ] Automatic convex splitting on save and export
 - [ ] Up to 6 viewports with preset layouts and all six side views
 - [ ] Render modes: wireframe, flat, textured
@@ -117,6 +117,7 @@ Newest first. One line per finished milestone or passed gate.
 
 | Date | Event |
 | --- | --- |
+| 2026-10-23 | Boolean operations: subtract (carve a doorway), union and intersect |
 | 2026-10-14 | Shape operations: extrude, bevel, bridge, split, clip, join, mirror, merge corners and delete parts, from a new Shape menu |
 | 2026-10-09 | Face, edge and vertex modes: pick corners, edges or faces (keys 2, 3, 4) and reshape brushes with the gizmo |
 | 2026-10-09 | Keybinds viewer: a drawn keyboard with every key, hover to see what it does, search to light up keys |

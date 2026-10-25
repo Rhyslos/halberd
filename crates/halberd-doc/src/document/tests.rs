@@ -550,6 +550,7 @@ fn a_shape_edit_changes_adds_and_removes_in_one_step() {
         changed: vec![(members[0], BrushObject::new(cube_at(10.0)))],
         added: vec![(BrushObject::new(cube_at(300.0)), Some(entity))],
         removed: vec![members[1]],
+        select_added: true,
     };
     assert_eq!(edit.describe(), "Split brush");
     doc.execute(edit).unwrap();
@@ -575,6 +576,7 @@ fn a_shape_edit_changes_adds_and_removes_in_one_step() {
         changed: Vec::new(),
         added: vec![(BrushObject::new(cube_at(0.0)), Some(members[0]))],
         removed: Vec::new(),
+        select_added: true,
     };
     assert_eq!(doc.execute(bad), Err(DocError::NotAnEntity(members[0])));
     let empty = Command::ShapeEdit {
@@ -582,6 +584,7 @@ fn a_shape_edit_changes_adds_and_removes_in_one_step() {
         changed: Vec::new(),
         added: Vec::new(),
         removed: Vec::new(),
+        select_added: true,
     };
     assert_eq!(doc.execute(empty), Err(DocError::NothingToDo));
     // Removing every brush but the changed one keeps the entity.
@@ -591,6 +594,7 @@ fn a_shape_edit_changes_adds_and_removes_in_one_step() {
         changed: vec![(last[0], BrushObject::new(cube_at(0.0)))],
         added: Vec::new(),
         removed: vec![last[1]],
+        select_added: true,
     };
     doc.execute(keep_one).unwrap();
     assert!(doc.get(entity).is_some());

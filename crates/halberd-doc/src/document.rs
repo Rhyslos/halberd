@@ -437,8 +437,9 @@ impl Document {
                 changed,
                 added,
                 removed,
+                select_added,
                 ..
-            } => self.prepare_shape_edit(changed, added, removed),
+            } => self.prepare_shape_edit(changed, added, removed, select_added),
             Command::EditBrushes { brushes, .. } => {
                 // As above: every brush is kept so a drag merges into one step.
                 let mut seen = BTreeSet::new();
@@ -506,9 +507,19 @@ impl Document {
                     self.objects.insert(*id, after.clone());
                 }
             }
-            Change::Several(parts) => {
+            Change::Several {
+                parts,
+                select_added,
+            } => {
+                let selection = self.selection.clone();
                 for part in parts {
                     self.apply_part(part, true);
+                }
+                if !select_added {
+                    self.selection = selection
+                        .into_iter()
+                        .filter(|id| self.objects.contains_key(id))
+                        .collect();
                 }
             }
         }
@@ -523,6 +534,7 @@ impl Document {
         changed: Vec<(ObjectId, BrushObject)>,
         added: Vec<(BrushObject, Option<ObjectId>)>,
         removed: Vec<ObjectId>,
+        select_added: bool,
     ) -> Result<Change, DocError> {
         if changed.is_empty() && added.is_empty() && removed.is_empty() {
             return Err(DocError::NothingToDo);
@@ -562,11 +574,14 @@ impl Document {
             let object = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
             gone.push((id, object.clone()));
         }
-        Ok(Change::Several(vec![
-            Change::Modified(modified),
-            Change::Removed(gone),
-            Change::Inserted(inserted),
-        ]))
+        Ok(Change::Several {
+            parts: vec![
+                Change::Modified(modified),
+                Change::Removed(gone),
+                Change::Inserted(inserted),
+            ],
+            select_added,
+        })
     }
 
     /// Puts an object in the map, keeping the entity index up to date.

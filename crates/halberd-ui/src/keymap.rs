@@ -323,6 +323,21 @@ pub const KEYBINDS: &[Keybind] = &[
         KeyContext::Viewport,
     ),
     bind(
+        &[Ctrl, Shift, k(Key::U)],
+        "Union: the selected brushes fill their space together, without overlap",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[Ctrl, Shift, k(Key::C)],
+        "Subtract: cut the selected brushes' space out of the brushes they overlap",
+        KeyContext::Viewport,
+    ),
+    bind(
+        &[Ctrl, Shift, k(Key::I)],
+        "Intersect: keep only the space the selected brushes share",
+        KeyContext::Viewport,
+    ),
+    bind(
         &[k(Key::Delete)],
         "In Vertex or Face mode: delete the picked corners or faces",
         KeyContext::Viewport,
