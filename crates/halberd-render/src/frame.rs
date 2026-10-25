@@ -29,6 +29,31 @@ pub struct FrameParams {
     pub player: Option<PlayerOutline>,
     /// Where the grid is drawn.
     pub grid: GridPlane,
+    /// How brushes are drawn.
+    pub mode: RenderMode,
+}
+
+/// How brushes are drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RenderMode {
+    /// Outlines only, in a light colour (Hammer's 2D views).
+    Wireframe,
+    /// Solid faces in one colour, shaded by which way they face.
+    #[default]
+    Flat,
+    /// Solid faces showing each face's material and texture alignment.
+    Textured,
+}
+
+impl RenderMode {
+    /// The value the shader reads.
+    fn shader_value(self) -> f32 {
+        match self {
+            Self::Flat => 0.0,
+            Self::Textured => 1.0,
+            Self::Wireframe => 2.0,
+        }
+    }
 }
 
 /// Where the grid is drawn: flat across one world axis, at a position along
@@ -97,7 +122,7 @@ impl FrameUniforms {
                     0.0
                 },
                 if params.grid.fade { 1.0 } else { 0.0 },
-                0.0,
+                params.mode.shader_value(),
             ],
         }
     }
@@ -147,8 +172,9 @@ mod tests {
                 offset: -50.0,
                 fade: false,
             },
+            mode: RenderMode::Wireframe,
         });
-        assert_eq!(u.plane, [1.0, -50.0, 0.0, 0.0]);
+        assert_eq!(u.plane, [1.0, -50.0, 0.0, 2.0]);
         assert_eq!(u.camera, [1.0, 2.0, 3.0, 1.0]);
         assert_eq!(u.grid, [32.0, 256.0, 1024.0, GRID_HALF_EXTENT]);
         assert_eq!(u.view_projection, Mat4::IDENTITY.to_cols_array_2d());

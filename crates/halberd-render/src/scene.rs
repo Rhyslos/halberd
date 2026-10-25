@@ -17,6 +17,12 @@ pub const POINT_ENTITY_COLOR: [f32; 4] = [0.42, 0.12, 0.52, 1.0];
 pub const SELECTED_COLOR: [f32; 4] = [0.55, 0.10, 0.08, 1.0];
 /// Brush outline colour, linear space (dark, so faces read as solid).
 pub const EDGE_COLOR: [f32; 4] = [0.02, 0.02, 0.025, 1.0];
+/// Outline of brushes that belong to an entity: as dark, with a hint of
+/// teal that the Wireframe mode brightens.
+pub const ENTITY_EDGE_COLOR: [f32; 4] = [0.0, 0.06, 0.06, 1.0];
+/// Outline of point entity markers: as dark, with a hint of purple that
+/// the Wireframe mode brightens.
+pub const POINT_ENTITY_EDGE_COLOR: [f32; 4] = [0.06, 0.0, 0.07, 1.0];
 /// Selected brush outline colour, linear space; drawn on top of everything.
 pub const SELECTED_EDGE_COLOR: [f32; 4] = [1.0, 0.22, 0.12, 1.0];
 /// Outline of a box being drawn, linear space (warm yellow).
@@ -64,6 +70,27 @@ pub struct FaceVertex {
     pub normal: [f32; 3],
     /// Linear-space colour.
     pub color: [f32; 4],
+    /// For the Textured mode: texture coordinates (in textures of
+    /// [`TEXTURE_SIZE`] texels), the material's hue (0 to 1), and 1 if the
+    /// face has a material, 2 if it also is selected (0: drawn plain, as
+    /// point entity markers).
+    pub texture: [f32; 4],
+}
+
+/// Texture size the Textured mode lays its pattern out for, in texels, until
+/// real textures are read (most Source textures are 128 to 512 across).
+pub const TEXTURE_SIZE: f32 = 128.0;
+
+/// A material's hue (0 to 1) for the Textured mode's pattern: the same
+/// for the same name whatever its case, and different for most others.
+pub fn material_hue(material: &str) -> f32 {
+    // FNV-1a over the upper-cased name.
+    let mut hash: u32 = 0x811c_9dc5;
+    for byte in material.bytes() {
+        hash ^= u32::from(byte.to_ascii_uppercase());
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    (hash % 1000) as f32 / 1000.0
 }
 
 impl FaceVertex {
@@ -71,7 +98,12 @@ impl FaceVertex {
     pub(crate) const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
         array_stride: std::mem::size_of::<FaceVertex>() as wgpu::BufferAddress,
         step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4],
+        attributes: &wgpu::vertex_attr_array![
+            0 => Float32x3,
+            1 => Float32x3,
+            2 => Float32x4,
+            3 => Float32x4,
+        ],
     };
 }
 
@@ -101,13 +133,13 @@ impl SceneGeometry {
                     } else {
                         BRUSH_COLOR
                     };
-                    scene.add_brush(brush.brush(), base, selected);
+                    scene.add_brush(brush.brush(), base, selected, Looks::Faces(brush.faces()));
                 }
                 // A brush entity is drawn as its brushes, even with an origin.
                 Object::Entity(_) if doc.has_brushes(id) => {}
                 Object::Entity(entity) => {
                     if let Some(marker) = entity.marker().and_then(|m| Brush::cuboid(m).ok()) {
-                        scene.add_brush(&marker, POINT_ENTITY_COLOR, selected);
+                        scene.add_brush(&marker, POINT_ENTITY_COLOR, selected, Looks::None);
                     }
                 }
                 Object::Shape(shape) => scene.add_shape(shape, selected),
@@ -125,7 +157,7 @@ impl SceneGeometry {
             self.edges.len()
         };
         for piece in shape.pieces() {
-            self.add_brush(piece, BRUSH_COLOR, selected);
+            self.add_brush(piece, BRUSH_COLOR, selected, Looks::All(&shape.look));
         }
         let (edges, color) = if selected {
             (&mut self.selected_edges, SELECTED_EDGE_COLOR)
@@ -149,7 +181,7 @@ impl SceneGeometry {
         }
     }
 
-    fn add_brush(&mut self, brush: &Brush, base: [f32; 4], selected: bool) {
+    fn add_brush(&mut self, brush: &Brush, base: [f32; 4], selected: bool, looks: Looks<'_>) {
         let (color, edges, edge_color) = if selected {
             (
                 SELECTED_COLOR,
@@ -157,15 +189,42 @@ impl SceneGeometry {
                 SELECTED_EDGE_COLOR,
             )
         } else {
-            (base, &mut self.edges, EDGE_COLOR)
+            let edge = if base == ENTITY_BRUSH_COLOR {
+                ENTITY_EDGE_COLOR
+            } else if base == POINT_ENTITY_COLOR {
+                POINT_ENTITY_EDGE_COLOR
+            } else {
+                EDGE_COLOR
+            };
+            (base, &mut self.edges, edge)
         };
-        for face in brush.faces() {
+        for (k, face) in brush.faces().iter().enumerate() {
             let normal = face.plane().normal.to_array();
             let corners = face.vertices();
+            let look = match looks {
+                Looks::Faces(infos) => infos.get(k),
+                Looks::All(info) => Some(info),
+                Looks::None => None,
+            };
+            let (axes, hue) = match look {
+                Some(info) => (
+                    Some(info.texture_axes(face.plane().normal)),
+                    material_hue(&info.material),
+                ),
+                None => (None, 0.0),
+            };
             let vertex = |i: usize| FaceVertex {
                 position: corners[i].to_array(),
                 normal,
                 color,
+                texture: match axes {
+                    Some(axes) => {
+                        let [u, v] = axes.texels(corners[i]);
+                        let flag = if selected { 2.0 } else { 1.0 };
+                        [u / TEXTURE_SIZE, v / TEXTURE_SIZE, hue, flag]
+                    }
+                    None => [0.0; 4],
+                },
             };
             // A convex polygon is a fan of triangles from its first corner.
             for i in 1..corners.len().saturating_sub(1) {
@@ -186,6 +245,17 @@ impl SceneGeometry {
             }
         }
     }
+}
+
+/// What a brush's faces look like, for the Textured mode.
+#[derive(Clone, Copy)]
+enum Looks<'a> {
+    /// Each face's own data, in face order.
+    Faces(&'a [halberd_doc::FaceInfo]),
+    /// One look for every face (a floor plan shape).
+    All(&'a halberd_doc::FaceInfo),
+    /// No material (point entity markers).
+    None,
 }
 
 /// The edges of every face of `brushes`, as a line list (for the outline
@@ -249,9 +319,40 @@ mod tests {
 
     #[test]
     fn vertex_layout_matches_the_shader() {
-        assert_eq!(std::mem::size_of::<FaceVertex>(), 40);
+        assert_eq!(std::mem::size_of::<FaceVertex>(), 56);
         assert_eq!(FaceVertex::LAYOUT.attributes[1].offset, 12);
         assert_eq!(FaceVertex::LAYOUT.attributes[2].offset, 24);
+        assert_eq!(FaceVertex::LAYOUT.attributes[3].offset, 40);
+    }
+
+    #[test]
+    fn faces_carry_texture_coordinates_and_a_hue_per_material() {
+        let doc = doc_with_two_boxes();
+        let scene = SceneGeometry::from_document(&doc);
+        assert!(
+            scene.faces.iter().all(|v| v.texture[3] >= 1.0),
+            "brushes have a material"
+        );
+        // New faces are world-aligned at a quarter unit per texel: 64 units
+        // across is 256 texels, two 128-texel textures.
+        let top: Vec<&FaceVertex> = scene
+            .faces
+            .iter()
+            .filter(|v| v.normal[2] > 0.5 && v.position[0] < 80.0)
+            .collect();
+        let us: Vec<f32> = top.iter().map(|v| v.texture[0]).collect();
+        let span = us.iter().copied().fold(f32::MIN, f32::max)
+            - us.iter().copied().fold(f32::MAX, f32::min);
+        assert!((span - 2.0).abs() < 1e-4, "{span}");
+        assert_eq!(
+            material_hue("dev/dev_measuregeneric01b"),
+            material_hue("DEV/DEV_MEASUREGENERIC01B")
+        );
+        assert_ne!(
+            material_hue("BRICK/BRICKWALL001A"),
+            material_hue("DEV/DEV_MEASUREGENERIC01B")
+        );
+        assert!((0.0..1.0).contains(&material_hue("")));
     }
 
     #[test]
@@ -382,6 +483,21 @@ mod tests {
         let scene = SceneGeometry::from_document(&doc);
         assert_eq!(count(&scene, SELECTED_COLOR), 36);
         assert_eq!(count(&scene, ENTITY_BRUSH_COLOR), 36);
+    }
+
+    #[test]
+    fn entity_outlines_carry_their_kind_for_the_wireframe_mode() {
+        let mut doc = doc_with_entities();
+        doc.clear_selection();
+        let scene = SceneGeometry::from_document(&doc);
+        let count = |color| scene.edges.iter().filter(|v| v.color == color).count();
+        assert_eq!(count(ENTITY_EDGE_COLOR), 2 * 48, "func_detail's brushes");
+        assert_eq!(count(POINT_ENTITY_EDGE_COLOR), 48, "the light");
+        assert_eq!(count(EDGE_COLOR), 0);
+        // All still dark, so solid faces read the same in the Flat mode.
+        for color in [EDGE_COLOR, ENTITY_EDGE_COLOR, POINT_ENTITY_EDGE_COLOR] {
+            assert!(color[..3].iter().all(|c| *c < 0.08));
+        }
     }
 
     #[test]

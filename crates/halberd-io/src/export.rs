@@ -2,7 +2,7 @@
 
 use crate::import::SOLID_SLOT;
 use crate::planes::{plane_from_points, points_of_face, same_plane};
-use halberd_doc::{BrushObject, Document, Object};
+use halberd_doc::{BrushObject, Document, Object, TextureAxes};
 use halberd_geom::Face;
 use halberd_vmf::{Block, Entry, Vmf, format_plane, id_of, parse_plane};
 
@@ -126,24 +126,33 @@ fn side_block(face: &Face, info: &halberd_doc::FaceInfo, ids: &mut IdSource) -> 
     };
     let mut side = Block::new("side");
     if info.file_data.is_empty() {
-        let (u, v) = world_axes(face);
+        let axes = TextureAxes::world_aligned(face.plane().normal);
         side.push_pair("id", ids.next().to_string());
         side.push_pair("plane", plane);
         side.push_pair("material", info.material.clone());
-        side.push_pair("uaxis", format!("[{u} 0] 0.25"));
-        side.push_pair("vaxis", format!("[{v} 0] 0.25"));
+        side.push_pair("uaxis", axes.u.to_hammer());
+        side.push_pair("vaxis", axes.v.to_hammer());
         side.push_pair("rotation", "0");
         side.push_pair("lightmapscale", "16");
         side.push_pair("smoothing_groups", "0");
         return side;
     }
     side.entries = info.file_data.clone();
+    // Texture axes that no longer fit the face (it was turned, or took its
+    // look from a face facing another way) would smear the texture.
+    let refit = info.refitted_texture(face.plane().normal);
     for entry in &mut side.entries {
         if let Entry::Pair(key, value) = entry {
             if key.eq_ignore_ascii_case("plane") {
                 value.clone_from(&plane);
             } else if key.eq_ignore_ascii_case("material") {
                 value.clone_from(&info.material);
+            } else if let Some(axes) = &refit {
+                if key.eq_ignore_ascii_case("uaxis") {
+                    *value = axes.u.to_hammer();
+                } else if key.eq_ignore_ascii_case("vaxis") {
+                    *value = axes.v.to_hammer();
+                }
             }
         }
     }
@@ -152,19 +161,6 @@ fn side_block(face: &Face, info: &halberd_doc::FaceInfo, ids: &mut IdSource) -> 
             .insert(0, Entry::Pair("id".into(), ids.next().to_string()));
     }
     side
-}
-
-/// Hammer's world-aligned texture axes for a face, as `x y z` text:
-/// textures run along the two world axes the face is most nearly flat to.
-pub(crate) fn world_axes(face: &Face) -> (&'static str, &'static str) {
-    let n = face.plane().normal.abs();
-    if n.z >= n.x && n.z >= n.y {
-        ("1 0 0", "0 -1 0")
-    } else if n.x >= n.y {
-        ("0 1 0", "0 0 -1")
-    } else {
-        ("1 0 0", "0 0 -1")
-    }
 }
 
 /// Puts `blocks` just before the first `editor` block in `entries`, or at

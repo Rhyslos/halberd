@@ -29,7 +29,7 @@ mod plan;
 mod shape_ops;
 mod tools;
 
-pub use layout::{MAX_VIEWS, PaneView, ViewLayout, ViewSetup};
+pub use layout::{MAX_VIEWS, PaneView, RenderMode, ViewLayout, ViewSetup};
 pub use panes::LAYOUT_PICKER_LABEL;
 pub use shape_ops::SHAPE_OP_KEYS;
 pub(crate) use shape_ops::shape_menu;
@@ -61,6 +61,8 @@ pub struct ViewportView {
     pub grid_offset: f32,
     /// Whether the grid fades into the distance (the 3D view only).
     pub grid_fade: bool,
+    /// How brushes are drawn.
+    pub render_mode: RenderMode,
 }
 
 /// Draws viewport images. The editor implements this with the GPU; tests
