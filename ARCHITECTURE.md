@@ -115,6 +115,10 @@ Rendering sits behind the `ViewportRenderer` trait, so the panel runs in tests w
 
 The player figure's place and clearance are worked out by the viewport panel each frame (`halberd_tools::clearance`, cached while the figure and map stay the same) and drawn by the renderer in a colour for whether a player fits ([decision 0026](docs/decisions/0026-scale-tools.md)).
 
+## Compiling
+
+**Compile and play** (F9; [decision 0028](docs/decisions/0028-quick-compile.md)): the workbench asks for a compile; `halberd-app` writes the map as it is now to a work folder in Garry's Mod's game folder (`halberd-io`), and `halberd-compile` runs Garry's Mod's vbsp, vvis and vrad on their own thread, one process at a time, never through a shell. Their output reaches the Console line by line; the compiled map is copied into `garrysmod/maps` and the game is started on it through Steam.
+
 ## Opening and saving maps
 
 1. **File menu** (`halberd-ui`): the workbench asks "save changes?" if needed, then returns an action (Open, Save, Save As, Quit).

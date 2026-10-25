@@ -34,3 +34,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0025](0025-basic-entities.md) | Basic entities: spawn points, lights, the sun and the sky | Accepted |
 | [0026](0026-scale-tools.md) | GMod scale tools: player clearance and size readouts | Accepted |
 | [0027](0027-map-limits.md) | Map size and engine limit meters | Accepted |
+| [0028](0028-quick-compile.md) | Compile and play | Accepted |

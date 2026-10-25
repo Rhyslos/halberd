@@ -8,7 +8,9 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
 /// A harness that collects the actions the workbench asks for.
-fn harness_with_actions(wb: Workbench) -> Harness<'static, (Workbench, Vec<WorkbenchAction>)> {
+pub(super) fn harness_with_actions(
+    wb: Workbench,
+) -> Harness<'static, (Workbench, Vec<WorkbenchAction>)> {
     Harness::builder()
         .with_size([1280.0, 800.0])
         .build_ui_state(

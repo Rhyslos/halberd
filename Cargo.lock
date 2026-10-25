@@ -1464,6 +1464,7 @@ name = "halberd-compile"
 version = "0.0.1"
 dependencies = [
  "halberd-config",
+ "tempfile",
 ]
 
 [[package]]

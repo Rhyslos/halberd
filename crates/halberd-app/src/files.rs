@@ -39,6 +39,8 @@ pub(crate) fn handle(
             None => save_as(then, workbench, ctx, allow_close),
         },
         WorkbenchAction::SaveAs { then } => save_as(then, workbench, ctx, allow_close),
+        // Compiling is carried out by the window (compile.rs).
+        WorkbenchAction::Compile | WorkbenchAction::CancelCompile => {}
     }
 }
 
