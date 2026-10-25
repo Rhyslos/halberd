@@ -75,12 +75,10 @@ fn applying_with_nothing_selected_warns_instead() {
     assert!(face_materials(wb.document()).iter().all(|m| m != BRICK));
 }
 
-fn barrel() -> halberd_tools::PropChoice {
-    halberd_tools::PropChoice {
-        model: "models/props_c17/oildrum001.mdl".into(),
-        local: Aabb::from_corners(Vec3::new(-14.0, -14.0, 0.0), Vec3::new(14.0, 14.0, 46.0)),
-        static_prop: true,
-    }
+const BARREL: &str = "models/props_c17/oildrum001.mdl";
+
+fn barrel_box() -> Aabb {
+    Aabb::from_corners(Vec3::new(-14.0, -14.0, 0.0), Vec3::new(14.0, 14.0, 46.0))
 }
 
 #[test]
@@ -101,7 +99,7 @@ fn picking_a_prop_starts_placing_it_once_its_model_is_read() {
         h.state().viewport().tools().tool(),
         halberd_tools::Tool::Select
     );
-    h.state_mut().add_prop_info(barrel());
+    h.state_mut().add_model_info(BARREL, barrel_box(), true);
     h.run();
     assert_eq!(
         h.state().viewport().tools().tool(),
@@ -109,7 +107,7 @@ fn picking_a_prop_starts_placing_it_once_its_model_is_read() {
     );
     assert!(h.query_by_label_contains(crate::PLACING_LABEL).is_some());
     // Picking it again, now known, starts placing at once.
-    h.state_mut().viewport_mut().tools_mut().set_prop(None);
+    h.state_mut().viewport_mut().tools_mut().set_placing(None);
     // The tile (the picked name is shown above the grid too).
     h.query_all_by_label("models/props_c17/oildrum001.mdl")
         .last()
@@ -133,7 +131,7 @@ fn a_newly_opened_map_knows_the_boxes_of_models_already_read() {
     // Regression: model boxes lived only in the old document, so after
     // opening a map props were picked by a tiny marker box.
     let mut wb = Workbench::new(info(), None);
-    wb.add_prop_info(barrel());
+    wb.add_model_info(BARREL, barrel_box(), true);
     let mut doc = Document::new();
     doc.execute(Command::AddEntity(halberd_doc::EntityObject::point(
         "prop_static",

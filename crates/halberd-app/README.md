@@ -27,7 +27,8 @@ Starts everything, wires the crates together and owns the frame loop.
 7. **GPU viewport** (`gpu.rs`): implements the viewport renderer with `halberd-render` on the window's own GPU device, keeping an image for each view shown (up to six, letting go of hidden ones), and hands each finished image to egui as a texture. Before each frame it passes the open map to the renderer, which redraws brushes only when the map or selection changed. The Console names the graphics device in use.
 8. **Materials** (`content.rs`, `window.rs`): after mounting, the background thread also lists every material; the window hands the names to the Library's browser and starts a `MaterialLoader`. Each frame it asks the loader for the pictures the browser wants (128 pixels) and the textures the GPU viewport wants (256 pixels), and hands back what has arrived.
 9. **Props** (`props.rs`, `PropFeed`): after mounting, the model names go to the prop browser. Models the browser wants pictures of, or the map's props show, are read in the background; each one that arrives gives the document its box, tells the Place tool about it, is drawn alone for its picture (`gpu.rs`, a 128-pixel image), and goes to the renderer if the map shows it.
-10. If the window cannot open (no Vulkan, DirectX 12 or Metal driver, or a missing Linux system library), the report and a plain-language reason are printed in the terminal instead. Panics from windowing libraries are caught for this.
+10. **Skies**: after mounting, the skies found in the game's material names go to the sky picker.
+11. If the window cannot open (no Vulkan, DirectX 12 or Metal driver, or a missing Linux system library), the report and a plain-language reason are printed in the terminal instead. Panics from windowing libraries are caught for this.
 
 Command-line options (`halberd --help`):
 

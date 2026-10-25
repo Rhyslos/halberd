@@ -16,15 +16,16 @@ use halberd_vmf::{Block, Entry, Vmf, format_plane, id_of, parse_plane};
 pub fn vmf_from_document(doc: &Document) -> Vmf {
     let data = doc.file_data();
     let mut ids = IdSource::new(doc);
-    let mut entries = if data.header.is_empty() && data.world_header.is_empty() {
+    let new_map = is_new_map(data);
+    let mut entries = if new_map {
         default_header()
     } else {
         data.header.clone()
     };
 
     let mut world = Block::new("world");
-    world.entries = if data.world_header.is_empty() {
-        default_world_settings()
+    world.entries = if new_map {
+        new_world_settings(&data.world_header)
     } else {
         data.world_header.clone()
     };
@@ -73,7 +74,7 @@ pub fn vmf_from_document(doc: &Document) -> Vmf {
             entries.push(Entry::Block(block));
         }
     }
-    if data.footer.is_empty() && data.header.is_empty() && data.world_header.is_empty() {
+    if data.footer.is_empty() && new_map {
         entries.extend(default_footer());
     } else {
         entries.extend(data.footer.iter().cloned());
@@ -290,6 +291,30 @@ fn default_header() -> Vec<Entry> {
         Entry::Block(Block::new("visgroups")),
         Entry::Block(view),
     ]
+}
+
+/// True for a map not read from a file.
+fn is_new_map(data: &halberd_doc::MapFileData) -> bool {
+    !data.from_file
+}
+
+/// A new map's world settings: Hammer's usual ones, with any set in the
+/// editor (such as its sky) in place of the usual values.
+fn new_world_settings(set: &[Entry]) -> Vec<Entry> {
+    let mut settings = default_world_settings();
+    for entry in set {
+        let slot = match entry {
+            Entry::Pair(key, _) => settings
+                .iter_mut()
+                .find(|e| matches!(e, Entry::Pair(k, _) if k.eq_ignore_ascii_case(key))),
+            Entry::Block(_) => None,
+        };
+        match (slot, entry) {
+            (Some(Entry::Pair(_, v)), Entry::Pair(_, value)) => *v = value.clone(),
+            _ => settings.push(entry.clone()),
+        }
+    }
+    settings
 }
 
 fn default_world_settings() -> Vec<Entry> {

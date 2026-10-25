@@ -7,7 +7,9 @@ use bytemuck::{Pod, Zeroable};
 use halberd_doc::{Document, Object};
 use halberd_geom::{Aabb, Brush};
 
+mod entities;
 mod props;
+pub use entities::{LIGHT_COLOR, SPAWN_COLOR, SUN_COLOR, entity_color};
 pub use props::{NORMALIZED_UV_FLAG, PROP_COLOR};
 
 /// Brush face colour, linear space (neutral grey with a hint of blue).
@@ -161,17 +163,7 @@ impl SceneGeometry {
                 Object::Entity(entity) if let Some(model) = entity.model().and_then(model_of) => {
                     scene.add_prop(entity, model, selected, layer_of);
                 }
-                Object::Entity(entity) => {
-                    if let Some(marker) = entity.marker().and_then(|m| Brush::cuboid(m).ok()) {
-                        scene.add_brush(
-                            &marker,
-                            POINT_ENTITY_COLOR,
-                            selected,
-                            Looks::None,
-                            layer_of,
-                        );
-                    }
-                }
+                Object::Entity(entity) => scene.add_point_entity(entity, selected, layer_of),
                 Object::Shape(shape) => scene.add_shape(shape, selected, layer_of),
             }
         }
@@ -237,12 +229,14 @@ impl SceneGeometry {
                 SELECTED_EDGE_COLOR,
             )
         } else {
+            // Every point entity colour (spawns, lights…) keeps the point
+            // entity tint in the Wireframe mode.
             let edge = if base == ENTITY_BRUSH_COLOR {
                 ENTITY_EDGE_COLOR
-            } else if base == POINT_ENTITY_COLOR {
-                POINT_ENTITY_EDGE_COLOR
-            } else {
+            } else if base == BRUSH_COLOR {
                 EDGE_COLOR
+            } else {
+                POINT_ENTITY_EDGE_COLOR
             };
             (base, &mut self.edges, edge)
         };
@@ -533,7 +527,7 @@ mod tests {
         let count =
             |scene: &SceneGeometry, color| scene.faces.iter().filter(|v| v.color == color).count();
         assert_eq!(count(&scene, ENTITY_BRUSH_COLOR), 2 * 36);
-        assert_eq!(count(&scene, POINT_ENTITY_COLOR), 36, "the light only");
+        assert_eq!(count(&scene, LIGHT_COLOR), 36, "the light only");
         let detail = doc.objects().next().unwrap().0;
         doc.set_selection([detail]);
         let scene = SceneGeometry::from_document(&doc);
