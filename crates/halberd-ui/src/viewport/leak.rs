@@ -129,7 +129,7 @@ impl ViewportPanel {
                             go = ui.button(GO_TO_LEAK_LABEL).clicked();
                             hide = ui
                                 .button(HIDE_LEAK_LABEL)
-                                .on_hover_text("View → Show leak path brings it back")
+                                .on_hover_text("The View menu's \"Show leak path\" brings it back")
                                 .clicked();
                         });
                     });

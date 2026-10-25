@@ -532,3 +532,25 @@ fn framing_puts_the_whole_map_in_view() {
         );
     }
 }
+
+#[test]
+fn turning_wasd_off_leaves_fly_mode_and_hides_it() {
+    let mut controller = CameraController::new(CameraState::default(), true);
+    controller.set_mode(CameraMode::Fly);
+    controller.set_wasd_enabled(false);
+    assert_eq!(controller.mode(), CameraMode::Default);
+    assert!(!controller.available_modes().contains(&CameraMode::Fly));
+    controller.set_wasd_enabled(true);
+    assert_eq!(controller.set_mode(CameraMode::Fly), CameraMode::Fly);
+}
+
+#[test]
+fn the_flying_speed_can_be_set_within_its_range() {
+    let mut controller = CameraController::new(CameraState::default(), true);
+    controller.set_fly_speed(1200.0);
+    assert_eq!(controller.fly_speed(), 1200.0);
+    controller.set_fly_speed(1.0e9);
+    assert_eq!(controller.fly_speed(), FLY_SPEED_RANGE.1);
+    controller.set_fly_speed(f32::NAN);
+    assert_eq!(controller.fly_speed(), DEFAULT_FLY_SPEED);
+}

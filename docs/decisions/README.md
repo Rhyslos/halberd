@@ -36,3 +36,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0027](0027-map-limits.md) | Map size and engine limit meters | Accepted |
 | [0028](0028-quick-compile.md) | Compile and play | Accepted |
 | [0029](0029-leak-path.md) | Showing where a map leaks | Accepted |
+| [0030](0030-settings-page.md) | The Settings page: keys, camera and memory | Accepted |

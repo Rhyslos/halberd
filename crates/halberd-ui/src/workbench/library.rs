@@ -146,6 +146,13 @@ impl Library {
 }
 
 impl Workbench {
+    /// Keeps at most `most` pictures in each of the material and prop
+    /// browsers (from the memory budget).
+    pub fn set_picture_limit(&mut self, most: usize) {
+        self.library.materials.set_picture_limit(most);
+        self.library.props.set_picture_limit(most);
+    }
+
     /// The material browser, for handing it names and pictures.
     pub fn materials_mut(&mut self) -> &mut AssetBrowser {
         &mut self.library.materials

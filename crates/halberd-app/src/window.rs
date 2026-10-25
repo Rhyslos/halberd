@@ -190,13 +190,18 @@ impl eframe::App for HalberdApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
         }
-        let (unit, player) = (self.workbench.length_unit(), self.workbench.show_player());
-        if let Some(note) = self.preferences.update(unit, player) {
+        let dragging = ctx.egui_is_using_pointer();
+        if let Some(note) = self
+            .preferences
+            .update(&self.workbench.settings(), dragging)
+        {
             self.workbench.push_warning(note);
         }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        // A change made in the last frames (a drag let go at closing).
+        self.preferences.update(&self.workbench.settings(), false);
         eframe::set_value(storage, LAYOUT_KEY, self.workbench.layout());
         eframe::set_value(
             storage,
@@ -255,10 +260,11 @@ pub(crate) fn run(
                     cc.storage.and_then(|s| eframe::get_value(s, VIEWS_KEY));
                 let viewport = ViewportPanel::new(saved_camera, viewport_options)
                     .with_view_setup(saved_views.unwrap_or_default());
-                let editor = &settings.editor;
+                let budgets = settings.budgets();
                 let mut workbench = Workbench::new(info, saved_layout)
                     .with_viewport(viewport)
-                    .with_display(editor.length_unit, editor.show_player_scale);
+                    .with_settings(settings.clone());
+                workbench.set_picture_limit(budgets.browser_pictures);
                 // Messages the Console has so far are sent to the file now;
                 // the report is already there (main.rs wrote it).
                 let file = Arc::clone(&log);
@@ -280,7 +286,7 @@ pub(crate) fn run(
                     files::open_path(&mut workbench, path);
                 }
                 let gpu = cc.wgpu_render_state.as_ref().map(|state| {
-                    let gpu = GpuViewport::new(state);
+                    let gpu = GpuViewport::new(state, budgets.material_textures);
                     workbench.push_console(gpu.describe());
                     gpu
                 });

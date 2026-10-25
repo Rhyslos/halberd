@@ -1,7 +1,8 @@
 //! What Halberd's settings contain, their defaults and their safe limits.
 
-use crate::LengthUnit;
+use crate::{CameraSettings, LengthUnit};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// Version of the settings file layout this build writes.
@@ -26,6 +27,12 @@ pub struct Settings {
     pub performance: PerformanceSettings,
     /// How the editor behaves.
     pub editor: EditorSettings,
+    /// How the viewport camera feels.
+    pub camera: CameraSettings,
+    /// Keys changed from their defaults: command name (such as
+    /// `"file.save"`) to key (such as `"Ctrl+Alt+S"`, or `""` for none).
+    /// The interface knows the commands and checks the keys.
+    pub keys: BTreeMap<String, String>,
 }
 
 /// Where the game is installed.
@@ -140,6 +147,7 @@ impl Settings {
             self.editor.length_unit = LengthUnit::Units;
         }
 
+        self.camera.sanitize(&mut changes);
         (self, changes)
     }
 }
@@ -164,6 +172,8 @@ impl Default for Settings {
             game: GameSettings::default(),
             performance: PerformanceSettings::default(),
             editor: EditorSettings::default(),
+            camera: CameraSettings::default(),
+            keys: BTreeMap::new(),
         }
     }
 }
@@ -292,5 +302,31 @@ mod tests {
         let (fixed, changes) = typo.sanitized();
         assert_eq!(fixed.editor.length_unit, LengthUnit::Units);
         assert!(changes.iter().any(|c| c.setting == "editor.length_unit"));
+    }
+
+    #[test]
+    fn camera_speeds_and_changed_keys_load_save_and_default() {
+        let old: Settings = toml::from_str("[editor]\ngrid_size = 32\n").unwrap();
+        assert_eq!(old.camera, CameraSettings::default());
+        assert!(old.keys.is_empty());
+        let text = "[camera]\nfly_speed = 1200\n\n[keys]\n\"file.save\" = \"Ctrl+Alt+S\"\n\"tool.select\" = \"\"\n";
+        let s: Settings = toml::from_str(text).unwrap();
+        assert_eq!(s.camera.fly_speed, 1200);
+        assert_eq!(s.camera.turn_speed_percent, 100);
+        assert_eq!(
+            s.keys.get("file.save").map(String::as_str),
+            Some("Ctrl+Alt+S")
+        );
+        assert_eq!(s.keys.get("tool.select").map(String::as_str), Some(""));
+        let again: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
+        assert_eq!(again, s);
+    }
+
+    #[test]
+    fn camera_speeds_out_of_range_are_corrected() {
+        let fast: Settings = toml::from_str("[camera]\nfly_speed = 999999\n").unwrap();
+        let (fixed, changes) = fast.sanitized();
+        assert_eq!(fixed.camera.fly_speed, CameraSettings::MAX_FLY_SPEED);
+        assert!(changes.iter().any(|c| c.setting == "camera.fly_speed"));
     }
 }

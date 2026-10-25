@@ -10,19 +10,19 @@
 //! Rendering itself happens elsewhere, behind the [`ViewportRenderer`]
 //! trait, so this panel (and its tests) need no GPU.
 
-use egui::{Align, Color32, Key, Layout, PointerButton, Rect, Sense, Stroke, Ui, UiBuilder, vec2};
+use egui::{Align, Color32, Layout, Rect, Sense, Stroke, Ui, UiBuilder, vec2};
 use glam::{Mat4, Vec2, Vec3};
 use halberd_config::LengthUnit;
 use halberd_doc::Document;
 use halberd_geom::Aabb;
 use halberd_tools::{
-    CameraController, CameraMode, CameraState, DocumentScene, FlyKeys, Tool, ToolController,
-    ViewportInput,
+    CameraController, CameraMode, CameraState, DocumentScene, Tool, ToolController,
 };
 
 mod draw_options;
 mod elements;
 mod gizmo;
+mod input;
 mod layout;
 mod leak;
 mod panes;
@@ -35,7 +35,7 @@ mod tools;
 pub use layout::{MAX_VIEWS, PaneView, RenderMode, ViewLayout, ViewSetup};
 pub use leak::{GO_TO_LEAK_LABEL, HIDE_LEAK_LABEL, LEAK_BANNER_TEXT};
 pub use panes::LAYOUT_PICKER_LABEL;
-pub use shape_ops::SHAPE_OP_KEYS;
+pub use shape_ops::SHAPE_OP_COMMANDS;
 pub(crate) use shape_ops::shape_menu;
 pub use tools::{INSIDE_ENTITIES_LABEL, PLACING_LABEL};
 
@@ -168,6 +168,12 @@ pub struct ViewportPanel {
     text_focus_was: bool,
     length_unit: LengthUnit,
     show_player: bool,
+    /// The keys in effect (Settings can change them).
+    bindings: crate::Bindings,
+    /// How fast dragging turns the 3D camera, and the wheel zooms (1.0 is
+    /// normal).
+    turn_factor: f32,
+    zoom_factor: f32,
     /// The leak path the last compile found, if any.
     leak: Option<leak::LeakPath>,
 }
@@ -202,6 +208,9 @@ impl ViewportPanel {
             text_focus_was: false,
             length_unit: LengthUnit::Units,
             show_player: true,
+            bindings: crate::Bindings::default(),
+            turn_factor: 1.0,
+            zoom_factor: 1.0,
             leak: None,
         }
     }
@@ -357,37 +366,6 @@ impl ViewportPanel {
         notes
     }
 
-    /// Picks the views that get this frame's input. The camera's: the one
-    /// under the pointer, unless the right or middle button is held in the
-    /// current one. The tools': the one under the pointer, unless the left
-    /// button is held or a tool is busy there; a floor plan being drawn
-    /// moves to any view it can be drawn in, so corners can be placed in
-    /// one view and the next in another.
-    fn choose_active(&mut self, responses: &[egui::Response]) {
-        let count = responses.len();
-        if self.active >= count {
-            self.active = 0;
-        }
-        if self.camera_view >= count {
-            self.camera_view = 0;
-        }
-        let hovered = responses.iter().position(egui::Response::hovered);
-        let camera = &self.panes[self.camera_view];
-        if !(camera.right_was_held || camera.middle_was_held)
-            && let Some(i) = hovered
-        {
-            self.camera_view = i;
-        }
-        let plan = self.tools.is_drawing_plan();
-        let sticky = self.left_was_held || (self.tools.is_busy() && !plan);
-        if let Some(i) = hovered
-            && !sticky
-            && (!plan || self.panes[i].can_draw())
-        {
-            self.active = i;
-        }
-    }
-
     /// The camera the player figure is placed for: the tools' view if it is
     /// a 3D view, else the first 3D view shown, else the first view's 3D
     /// camera. (A side view's camera stands far away, which would put the
@@ -400,95 +378,6 @@ impl ViewportPanel {
             .find(|p| p.view == PaneView::Perspective)
             .unwrap_or(&self.panes[0]);
         *pane.perspective.camera()
-    }
-
-    /// Reads this frame's mouse and keyboard input for the viewport.
-    fn gather_input(
-        &mut self,
-        ui: &Ui,
-        response: &egui::Response,
-        rect: Rect,
-        index: usize,
-    ) -> ViewportInput {
-        if index != self.camera_view {
-            let pane = &mut self.panes[index];
-            pane.right_was_held = false;
-            pane.middle_was_held = false;
-            return ViewportInput {
-                size: Vec2::new(rect.width(), rect.height()),
-                dt: ui.input(|i| i.stable_dt),
-                ..ViewportInput::default()
-            };
-        }
-        let pressed_here = response.is_pointer_button_down_on();
-        let (right_down, middle_down, pointer_delta, dt, keys) = ui.input(|i| {
-            let keys = FlyKeys {
-                forward: i.key_down(Key::W),
-                back: i.key_down(Key::S),
-                left: i.key_down(Key::A),
-                right: i.key_down(Key::D),
-                up: i.key_down(Key::Space),
-                down: i.key_down(Key::C),
-                fast: i.modifiers.shift,
-            };
-            (
-                i.pointer.button_down(PointerButton::Secondary),
-                i.pointer.button_down(PointerButton::Middle),
-                i.pointer.delta(),
-                i.stable_dt,
-                keys,
-            )
-        });
-        let pane = &mut self.panes[index];
-        let right_held = right_down && (pressed_here || pane.right_was_held);
-        let middle_held = middle_down && (pressed_here || pane.middle_was_held);
-        let right_pressed = right_held && !pane.right_was_held;
-        let middle_pressed = middle_held && !pane.middle_was_held;
-        pane.right_was_held = right_held;
-        pane.middle_was_held = middle_held;
-        // Flying is for the 3D view only.
-        let keys = if pane.view == PaneView::Perspective {
-            keys
-        } else {
-            FlyKeys::default()
-        };
-
-        let scroll = if response.hovered() {
-            let delta = ui.input(|i| i.smooth_scroll_delta.y);
-            ui.ctx()
-                .input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
-            delta
-        } else {
-            0.0
-        };
-
-        let cursor = response
-            .interact_pointer_pos()
-            .or_else(|| response.hover_pos())
-            .map(|p| Vec2::new(p.x - rect.min.x, p.y - rect.min.y));
-        let delta = Vec2::new(pointer_delta.x, pointer_delta.y);
-
-        ViewportInput {
-            size: Vec2::new(rect.width(), rect.height()),
-            cursor,
-            right_pressed,
-            right_held,
-            right_delta: if right_held && !right_pressed {
-                delta
-            } else {
-                Vec2::ZERO
-            },
-            middle_pressed,
-            middle_held,
-            middle_delta: if middle_held && !middle_pressed {
-                delta
-            } else {
-                Vec2::ZERO
-            },
-            scroll,
-            keys,
-            dt,
-        }
     }
 
     /// The camera mode buttons in the viewport's bottom-left corner.

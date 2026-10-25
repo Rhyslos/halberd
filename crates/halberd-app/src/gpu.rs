@@ -31,11 +31,14 @@ struct ViewImage {
 }
 
 impl GpuViewport {
-    /// Sets up viewport rendering on the window's GPU device.
-    pub(crate) fn new(state: &RenderState) -> Self {
+    /// Sets up viewport rendering on the window's GPU device, keeping at
+    /// most `textures` material textures (the memory budget).
+    pub(crate) fn new(state: &RenderState, textures: u32) -> Self {
         let samples = halberd_render::best_sample_count(&state.adapter);
+        let mut renderer = GpuRenderer::new(&state.device, samples);
+        renderer.limit_textures(textures);
         Self {
-            renderer: GpuRenderer::new(&state.device, samples),
+            renderer,
             state: state.clone(),
             views: Vec::new(),
             thumbnail_target: None,

@@ -238,6 +238,18 @@ impl CameraController {
         self.state.fly_speed
     }
 
+    /// Sets the flying speed (kept within [`FLY_SPEED_RANGE`]).
+    pub fn set_fly_speed(&mut self, speed: f32) {
+        self.state.fly_speed = speed;
+        self.state = sanitize_state(self.state);
+    }
+
+    /// Turns WASD movement on or off; off leaves Fly mode for Default.
+    pub fn set_wasd_enabled(&mut self, enabled: bool) {
+        self.wasd_enabled = enabled;
+        self.set_mode(self.state.mode);
+    }
+
     /// Moves the camera back along its current view direction until all of
     /// `bounds` is in view, looking at its middle, which also becomes the
     /// orbit point. Used when a map is opened.
@@ -433,63 +445,8 @@ impl CameraController {
     }
 }
 
-/// Replaces non-finite or out-of-range input with harmless values.
-fn clean_input(input: &ViewportInput) -> ViewportInput {
-    let finite_or_zero = |v: Vec2| if v.is_finite() { v } else { Vec2::ZERO };
-    let size = if input.size.is_finite() {
-        input.size.max(Vec2::ONE)
-    } else {
-        Vec2::ONE
-    };
-    ViewportInput {
-        size,
-        cursor: input.cursor.filter(|c| c.is_finite()),
-        right_delta: finite_or_zero(input.right_delta),
-        middle_delta: finite_or_zero(input.middle_delta),
-        scroll: if input.scroll.is_finite() {
-            input.scroll.clamp(-2000.0, 2000.0)
-        } else {
-            0.0
-        },
-        dt: if input.dt.is_finite() {
-            input.dt.clamp(0.0, MAX_DT)
-        } else {
-            0.0
-        },
-        ..*input
-    }
-}
-
-/// `camera` as a perspective camera.
-fn perspective(camera: Camera) -> Camera {
-    Camera {
-        ortho: None,
-        ..camera
-    }
-}
-
-fn sanitize_state(state: CameraState) -> CameraState {
-    let (low, high) = FLY_SPEED_RANGE;
-    let fly_speed = if state.fly_speed.is_finite() {
-        state.fly_speed.clamp(low, high)
-    } else {
-        DEFAULT_FLY_SPEED
-    };
-    let pivot = if state.pivot.is_finite() {
-        state.pivot
-    } else {
-        Vec3::ZERO
-    };
-    // The controller moves a perspective camera; a flat one (from a damaged
-    // settings file) would draw flat while moving in perspective.
-    let camera = perspective(state.camera.sanitized());
-    CameraState {
-        camera,
-        pivot,
-        fly_speed,
-        ..state
-    }
-}
+mod sanitize;
+use sanitize::{clean_input, sanitize_state};
 
 #[cfg(test)]
 mod tests;

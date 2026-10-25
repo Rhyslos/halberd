@@ -71,6 +71,20 @@ impl MaterialTextures {
         }
     }
 
+    /// Keeps at most `most` textures (the memory budget). Only before the
+    /// first texture arrives; afterwards the array's size is fixed.
+    pub(crate) fn limit(&mut self, most: u32) {
+        if !self.real {
+            let capacity = self.layers.capacity().min(most.max(1));
+            self.layers = Layers::new(capacity);
+        }
+    }
+
+    /// How many textures can be kept.
+    pub(crate) fn capacity(&self) -> u32 {
+        self.layers.capacity()
+    }
+
     /// The array's view, for the bind group.
     pub(crate) fn view(&self) -> &wgpu::TextureView {
         &self.view

@@ -26,10 +26,14 @@
 //! assert_eq!(store.load().settings.editor.grid_size, 32);
 //! ```
 
+mod budget;
+mod camera;
 mod measure;
 mod settings;
 mod store;
 
+pub use budget::Budgets;
+pub use camera::CameraSettings;
 pub use measure::{LengthUnit, METRES_PER_UNIT, UNITS_PER_FOOT};
 pub use settings::{
     Adjustment, EditorSettings, FORMAT_VERSION, GameSettings, PerformanceSettings, Settings,

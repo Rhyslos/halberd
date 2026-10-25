@@ -124,6 +124,8 @@ pub struct Workbench {
     compiling: Option<compile::CompileProgress>,
     /// The map's size and limits, kept while the map doesn't change.
     stats: crate::panels::map_summary::StatsCache,
+    /// The settings and the Settings window.
+    settings: settings::SettingsState,
 }
 
 impl Workbench {
@@ -148,6 +150,7 @@ impl Workbench {
             library: Library::default(),
             compiling: None,
             stats: Default::default(),
+            settings: Default::default(),
         };
         if let Some(note) = note {
             workbench.push_warning(note);
@@ -283,9 +286,13 @@ impl Workbench {
         renderer: &mut dyn ViewportRenderer,
     ) -> Vec<WorkbenchAction> {
         let mut actions = Vec::new();
-        self.file_shortcuts(ui, &mut actions);
-        self.compile_shortcut(ui, &mut actions);
-        self.edit_shortcuts(ui);
+        // While Settings waits for a new key, keys do nothing else.
+        let capturing = self.capturing_key();
+        if !capturing {
+            self.file_shortcuts(ui, &mut actions);
+            self.compile_shortcut(ui, &mut actions);
+            self.edit_shortcuts(ui);
+        }
         // Between drags, the next edit starts a new undo step; during a drag
         // (of a size field, say) its many small edits stay one step.
         if !ui.ctx().egui_is_using_pointer() {
@@ -294,7 +301,7 @@ impl Workbench {
         self.viewport
             .note_popup_open(egui::Popup::is_any_open(ui.ctx()));
         self.viewport
-            .block_keys(self.is_asking_to_save() || self.error.is_some());
+            .block_keys(self.is_asking_to_save() || self.error.is_some() || capturing);
         self.viewport
             .set_display(self.length_unit, self.show_player);
         egui::Panel::top("halberd_menu_bar").show(ui, |ui| {
@@ -347,6 +354,7 @@ impl Workbench {
             .resizable(false)
             .show(ui.ctx(), |ui| keybinds.show(ui));
         self.keybinds_open = keybinds_open;
+        self.settings_windows(ui);
         self.dialogs(ui, &mut actions);
         self.viewport
             .note_text_focus(ui.ctx().egui_wants_keyboard_input());
@@ -356,148 +364,6 @@ impl Workbench {
         }
 
         actions
-    }
-
-    /// Undo, redo and delete from the keyboard, unless a text box is in use.
-    fn edit_shortcuts(&mut self, ui: &Ui) {
-        // Mid-drag (a box being drawn, a gizmo handle held), undo and delete
-        // would pull the map from under the drag; they wait until it ends.
-        // While a box ("save changes?", a problem) is showing, the map
-        // behind it stays as it is.
-        if ui.ctx().egui_wants_keyboard_input()
-            || self.viewport.tools().is_busy()
-            || self.is_asking_to_save()
-            || self.error.is_some()
-        {
-            return;
-        }
-        let consume = |shortcut: &KeyboardShortcut| ui.input_mut(|i| i.consume_shortcut(shortcut));
-        // Ctrl+Shift+Z first: Ctrl+Z would also match it.
-        if consume(&REDO_ALT_SHORTCUT) || consume(&REDO_SHORTCUT) {
-            self.redo();
-        } else if consume(&UNDO_SHORTCUT) {
-            self.undo();
-        }
-        if consume(&DELETE_SHORTCUT) || consume(&DELETE_ALT_SHORTCUT) {
-            self.delete_selection();
-        }
-    }
-
-    fn edit_menu(&mut self, ui: &mut Ui) {
-        let shortcut = |s: &KeyboardShortcut| ui.ctx().format_shortcut(s);
-        let undo = match self.doc.undo_label() {
-            Some(label) => format!("Undo {label}"),
-            None => "Undo".to_string(),
-        };
-        let redo = match self.doc.redo_label() {
-            Some(label) => format!("Redo {label}"),
-            None => "Redo".to_string(),
-        };
-        let (undo_keys, redo_keys, delete_keys) = (
-            shortcut(&UNDO_SHORTCUT),
-            shortcut(&REDO_SHORTCUT),
-            shortcut(&DELETE_SHORTCUT),
-        );
-        let can_undo = self.doc.undo_label().is_some();
-        let can_redo = self.doc.redo_label().is_some();
-        let can_delete = if self.delete_waits() {
-            self.viewport
-                .shape_op_ready(halberd_tools::ShapeOp::DeleteParts, &self.doc)
-                .is_ok()
-        } else {
-            !self.doc.selection().is_empty()
-        };
-        if ui
-            .add_enabled(can_undo, egui::Button::new(undo).shortcut_text(undo_keys))
-            .clicked()
-        {
-            self.undo();
-        }
-        if ui
-            .add_enabled(can_redo, egui::Button::new(redo).shortcut_text(redo_keys))
-            .clicked()
-        {
-            self.redo();
-        }
-        ui.separator();
-        if ui
-            .add_enabled(
-                can_delete,
-                egui::Button::new("Delete").shortcut_text(delete_keys),
-            )
-            .clicked()
-        {
-            self.delete_selection();
-        }
-    }
-
-    fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<WorkbenchAction>) {
-        ui.menu_button("File", |ui| self.file_menu(ui, actions));
-        ui.menu_button("Edit", |ui| self.edit_menu(ui));
-        ui.menu_button("Shape", |ui| {
-            let notes = crate::viewport::shape_menu(ui, &mut self.viewport, &mut self.doc);
-            for note in notes {
-                self.push_warning(note);
-            }
-        });
-        ui.menu_button("View", |ui| {
-            if ui.button("Reset panel layout").clicked() {
-                self.reset_layout();
-                self.push_console("Panel layout reset to the standard arrangement.");
-            }
-            ui.separator();
-            ui.label("Viewport views");
-            let current = self.viewport.layout();
-            for layout in crate::ViewLayout::ALL {
-                if ui.radio(current == layout, layout.label()).clicked() {
-                    self.viewport.set_layout(layout);
-                }
-            }
-            ui.separator();
-            ui.label("Show lengths in");
-            for unit in LengthUnit::CHOICES {
-                if ui
-                    .radio(self.length_unit == unit, unit.label())
-                    .on_hover_text("Maps are always saved in Hammer units; 1 unit is 2.54 cm")
-                    .clicked()
-                {
-                    self.set_length_unit(unit);
-                }
-            }
-            ui.separator();
-            ui.checkbox(&mut self.show_player, PLAYER_TOGGLE_LABEL)
-                .on_hover_text(
-                    "A 72-unit (1.83 m) player figure next to what you are working on. It turns \
-                     orange where a player could only crouch, red where one wouldn't fit.",
-                );
-            let mut follows = self.viewport.player_follows();
-            if ui
-                .add_enabled(
-                    self.show_player,
-                    egui::Checkbox::new(&mut follows, PLAYER_FOLLOW_LABEL),
-                )
-                .on_hover_text(
-                    "The player figure stands on whatever is under the pointer in the 3D view, \
-                     to check doorways, ceilings and gaps",
-                )
-                .changed()
-            {
-                self.viewport.set_player_follows(follows);
-            }
-            self.leak_menu_item(ui);
-        });
-        if ui
-            .button(KEYBINDS_TITLE)
-            .on_hover_text("Every key and what it does, on a drawn keyboard")
-            .clicked()
-        {
-            self.keybinds_open = !self.keybinds_open;
-        }
-        ui.menu_button("Help", |ui| {
-            if ui.button("About Halberd").clicked() {
-                self.about_open = true;
-            }
-        });
     }
 }
 
@@ -593,12 +459,15 @@ mod compile;
 mod entity_list;
 mod files;
 mod library;
+mod menus;
 mod messages;
+mod settings;
 
 pub use files::{
     CANCEL_BUTTON, DONT_SAVE_BUTTON, NEW_SHORTCUT, OPEN_SHORTCUT, SAVE_AS_SHORTCUT, SAVE_BUTTON,
     SAVE_SHORTCUT,
 };
+pub use settings::{WASD_NO_LABEL, WASD_QUESTION_TITLE, WASD_YES_LABEL};
 
 #[cfg(test)]
 mod basic_entity_tests;
@@ -616,6 +485,8 @@ mod keybinds_tests;
 mod library_tests;
 #[cfg(test)]
 mod map_summary_tests;
+#[cfg(test)]
+mod settings_tests;
 #[cfg(test)]
 mod shape_tests;
 #[cfg(test)]
