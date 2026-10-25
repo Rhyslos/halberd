@@ -433,6 +433,12 @@ impl Document {
                 }
                 Ok(Change::Modified(objects))
             }
+            Command::ShapeEdit {
+                changed,
+                added,
+                removed,
+                ..
+            } => self.prepare_shape_edit(changed, added, removed),
             Command::EditBrushes { brushes, .. } => {
                 // As above: every brush is kept so a drag merges into one step.
                 let mut seen = BTreeSet::new();
@@ -456,14 +462,26 @@ impl Document {
 
     /// Carries out a checked change and returns it (for the history).
     fn apply(&mut self, change: Change) -> Change {
-        match &change {
+        self.apply_part(&change, false);
+        self.revision += 1;
+        self.selection_revision += 1;
+        change
+    }
+
+    /// Carries out one part of a change. Objects coming in become the
+    /// selection, or (`adding`, inside a change of several parts) join it.
+    fn apply_part(&mut self, change: &Change, adding: bool) {
+        match change {
             Change::Inserted(objects) => {
                 for (id, object) in objects {
                     self.insert(*id, object.clone());
                 }
+                if objects.is_empty() {
+                    return;
+                }
                 // Select what came in, as one would pick it: an entity's
                 // brushes come in with it and are selected through it.
-                self.selection = objects
+                let came_in: BTreeSet<ObjectId> = objects
                     .iter()
                     .map(|(id, _)| *id)
                     .filter(|id| {
@@ -471,6 +489,11 @@ impl Document {
                         owner == *id || !objects.iter().any(|(other, _)| *other == owner)
                     })
                     .collect();
+                if adding {
+                    self.selection.extend(came_in);
+                } else {
+                    self.selection = came_in;
+                }
             }
             Change::Removed(objects) => {
                 for (id, _) in objects {
@@ -483,10 +506,67 @@ impl Document {
                     self.objects.insert(*id, after.clone());
                 }
             }
+            Change::Several(parts) => {
+                for part in parts {
+                    self.apply_part(part, true);
+                }
+            }
         }
-        self.revision += 1;
-        self.selection_revision += 1;
-        change
+    }
+
+    /// Checks a [`Command::ShapeEdit`]: changed brushes keep their entity,
+    /// added brushes join theirs, and removed objects take along what must
+    /// go with them (but never what is changed, or an entity something is
+    /// added to).
+    fn prepare_shape_edit(
+        &mut self,
+        changed: Vec<(ObjectId, BrushObject)>,
+        added: Vec<(BrushObject, Option<ObjectId>)>,
+        removed: Vec<ObjectId>,
+    ) -> Result<Change, DocError> {
+        if changed.is_empty() && added.is_empty() && removed.is_empty() {
+            return Err(DocError::NothingToDo);
+        }
+        if self.objects.len() + added.len() > MAX_OBJECTS {
+            return Err(DocError::TooManyObjects);
+        }
+        let mut modified = Vec::with_capacity(changed.len());
+        for (id, mut brush) in changed {
+            let before = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
+            let old = before.as_brush().ok_or(DocError::NotABrush(id))?;
+            brush.set_entity(old.entity());
+            modified.push((id, before.clone(), Object::Brush(brush)));
+        }
+        let mut inserted = Vec::with_capacity(added.len());
+        for (mut brush, entity) in added {
+            if let Some(entity) = entity {
+                match self.objects.get(&entity) {
+                    Some(Object::Entity(_)) => {}
+                    Some(Object::Brush(_)) => return Err(DocError::NotAnEntity(entity)),
+                    None => return Err(DocError::UnknownObject(entity)),
+                }
+            }
+            brush.set_entity(entity);
+            inserted.push((self.new_id(), Object::Brush(brush)));
+        }
+        let keep: BTreeSet<ObjectId> = modified
+            .iter()
+            .map(|(id, ..)| *id)
+            .chain(inserted.iter().filter_map(|(_, o)| o.as_brush()?.entity()))
+            .collect();
+        let mut gone = Vec::new();
+        for id in self.with_dependents(removed.into_iter().collect()) {
+            if keep.contains(&id) {
+                continue;
+            }
+            let object = self.objects.get(&id).ok_or(DocError::UnknownObject(id))?;
+            gone.push((id, object.clone()));
+        }
+        Ok(Change::Several(vec![
+            Change::Modified(modified),
+            Change::Removed(gone),
+            Change::Inserted(inserted),
+        ]))
     }
 
     /// Puts an object in the map, keeping the entity index up to date.

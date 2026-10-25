@@ -947,3 +947,38 @@ fn both_toolbar_rows_fit_an_800_point_viewport() {
     let inside = h.get_by_label_contains(INSIDE_ENTITIES_LABEL).rect();
     assert!(viewport.contains_rect(inside), "{inside:?} in {viewport:?}");
 }
+
+#[test]
+fn e_extrudes_the_picked_face_and_the_new_far_face_is_picked() {
+    let mut h = box_with_gizmo(halberd_tools::GizmoMode::Move);
+    h.key_press(Key::Num4);
+    h.run();
+    let b = h.state().doc.selection_bounds().unwrap();
+    let top = world_on_screen(&h, b.center().with_z(b.max.z));
+    left_click(&mut h, top);
+    assert_eq!(h.state().panel.tools().picked_elements().len(), 1);
+    h.key_press(Key::E);
+    h.run();
+    assert_eq!(h.state().doc.len(), 2);
+    let new = h.state().doc.selection_bounds().unwrap();
+    assert_eq!(new.min.z, b.max.z, "standing on the face");
+    assert_eq!(new.size().z, 16.0, "one grid step");
+    assert_eq!(h.state().panel.tools().picked_elements().len(), 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Extrude face"));
+}
+
+#[test]
+fn a_shape_key_that_cannot_run_says_why() {
+    let mut h = box_with_gizmo(halberd_tools::GizmoMode::Move);
+    h.key_press(Key::E);
+    h.run();
+    assert_eq!(h.state().doc.len(), 1);
+    assert!(
+        h.state()
+            .notes
+            .iter()
+            .any(|n| n.contains("Pick faces first")),
+        "{:?}",
+        h.state().notes
+    );
+}

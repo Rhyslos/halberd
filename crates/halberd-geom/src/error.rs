@@ -17,6 +17,10 @@ pub enum GeomError {
     NotClosed,
     /// A shape would need more than [`crate::MAX_SHAPE_BRUSHES`] brushes.
     TooManyPieces,
+    /// A bevel would cut past the corners beside the edge.
+    BevelTooWide,
+    /// Taking the face away would leave the shape open.
+    WouldOpen,
 }
 
 impl fmt::Display for GeomError {
@@ -27,6 +31,8 @@ impl fmt::Display for GeomError {
             Self::TooLarge => "the shape reaches beyond the edge of the world",
             Self::TooManyFaces => "the shape has too many faces",
             Self::NotClosed => "the faces do not enclose a solid shape",
+            Self::BevelTooWide => "the bevel is wider than the faces beside the edge",
+            Self::WouldOpen => "without that face the shape would be open",
             Self::TooManyPieces => {
                 "it would need more than 256 pieces (for stairs: use taller steps or a lower height)"
             }

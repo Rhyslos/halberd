@@ -526,3 +526,73 @@ fn editing_corners_reshapes_brushes_and_undoes_in_one_step() {
     assert_eq!(doc.execute(same), Err(DocError::NothingToDo));
     assert_eq!(ElementKind::Edge.name(2), "edges");
 }
+
+#[test]
+fn a_shape_edit_changes_adds_and_removes_in_one_step() {
+    use crate::{BrushObject, EntityObject, MapObject};
+    let detail = MapObject::Entity(
+        EntityObject {
+            classname: "func_detail".into(),
+            origin: None,
+            file_data: Vec::new(),
+        },
+        vec![
+            BrushObject::new(cube_at(0.0)),
+            BrushObject::new(cube_at(100.0)),
+        ],
+    );
+    let mut doc = Document::from_map(vec![detail], Default::default()).unwrap();
+    let entity = ids(&doc)[0];
+    let members: Vec<ObjectId> = doc.brushes_of(entity).collect();
+    doc.set_selection([members[0]]);
+    let edit = Command::ShapeEdit {
+        label: "Split brush".into(),
+        changed: vec![(members[0], BrushObject::new(cube_at(10.0)))],
+        added: vec![(BrushObject::new(cube_at(300.0)), Some(entity))],
+        removed: vec![members[1]],
+    };
+    assert_eq!(edit.describe(), "Split brush");
+    doc.execute(edit).unwrap();
+    assert_eq!(doc.len(), 3, "entity, changed brush, new brush");
+    assert_eq!(doc.brushes_of(entity).count(), 2);
+    let changed = doc.get(members[0]).unwrap().as_brush().unwrap();
+    assert_eq!(changed.entity(), Some(entity), "stays in its entity");
+    assert_eq!(changed.brush().bounds().min.x, 10.0);
+    assert_eq!(
+        doc.selection().len(),
+        2,
+        "the new brush joins the selection"
+    );
+    assert_eq!(doc.undo().as_deref(), Some("Split brush"));
+    assert_eq!(doc.len(), 3);
+    assert_eq!(bounds_of(&doc, members[0]).min.x, 0.0);
+    assert!(doc.get(members[1]).is_some());
+    doc.redo();
+    assert_eq!(doc.brushes_of(entity).count(), 2);
+    // Only an entity can be joined, and an empty edit is nothing.
+    let bad = Command::ShapeEdit {
+        label: String::new(),
+        changed: Vec::new(),
+        added: vec![(BrushObject::new(cube_at(0.0)), Some(members[0]))],
+        removed: Vec::new(),
+    };
+    assert_eq!(doc.execute(bad), Err(DocError::NotAnEntity(members[0])));
+    let empty = Command::ShapeEdit {
+        label: String::new(),
+        changed: Vec::new(),
+        added: Vec::new(),
+        removed: Vec::new(),
+    };
+    assert_eq!(doc.execute(empty), Err(DocError::NothingToDo));
+    // Removing every brush but the changed one keeps the entity.
+    let last: Vec<ObjectId> = doc.brushes_of(entity).collect();
+    let keep_one = Command::ShapeEdit {
+        label: "Join 2 brushes".into(),
+        changed: vec![(last[0], BrushObject::new(cube_at(0.0)))],
+        added: Vec::new(),
+        removed: vec![last[1]],
+    };
+    doc.execute(keep_one).unwrap();
+    assert!(doc.get(entity).is_some());
+    assert_eq!(doc.brushes_of(entity).count(), 1);
+}

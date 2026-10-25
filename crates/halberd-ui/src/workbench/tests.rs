@@ -553,11 +553,40 @@ fn delete_waits_in_vertex_edge_and_face_modes() {
         .state()
         .console()
         .entries()
-        .any(|e| e.message.contains("Deleting corners, edges or faces"));
+        .any(|e| e.message.contains("Pick the corners or faces to delete"));
     assert!(warned, "the Console says why");
     harness.key_press(Key::Num1);
     harness.run();
     harness.key_press(Key::Delete);
     harness.run();
     assert!(harness.state().document().is_empty(), "Object mode deletes");
+}
+
+#[test]
+fn the_shape_menu_joins_selected_boxes_and_ctrl_j_does_too() {
+    let mut harness = harness_for(workbench_with_boxes(2));
+    harness.run();
+    harness.get_by_label("Shape").click();
+    harness.run();
+    harness.get_by_label_contains("Join brushes").click();
+    harness.run();
+    assert_eq!(harness.state().document().len(), 1);
+    assert_eq!(
+        harness.state().document().undo_label(),
+        Some("Join 2 brushes")
+    );
+    assert!(
+        harness
+            .state()
+            .console()
+            .entries()
+            .any(|e| e.message.contains("space between")),
+        "the boxes were apart, so the gap was filled and the Console says so"
+    );
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(harness.state().document().len(), 2);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::J);
+    harness.run();
+    assert_eq!(harness.state().document().len(), 1, "Ctrl+J");
 }

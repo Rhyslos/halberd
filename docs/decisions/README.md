@@ -23,3 +23,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0014](0014-primitive-shapes.md) | Ready-made shapes | Accepted |
 | [0015](0015-keybinds-viewer.md) | The Keybinds viewer | Accepted |
 | [0016](0016-element-modes.md) | Face, edge and vertex modes | Accepted |
+| [0017](0017-shape-operations.md) | Shape operations | Accepted |
