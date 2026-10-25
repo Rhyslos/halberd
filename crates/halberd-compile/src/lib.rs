@@ -11,12 +11,14 @@ mod error;
 mod job;
 mod launch;
 mod log;
+mod pointfile;
 mod run;
 
 pub use error::CompileError;
 pub use job::{CompileJob, Profile, Step};
 pub use launch::{GMOD_APP_ID, Launcher};
 pub use log::{LineKind, classify, is_leak};
+pub use pointfile::{parse_pointfile, read_pointfile};
 pub use run::{CompileEvent, CompileRunner, Compiled};
 
 /// The name of this crate, used in logs and diagnostics.

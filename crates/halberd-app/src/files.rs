@@ -40,7 +40,8 @@ pub(crate) fn handle(
         },
         WorkbenchAction::SaveAs { then } => save_as(then, workbench, ctx, allow_close),
         // Compiling is carried out by the window (compile.rs).
-        WorkbenchAction::Compile | WorkbenchAction::CancelCompile => {}
+        WorkbenchAction::Compile | WorkbenchAction::CheckLeaks | WorkbenchAction::CancelCompile => {
+        }
     }
 }
 

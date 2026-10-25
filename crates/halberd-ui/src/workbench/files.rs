@@ -75,6 +75,7 @@ impl Workbench {
         }
         self.doc = doc;
         self.file_path = path;
+        self.viewport.set_leak_path(None);
         self.viewport.set_tool(halberd_tools::Tool::Select);
         self.viewport.tools_mut().set_gizmo_mode(None);
     }

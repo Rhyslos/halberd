@@ -44,9 +44,9 @@ impl fmt::Display for CompileError {
             }
             Self::ToolFailed(tool, why) => write!(f, "{tool} stopped with an error: {why}"),
             Self::Leaked => f.write_str(
-                "the map leaks: somewhere there is a gap to the void outside it, so the \
-                 compiler can't tell inside from outside. Seal the map with brushes (a box \
-                 around everything works) and compile again.",
+                "the map leaks: somewhere there is a gap to the empty space outside it, so \
+                 the compiler can't tell inside from outside. Close the gap and compile \
+                 again.",
             ),
             Self::CouldNotCopy(why) => {
                 write!(
