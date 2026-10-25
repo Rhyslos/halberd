@@ -16,6 +16,8 @@ layer = 3
 
 [dependencies]
 halberd-doc.workspace = true
+halberd-fgd.workspace = true
+halberd-kv.workspace = true
 halberd-geom.workspace = true
 halberd-config.workspace = true
 halberd-tools.workspace = true
@@ -26,7 +28,6 @@ serde.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]
-halberd-kv.workspace = true
 egui_kittest.workspace = true
 ron.workspace = true
 

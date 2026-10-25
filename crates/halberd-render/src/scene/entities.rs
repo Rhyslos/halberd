@@ -46,10 +46,11 @@ impl SceneGeometry {
     pub(super) fn add_point_entity(
         &mut self,
         entity: &EntityObject,
+        marker: Option<halberd_geom::Aabb>,
         selected: bool,
         layer_of: &mut dyn FnMut(&str) -> Option<u32>,
     ) {
-        let Some(marker) = entity.marker() else {
+        let Some(marker) = marker else {
             return;
         };
         if let Ok(cube) = Brush::cuboid(marker) {

@@ -69,12 +69,23 @@ impl eframe::App for HalberdApp {
             self.workbench.console_mut().push_logged(entry);
         }
         match self.loading.as_ref().map(ContentLoader::poll) {
-            Some(Mounting::Ready(Mounted {
-                content,
-                materials,
-                models,
-            })) => {
+            Some(Mounting::Ready(mounted)) => {
+                let Mounted {
+                    content,
+                    materials,
+                    models,
+                    fgd,
+                } = *mounted;
                 self.loading = None;
+                match fgd {
+                    Some((path, defs)) => self
+                        .workbench
+                        .set_entity_definitions(defs, &path.display().to_string()),
+                    None => self.workbench.push_warning(
+                        "Garry's Mod's entity list (garrysmod.fgd in its bin folder) wasn't \
+                         found; only the basic entities can be placed.",
+                    ),
+                }
                 self.workbench
                     .set_sky_names(halberd_ui::sky_names(&materials));
                 self.workbench.materials_mut().set_names(materials);
