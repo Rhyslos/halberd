@@ -221,9 +221,15 @@ impl Workbench {
     /// tool is picking corners, edges or faces of selected brushes.
     fn delete_waits(&self) -> bool {
         let tools = self.viewport.tools();
+        // Floor plan shapes have no parts to pick: a selection of only
+        // shapes is deleted whole.
+        let selection = self.doc.selection();
         tools.tool() == halberd_tools::Tool::Select
             && tools.select_mode() != SelectMode::Object
-            && !self.doc.selection().is_empty()
+            && !selection.is_empty()
+            && !selection
+                .iter()
+                .all(|id| self.doc.get(*id).is_some_and(|o| o.as_shape().is_some()))
     }
 
     /// The current panel arrangement, for saving between sessions.
@@ -533,5 +539,7 @@ mod entity_tests;
 mod file_tests;
 #[cfg(test)]
 mod keybinds_tests;
+#[cfg(test)]
+mod shape_tests;
 #[cfg(test)]
 mod tests;

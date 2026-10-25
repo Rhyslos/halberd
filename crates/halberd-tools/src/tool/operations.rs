@@ -14,9 +14,7 @@ use crate::camera::Camera;
 use crate::elements::{ElementShape, PickedElement, SelectMode, editable_brushes};
 use crate::gizmo::{Axis, GizmoMode};
 use glam::Vec3;
-use halberd_doc::{
-    BrushObject, Command, Document, ElementKind, FaceInfo, Object, ObjectId, TransformKind,
-};
+use halberd_doc::{BrushObject, Command, Document, ElementKind, FaceInfo, ObjectId, TransformKind};
 use halberd_geom::{Brush, GeomError};
 
 /// A shape operation.
@@ -52,11 +50,14 @@ pub enum ShapeOp {
     /// Keep only the space the selected brushes have in common
     /// (Ctrl+Shift+I).
     Intersect,
+    /// Turn the selected floor plan shapes into plain brushes, one per
+    /// convex piece (Ctrl+Shift+B).
+    MakeBrushes,
 }
 
 impl ShapeOp {
     /// The operations in the order the Shape menu lists them.
-    pub const MENU: [ShapeOp; 14] = [
+    pub const MENU: [ShapeOp; 15] = [
         Self::Extrude,
         Self::Bevel,
         Self::Bridge,
@@ -71,6 +72,7 @@ impl ShapeOp {
         Self::Union,
         Self::Subtract,
         Self::Intersect,
+        Self::MakeBrushes,
     ];
 
     /// Name for the menu.
@@ -90,6 +92,7 @@ impl ShapeOp {
             Self::Union => "Union",
             Self::Subtract => "Subtract (carve)",
             Self::Intersect => "Intersect",
+            Self::MakeBrushes => "Make brushes from shape",
             Self::MirrorAcrossView => "Mirror left to right",
         }
     }
@@ -130,6 +133,10 @@ impl ShapeOp {
                  the cutting brushes stay"
             }
             Self::Intersect => "Keep only the space all the selected brushes share, as one brush",
+            Self::MakeBrushes => {
+                "Turn the selected floor plan shapes into ordinary brushes, one for each convex \
+                 piece, so each can be edited on its own"
+            }
         }
     }
 }
@@ -184,10 +191,7 @@ fn counted(count: usize, one: &str, many: &str) -> String {
 
 /// A selected brush object.
 fn brush_object(doc: &Document, id: ObjectId) -> Option<&BrushObject> {
-    match doc.get(id)? {
-        Object::Brush(b) => Some(b),
-        Object::Entity(_) => None,
-    }
+    doc.get(id)?.as_brush()
 }
 
 impl ToolController {
@@ -206,6 +210,7 @@ impl ToolController {
                 | ShapeOp::Union
                 | ShapeOp::Subtract
                 | ShapeOp::Intersect
+                | ShapeOp::MakeBrushes
         );
         if needs_picks && self.tool != super::Tool::Select {
             return Err("Press Q for the Select tool, then pick parts with 2, 3 or 4.".into());
@@ -236,6 +241,10 @@ impl ToolController {
                 !editable_brushes(doc).is_empty(),
                 "Select the brush to cut with first: its space is cut out of every brush it \
                  overlaps.",
+            ),
+            ShapeOp::MakeBrushes => need(
+                !selected_shapes(doc).is_empty(),
+                "Select a floor plan shape first.",
             ),
             ShapeOp::Join => need(
                 editable_brushes(doc).len() >= 2,
@@ -282,6 +291,7 @@ impl ToolController {
             ShapeOp::Union => boolean::union(doc),
             ShapeOp::Subtract => boolean::subtract(doc),
             ShapeOp::Intersect => boolean::intersect(doc),
+            ShapeOp::MakeBrushes => make_brushes(doc),
             ShapeOp::MergeCorners => self.merge_corners(doc),
             ShapeOp::DeleteParts => self.delete_parts(doc),
             ShapeOp::Mirror(axis) => mirror(doc, axis as usize),
@@ -616,6 +626,47 @@ pub(super) fn join(doc: &Document) -> Result<ShapeOpOutcome, String> {
     Ok(outcome)
 }
 
+/// The selected floor plan shapes.
+fn selected_shapes(doc: &Document) -> Vec<(ObjectId, &halberd_doc::ShapeObject)> {
+    doc.selection()
+        .iter()
+        .filter_map(|id| Some((*id, doc.get(*id)?.as_shape()?)))
+        .collect()
+}
+
+/// Make brushes: each selected shape becomes its convex pieces, as world
+/// brushes with the shape's look, selected in its place.
+fn make_brushes(doc: &Document) -> Result<ShapeOpOutcome, String> {
+    let shapes = selected_shapes(doc);
+    if shapes.is_empty() {
+        return Err("Select a floor plan shape first.".into());
+    }
+    let mut added = Vec::new();
+    for (_, shape) in &shapes {
+        for piece in shape.pieces() {
+            let faces = vec![shape.look.copied(); piece.faces().len()];
+            added.push((
+                BrushObject::with_faces(piece.clone(), faces, Vec::new()),
+                None,
+            ));
+        }
+    }
+    let label = format!(
+        "Make {} from {}",
+        counted(added.len(), "a brush", "brushes"),
+        counted(shapes.len(), "a shape", "shapes")
+    );
+    let mut outcome = ShapeOpOutcome::new(Command::ShapeEdit {
+        label,
+        changed: Vec::new(),
+        added,
+        removed: shapes.iter().map(|(id, _)| *id).collect(),
+        select_added: true,
+    });
+    outcome.select = SelectAfter::Added;
+    Ok(outcome)
+}
+
 fn mirror(doc: &Document, axis: usize) -> Result<ShapeOpOutcome, String> {
     let brushes = editable_brushes(doc);
     let bounds = brushes
@@ -632,6 +683,7 @@ fn mirror(doc: &Document, axis: usize) -> Result<ShapeOpOutcome, String> {
     Ok(ShapeOpOutcome::new(Command::TransformBrushes {
         kind: TransformKind::Mirror,
         brushes: mirrored,
+        shapes: Vec::new(),
     }))
 }
 

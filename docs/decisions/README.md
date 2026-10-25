@@ -25,3 +25,4 @@ Short notes on major technical choices: the problem, the options, the choice and
 | [0016](0016-element-modes.md) | Face, edge and vertex modes | Accepted |
 | [0017](0017-shape-operations.md) | Shape operations | Accepted |
 | [0018](0018-boolean-operations.md) | Boolean operations | Accepted |
+| [0019](0019-floor-plan-shapes.md) | Floor plan shapes, split into convex brushes on save | Accepted |

@@ -66,8 +66,21 @@ pub fn document_from_vmf(vmf: &Vmf) -> Result<Imported, halberd_doc::DocError> {
             other => data.header.push(other.clone()),
         }
     }
+    let (objects, changed_shapes) = crate::shapes::regroup(objects);
     let document = Document::from_map(objects, data)?;
     let mut notes = Vec::new();
+    if changed_shapes > 0 {
+        notes.push(format!(
+            "{changed_shapes} floor plan shape{} had been changed outside Halberd (or copied, or \
+             retextured), so {} as ordinary brushes, with those changes kept.",
+            if changed_shapes == 1 { "" } else { "s" },
+            if changed_shapes == 1 {
+                "it opens"
+            } else {
+                "they open"
+            },
+        ));
+    }
     if hidden_brushes > 0 {
         notes.push(format!(
             "{hidden_brushes} brush{} had a shape Halberd could not work out (broken, or with extra sides). \

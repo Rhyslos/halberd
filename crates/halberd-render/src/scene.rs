@@ -110,9 +110,43 @@ impl SceneGeometry {
                         scene.add_brush(&marker, POINT_ENTITY_COLOR, selected);
                     }
                 }
+                Object::Shape(shape) => scene.add_shape(shape, selected),
             }
         }
         scene
+    }
+
+    /// A floor-plan shape: its pieces' sides, with edges only along its
+    /// outline (where pieces meet inside it, nothing is drawn).
+    fn add_shape(&mut self, shape: &halberd_doc::ShapeObject, selected: bool) {
+        let edge_start = if selected {
+            self.selected_edges.len()
+        } else {
+            self.edges.len()
+        };
+        for piece in shape.pieces() {
+            self.add_brush(piece, BRUSH_COLOR, selected);
+        }
+        let (edges, color) = if selected {
+            (&mut self.selected_edges, SELECTED_EDGE_COLOR)
+        } else {
+            (&mut self.edges, EDGE_COLOR)
+        };
+        edges.truncate(edge_start);
+        let outline = shape.outline();
+        let line = |a: glam::Vec3, b: glam::Vec3| {
+            [a, b].map(|p| LineVertex {
+                position: p.to_array(),
+                color,
+            })
+        };
+        for (i, a) in outline.iter().enumerate() {
+            let b = outline[(i + 1) % outline.len()];
+            for z in [shape.bottom(), shape.top()] {
+                edges.extend(line(a.extend(z), b.extend(z)));
+            }
+            edges.extend(line(a.extend(shape.bottom()), a.extend(shape.top())));
+        }
     }
 
     fn add_brush(&mut self, brush: &Brush, base: [f32; 4], selected: bool) {
@@ -254,6 +288,32 @@ mod tests {
         assert_eq!(red, 36);
         assert_eq!(scene.selected_edges.len(), 48);
         assert_eq!(scene.edges.len(), 48);
+    }
+
+    #[test]
+    fn a_shape_is_outlined_only_along_its_outline() {
+        let outline = [
+            glam::Vec2::new(0.0, 0.0),
+            glam::Vec2::new(256.0, 0.0),
+            glam::Vec2::new(256.0, 128.0),
+            glam::Vec2::new(128.0, 128.0),
+            glam::Vec2::new(128.0, 256.0),
+            glam::Vec2::new(0.0, 256.0),
+        ];
+        let shape = halberd_doc::ShapeObject::new(&outline, 0.0, 64.0, Default::default()).unwrap();
+        let mut doc = Document::new();
+        doc.execute(Command::AddShape(shape)).unwrap();
+        doc.clear_selection();
+        let scene = SceneGeometry::from_document(&doc);
+        assert!(!scene.faces.is_empty());
+        // Six sides: a bottom, a top and an upright line for each corner,
+        // with no line where the pieces meet inside.
+        assert_eq!(scene.edges.len(), 6 * 3 * 2);
+        let ids: Vec<_> = doc.objects().map(|(id, _)| id).collect();
+        doc.set_selection(ids);
+        let scene = SceneGeometry::from_document(&doc);
+        assert_eq!(scene.selected_edges.len(), 6 * 3 * 2);
+        assert!(scene.edges.is_empty());
     }
 
     #[test]

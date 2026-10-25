@@ -194,7 +194,7 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthU
         .flatten()
         .filter(|id| match doc.get(*id) {
             Some(Object::Brush(brush)) => brush.brush().is_axis_aligned_box(),
-            Some(Object::Entity(_)) | None => false,
+            Some(Object::Entity(_) | Object::Shape(_)) | None => false,
         });
     if let Some(Object::Brush(brush)) = single.and_then(|id| doc.get(id)) {
         if let Some(owner) = brush.entity() {
@@ -202,6 +202,15 @@ pub(crate) fn properties_contents(ui: &mut Ui, doc: &mut Document, unit: LengthU
             ui.label(format!("Part of {name} {owner}"));
         }
         ui.label(materials_summary(brush));
+    }
+    if let Some(Object::Shape(shape)) = single.and_then(|id| doc.get(id)) {
+        ui.label(format!("Material: {}", shape.look.material));
+        ui.label(format!(
+            "Floor plan with {} corners; saved as {} convex brush{}.",
+            shape.outline().len(),
+            shape.pieces().len(),
+            if shape.pieces().len() == 1 { "" } else { "es" }
+        ));
     }
     match editable_box {
         Some(id) => box_fields(ui, doc, id, bounds, unit),
@@ -234,6 +243,7 @@ fn object_name(object: &Object) -> String {
         Object::Brush(_) => "Brush".to_string(),
         Object::Entity(e) if !e.classname.is_empty() => e.classname.clone(),
         Object::Entity(_) => "Entity".to_string(),
+        Object::Shape(_) => "Floor plan shape".to_string(),
     }
 }
 

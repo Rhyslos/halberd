@@ -242,6 +242,8 @@ pub enum Object {
     Brush(BrushObject),
     /// An entity. A brush entity's brushes are objects of their own.
     Entity(EntityObject),
+    /// A floor-plan shape, kept whole and saved as convex brushes.
+    Shape(crate::ShapeObject),
 }
 
 impl Object {
@@ -250,6 +252,7 @@ impl Object {
         match self {
             Self::Brush(_) => "Brush",
             Self::Entity(_) => "Entity",
+            Self::Shape(_) => "Shape",
         }
     }
 
@@ -260,6 +263,7 @@ impl Object {
         match self {
             Self::Brush(b) => Some(b.brush().bounds()),
             Self::Entity(e) => e.marker(),
+            Self::Shape(s) => Some(s.bounds()),
         }
     }
 
@@ -268,6 +272,7 @@ impl Object {
     pub fn ray_hit(&self, origin: Vec3, direction: Vec3) -> Option<f32> {
         match self {
             Self::Brush(b) => b.brush().ray_hit(origin, direction),
+            Self::Shape(s) => s.ray_hit(origin, direction),
             Self::Entity(e) => e
                 .marker()
                 .and_then(|m| Brush::cuboid(m).ok())
@@ -279,7 +284,7 @@ impl Object {
     pub fn as_brush(&self) -> Option<&BrushObject> {
         match self {
             Self::Brush(b) => Some(b),
-            Self::Entity(_) => None,
+            Self::Entity(_) | Self::Shape(_) => None,
         }
     }
 
@@ -287,7 +292,15 @@ impl Object {
     pub fn as_entity(&self) -> Option<&EntityObject> {
         match self {
             Self::Entity(e) => Some(e),
-            Self::Brush(_) => None,
+            Self::Brush(_) | Self::Shape(_) => None,
+        }
+    }
+
+    /// The floor-plan shape, if this is one.
+    pub fn as_shape(&self) -> Option<&crate::ShapeObject> {
+        match self {
+            Self::Shape(s) => Some(s),
+            Self::Brush(_) | Self::Entity(_) => None,
         }
     }
 }
@@ -300,6 +313,8 @@ pub enum MapObject {
     Brush(BrushObject),
     /// An entity and its brushes (none for a point entity).
     Entity(EntityObject, Vec<BrushObject>),
+    /// A floor-plan shape, from brushes Halberd saved for one.
+    Shape(crate::ShapeObject),
 }
 
 #[cfg(test)]

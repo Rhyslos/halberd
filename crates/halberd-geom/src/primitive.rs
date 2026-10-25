@@ -42,11 +42,15 @@ pub enum Shape {
     Arch,
     /// A flight of solid steps, one brush per step.
     Stairs,
+    /// A floor plan of any outline, drawn corner by corner by the Draw
+    /// tool and kept as one shape until saved (see `prism_brushes`).
+    /// Filling a box with it gives a box.
+    FloorPlan,
 }
 
 impl Shape {
     /// Every shape, in the order the shape picker lists them.
-    pub const ALL: [Shape; 7] = [
+    pub const ALL: [Shape; 8] = [
         Self::Box,
         Self::Wedge,
         Self::Cylinder,
@@ -54,6 +58,7 @@ impl Shape {
         Self::Sphere,
         Self::Arch,
         Self::Stairs,
+        Self::FloorPlan,
     ];
 
     /// The shape's name in the interface.
@@ -66,6 +71,7 @@ impl Shape {
             Self::Sphere => "Sphere",
             Self::Arch => "Arch",
             Self::Stairs => "Stairs",
+            Self::FloorPlan => "Floor plan",
         }
     }
 
@@ -159,7 +165,7 @@ pub fn build_shape(
     }
     let frame = Frame::new(bounds, heading);
     let brushes = match shape {
-        Shape::Box => Ok(vec![Brush::cuboid(bounds)?]),
+        Shape::Box | Shape::FloorPlan => Ok(vec![Brush::cuboid(bounds)?]),
         Shape::Wedge => Ok(vec![wedge(&frame)?]),
         Shape::Cylinder => Ok(vec![cylinder(bounds, clamp_sides(settings.sides))?]),
         Shape::Cone => Ok(vec![cone(bounds, clamp_sides(settings.sides))?]),

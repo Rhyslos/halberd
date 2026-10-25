@@ -21,6 +21,7 @@ use halberd_tools::{
 mod draw_options;
 mod elements;
 mod gizmo;
+mod plan;
 mod shape_ops;
 mod tools;
 
@@ -300,6 +301,13 @@ impl ViewportPanel {
         }
         let gizmo_shapes = self.tools.gizmo_shapes(&camera, size, doc);
         gizmo::draw(&painter, rect, &gizmo_shapes);
+        if self.tools.tool() == Tool::Box && self.tools.shape() == halberd_geom::Shape::FloorPlan {
+            let preview = self.tools.plan_preview();
+            if let Some(plan) = &preview {
+                plan::draw(&painter, rect, &camera, plan);
+            }
+            plan::hint(&painter, rect, preview.as_ref());
+        }
 
         painter.text(
             rect.left_top() + vec2(8.0, 6.0),

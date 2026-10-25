@@ -21,6 +21,7 @@ mod aabb;
 mod brush;
 mod error;
 mod plane;
+mod polygon;
 mod primitive;
 mod transform;
 
@@ -28,6 +29,7 @@ pub use aabb::Aabb;
 pub use brush::{Brush, Face, FaceFate, MAX_FACES, MIN_SIZE, Subtracted, Topology};
 pub use error::GeomError;
 pub use plane::Plane;
+pub use polygon::{MAX_OUTLINE_POINTS, clean_outline, convex_parts, prism_brushes};
 pub use primitive::{
     Heading, MAX_SHAPE_BRUSHES, SIDES_RANGE, SPHERE_SIDES_RANGE, Shape, ShapeSettings, build_shape,
 };

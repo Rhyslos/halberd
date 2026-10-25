@@ -22,6 +22,7 @@ mod error;
 mod history;
 mod map_data;
 mod object;
+mod shape;
 
 pub use command::{AddedBrush, Command, ElementKind, TransformKind};
 pub use document::{Document, MAX_OBJECTS};
@@ -32,3 +33,4 @@ pub use object::{
     BrushObject, DEFAULT_MATERIAL, EntityObject, FaceInfo, MapObject, Object, ObjectId,
     POINT_ENTITY_HALF_SIZE,
 };
+pub use shape::{PieceIds, ShapeObject};
