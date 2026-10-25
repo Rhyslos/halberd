@@ -30,7 +30,7 @@ mod measure;
 mod settings;
 mod store;
 
-pub use measure::{LengthUnit, METRES_PER_UNIT};
+pub use measure::{LengthUnit, METRES_PER_UNIT, UNITS_PER_FOOT};
 pub use settings::{
     Adjustment, EditorSettings, FORMAT_VERSION, GameSettings, PerformanceSettings, Settings,
 };

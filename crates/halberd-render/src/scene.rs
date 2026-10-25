@@ -44,14 +44,22 @@ pub struct PlayerOutline {
     pub bounds: Aabb,
     /// Eye height above the feet, in units.
     pub eye_height: f32,
+    /// Its colour: [`PLAYER_COLOR`] where a player fits,
+    /// [`PLAYER_CROUCH_COLOR`] or [`PLAYER_BLOCKED_COLOR`] where not.
+    pub color: [f32; 4],
 }
+
+/// Colour of the player figure where a player only fits crouching.
+pub const PLAYER_CROUCH_COLOR: [f32; 4] = [1.0, 0.62, 0.15, 1.0];
+/// Colour of the player figure where a player doesn't fit.
+pub const PLAYER_BLOCKED_COLOR: [f32; 4] = [1.0, 0.25, 0.2, 1.0];
 
 /// Vertices in a player outline: a box and a ring at eye height.
 pub const PLAYER_OUTLINE_VERTICES: usize = 32;
 
 /// The player figure as a line list: its box, and a ring at eye height.
 pub fn player_outline(player: PlayerOutline) -> Vec<LineVertex> {
-    let mut lines = box_outline(player.bounds, PLAYER_COLOR);
+    let mut lines = box_outline(player.bounds, player.color);
     let eye = player.bounds.min.z + player.eye_height.clamp(0.0, player.bounds.size().z);
     let ring = Aabb::from_corners(player.bounds.min.with_z(eye), player.bounds.max.with_z(eye));
     let corners = ring.corners();
@@ -59,7 +67,7 @@ pub fn player_outline(player: PlayerOutline) -> Vec<LineVertex> {
         for corner in [corners[i], corners[(i + 1) % 4]] {
             lines.push(LineVertex {
                 position: corner.to_array(),
-                color: PLAYER_COLOR,
+                color: player.color,
             });
         }
     }
@@ -487,6 +495,7 @@ mod tests {
         let player = PlayerOutline {
             bounds: Aabb::from_corners(Vec3::new(-16.0, -16.0, 0.0), Vec3::new(16.0, 16.0, 72.0)),
             eye_height: 64.0,
+            color: PLAYER_COLOR,
         };
         let lines = player_outline(player);
         assert_eq!(lines.len(), PLAYER_OUTLINE_VERTICES);

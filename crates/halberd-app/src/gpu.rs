@@ -150,6 +150,11 @@ impl ViewportRenderer for GpuViewport {
             player: view.player.map(|bounds| PlayerOutline {
                 bounds,
                 eye_height: PLAYER_EYE_HEIGHT,
+                color: match view.player_fit {
+                    Some(halberd_tools::Fit::CrouchOnly) => halberd_render::PLAYER_CROUCH_COLOR,
+                    Some(halberd_tools::Fit::Blocked) => halberd_render::PLAYER_BLOCKED_COLOR,
+                    _ => halberd_render::PLAYER_COLOR,
+                },
             }),
             grid: GridPlane {
                 axis: view.grid_axis,

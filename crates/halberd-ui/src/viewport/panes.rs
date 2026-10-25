@@ -9,7 +9,7 @@ use super::{
 use egui::{Align, Align2, Color32, FontId, Layout, Rect, Stroke, Ui, UiBuilder, pos2, vec2};
 use glam::Vec2;
 use halberd_doc::Document;
-use halberd_tools::{PLAYER_HEIGHT, Tool};
+use halberd_tools::Tool;
 
 /// Accessible name of the layout picker in the viewport's top-right corner.
 pub const LAYOUT_PICKER_LABEL: &str = "Views";
@@ -125,6 +125,7 @@ impl ViewportPanel {
             preview: self.tools.preview(),
             preview_shape: self.tools.preview_brushes(),
             player: self.player_at,
+            player_fit: self.player_clearance().map(|c| c.fit),
             id: index,
             grid_axis,
             grid_offset,
@@ -166,14 +167,26 @@ impl ViewportPanel {
             painter.text(
                 rect.min + vec2(at.x, at.y),
                 Align2::CENTER_BOTTOM,
-                format!(
-                    "Player · {}",
-                    self.length_unit.format(f64::from(PLAYER_HEIGHT))
-                ),
+                super::player::label(self.length_unit, self.player_clearance()),
                 FontId::proportional(11.0),
-                PLAYER_LABEL_COLOR,
+                match view.player_fit {
+                    Some(halberd_tools::Fit::CrouchOnly) => super::PLAYER_CROUCH_LABEL_COLOR,
+                    Some(halberd_tools::Fit::Blocked) => super::PLAYER_BLOCKED_LABEL_COLOR,
+                    _ => PLAYER_LABEL_COLOR,
+                },
             );
         }
+        super::readout::draw(
+            &painter,
+            rect,
+            &camera,
+            size,
+            self.tools
+                .preview()
+                .filter(|_| self.tools.tool() == Tool::Box),
+            (index == 0).then(|| doc.selection_bounds()).flatten(),
+            self.length_unit,
+        );
 
         let first = index == 0;
         if let Some(overlay) = self.tools.element_overlay(&camera, size, doc) {
