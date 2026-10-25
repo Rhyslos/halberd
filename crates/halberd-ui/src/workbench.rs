@@ -4,6 +4,7 @@
 use crate::console::Console;
 use crate::keybinds::{KEYBINDS_TITLE, KeybindsViewer};
 use crate::layout::{default_layout, restore_or_default};
+use crate::materials::{BrowserAction, MaterialBrowser};
 use crate::panel::Panel;
 use crate::panels::{about_contents, placeholder, properties_contents, scene_contents};
 use crate::viewport::{ViewportOptions, ViewportPanel, ViewportRenderer};
@@ -12,6 +13,7 @@ use egui_dock::{DockArea, DockState, Style, TabViewer};
 use halberd_config::LengthUnit;
 use halberd_doc::{Command, Document};
 use halberd_tools::SelectMode;
+pub use library::ContentStatus;
 
 /// Facts about the program shown in the window and the About box.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,18 +103,8 @@ pub struct Workbench {
     error: Option<String>,
     /// What the Library panel says about the game's content.
     content_status: ContentStatus,
-}
-
-/// How far mounting the game's content has got, for the Library panel.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum ContentStatus {
-    /// Garry's Mod was not found, so there is no content to mount.
-    #[default]
-    NoGame,
-    /// Its content is being mounted.
-    Mounting,
-    /// Mounted, with a one-line summary.
-    Mounted(String),
+    /// The material browser, in the Library panel.
+    materials: MaterialBrowser,
 }
 
 impl Workbench {
@@ -135,6 +127,7 @@ impl Workbench {
             asking_to_save: None,
             error: None,
             content_status: ContentStatus::NoGame,
+            materials: MaterialBrowser::default(),
         };
         if let Some(note) = note {
             workbench.push_warning(note);
@@ -209,16 +202,6 @@ impl Workbench {
     /// Edit → Redo.
     pub fn redo(&mut self) {
         self.doc.redo();
-    }
-
-    /// Tells the Library panel how far mounting the game's content has got.
-    pub fn set_content_status(&mut self, status: ContentStatus) {
-        self.content_status = status;
-    }
-
-    /// What the Library panel says about the game's content.
-    pub fn content_status(&self) -> &ContentStatus {
-        &self.content_status
     }
 
     /// Edit → Delete: removes the selected objects (an undoable edit).
@@ -298,6 +281,7 @@ impl Workbench {
         });
 
         let mut notes = Vec::new();
+        let mut browser_action = None;
         let mut viewer = PanelViewer {
             console: &mut self.console,
             viewport: &mut self.viewport,
@@ -306,6 +290,8 @@ impl Workbench {
             notes: &mut notes,
             length_unit: self.length_unit,
             content_status: &self.content_status,
+            materials: &mut self.materials,
+            browser_action: &mut browser_action,
         };
         DockArea::new(&mut self.dock)
             .style(Style::from_egui(ui.style().as_ref()))
@@ -315,6 +301,9 @@ impl Workbench {
             .show_inside(ui, &mut viewer);
         for note in notes {
             self.push_warning(note);
+        }
+        if let Some(action) = browser_action {
+            self.browser_action(action);
         }
 
         let mut about_open = self.about_open;
@@ -483,6 +472,8 @@ struct PanelViewer<'a> {
     notes: &'a mut Vec<String>,
     length_unit: LengthUnit,
     content_status: &'a ContentStatus,
+    materials: &'a mut MaterialBrowser,
+    browser_action: &'a mut Option<BrowserAction>,
 }
 
 impl TabViewer for PanelViewer<'_> {
@@ -541,19 +532,12 @@ impl TabViewer for PanelViewer<'_> {
                 self.notes.extend(notes);
             }
             Panel::Library => {
-                let content = match self.content_status {
-                    ContentStatus::NoGame => {
-                        "Garry's Mod was not found, so its materials and models can't be \
-                         shown. Start Halberd with --gmod-dir to point at it."
-                            .to_string()
-                    }
-                    ContentStatus::Mounting => "Reading Garry's Mod's content…".to_string(),
-                    ContentStatus::Mounted(summary) => summary.clone(),
-                };
-                placeholder(
+                library::show(
                     ui,
-                    "Props, materials and entities",
-                    &format!("{content}\n\nBrowsing materials and props arrives next."),
+                    self.materials,
+                    self.content_status,
+                    !self.doc.selection().is_empty(),
+                    self.browser_action,
                 );
             }
             Panel::Scene => scene_contents(ui, self.doc),
@@ -570,6 +554,7 @@ impl TabViewer for PanelViewer<'_> {
 }
 
 mod files;
+mod library;
 mod messages;
 
 pub use files::{
@@ -585,6 +570,8 @@ mod entity_tests;
 mod file_tests;
 #[cfg(test)]
 mod keybinds_tests;
+#[cfg(test)]
+mod library_tests;
 #[cfg(test)]
 mod shape_tests;
 #[cfg(test)]

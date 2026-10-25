@@ -8,8 +8,21 @@ use halberd_geom::{Brush, FaceFate};
 pub enum Command {
     /// Adds brushes. They become the selection.
     AddBrushes(Vec<Brush>),
+    /// Adds brushes with their faces' data (a chosen material). They
+    /// become the selection.
+    AddBrushObjects(Vec<BrushObject>),
     /// Adds a floor-plan shape. It becomes the selection.
     AddShape(crate::ShapeObject),
+    /// Puts a material on faces. For each object, which of its faces (by
+    /// number; `None`: all of them). A brush entity's faces are those of
+    /// its brushes; a shape's are all one look. The selection does not
+    /// change.
+    SetMaterial {
+        /// The material (`BRICK/BRICKWALL001A`).
+        material: String,
+        /// The objects and faces to put it on.
+        faces: Vec<(ObjectId, Option<Vec<usize>>)>,
+    },
     /// Removes objects. Removed objects leave the selection.
     Remove(Vec<ObjectId>),
     /// Replaces a brush's shape, for example after changing its size or
@@ -129,7 +142,20 @@ impl Command {
         match self {
             Self::AddBrushes(brushes) if brushes.len() == 1 => "Create brush".into(),
             Self::AddBrushes(brushes) => format!("Create {} brushes", brushes.len()),
+            Self::AddBrushObjects(brushes) if brushes.len() == 1 => "Create brush".into(),
+            Self::AddBrushObjects(brushes) => format!("Create {} brushes", brushes.len()),
             Self::AddShape(_) => "Create floor plan shape".into(),
+            Self::SetMaterial { faces, .. } => {
+                let picked: Option<usize> = faces
+                    .iter()
+                    .map(|(_, f)| f.as_ref().map(Vec::len))
+                    .sum::<Option<usize>>();
+                match picked {
+                    Some(1) => "Apply material to face".into(),
+                    Some(n) => format!("Apply material to {n} faces"),
+                    None => "Apply material".into(),
+                }
+            }
             Self::ReplaceBrush { .. } => "Change brush".into(),
             Self::ShapeEdit { label, .. } => label.clone(),
             Self::EditBrushes {

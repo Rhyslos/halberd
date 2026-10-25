@@ -90,6 +90,8 @@ The Console (`halberd-ui`) holds messages with a time and a level (information, 
 
 When Garry's Mod is found, `halberd-app` mounts its content on a background thread: `halberd-assets` reads `gameinfo.txt`'s search paths and opens each VPK archive's file list (`halberd-vpk`) and each loose folder, in the engine's search order. Files are read later, one at a time, from the first place that has them. See [decision 0022](docs/decisions/0022-game-content.md).
 
+Materials ([decision 0023](docs/decisions/0023-materials.md)): after mounting, the same thread lists every material (`halberd_assets::material_names`). `halberd-app` hands the names to the Library's `MaterialBrowser` (`halberd-ui`) and runs a `MaterialLoader`, which decodes textures (`halberd-vtf`) on its own thread: small pictures for the tiles the browser asks for, and 256-pixel textures for the materials the renderer's Textured mode asks for. Picking or applying a material goes from the browser to the tools (`ToolController::set_material`, `apply_material`) and becomes a document command (`SetMaterial`, `AddBrushObjects`).
+
 ## Viewport
 
 Coordinates follow Hammer: **Z is up**, units are Hammer units, right-handed.

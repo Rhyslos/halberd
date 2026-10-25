@@ -8,7 +8,7 @@ use crate::SceneQuery;
 use crate::camera::Ray;
 use crate::scene::DocumentScene;
 use glam::{Vec2, Vec3};
-use halberd_doc::{Command, Document, FaceInfo, ShapeObject};
+use halberd_doc::{Command, Document, ShapeObject};
 use halberd_geom::MAX_OUTLINE_POINTS;
 
 /// A floor plan being drawn.
@@ -137,7 +137,7 @@ impl ToolController {
             );
         }
         let top = plan.base + self.box_height;
-        match ShapeObject::new(&plan.corners, plan.base, top, FaceInfo::default()) {
+        match ShapeObject::new(&plan.corners, plan.base, top, self.new_look()) {
             Ok(shape) => ToolAction::Execute(Command::AddShape(shape)),
             Err(e) => ToolAction::Refused(format!("No floor plan was made: {e}.")),
         }

@@ -71,9 +71,8 @@ pub struct FaceVertex {
     /// Linear-space colour.
     pub color: [f32; 4],
     /// For the Textured mode: texture coordinates (in textures of
-    /// [`TEXTURE_SIZE`] texels), the material's hue (0 to 1), and 1 if the
-    /// face has a material, 2 if it also is selected (0: drawn plain, as
-    /// point entity markers).
+    /// [`TEXTURE_SIZE`] texels), the material's hue (0 to 1), and
+    /// [`texture_flag`] (0: drawn plain, as point entity markers).
     pub texture: [f32; 4],
 }
 
@@ -122,6 +121,15 @@ pub struct SceneGeometry {
 impl SceneGeometry {
     /// Builds the geometry for every object in `doc`.
     pub fn from_document(doc: &Document) -> Self {
+        Self::from_document_with(doc, &mut |_| None)
+    }
+
+    /// Builds the geometry, asking `layer_of` which texture layer each
+    /// material's real texture is in (`None`: none, the pattern is shown).
+    pub fn from_document_with(
+        doc: &Document,
+        layer_of: &mut dyn FnMut(&str) -> Option<u32>,
+    ) -> Self {
         let mut scene = Self::default();
         for (id, object) in doc.objects() {
             // A brush entity's brushes are selected with it, or one by one.
@@ -133,16 +141,23 @@ impl SceneGeometry {
                     } else {
                         BRUSH_COLOR
                     };
-                    scene.add_brush(brush.brush(), base, selected, Looks::Faces(brush.faces()));
+                    let looks = Looks::Faces(brush.faces());
+                    scene.add_brush(brush.brush(), base, selected, looks, layer_of);
                 }
                 // A brush entity is drawn as its brushes, even with an origin.
                 Object::Entity(_) if doc.has_brushes(id) => {}
                 Object::Entity(entity) => {
                     if let Some(marker) = entity.marker().and_then(|m| Brush::cuboid(m).ok()) {
-                        scene.add_brush(&marker, POINT_ENTITY_COLOR, selected, Looks::None);
+                        scene.add_brush(
+                            &marker,
+                            POINT_ENTITY_COLOR,
+                            selected,
+                            Looks::None,
+                            layer_of,
+                        );
                     }
                 }
-                Object::Shape(shape) => scene.add_shape(shape, selected),
+                Object::Shape(shape) => scene.add_shape(shape, selected, layer_of),
             }
         }
         scene
@@ -150,14 +165,25 @@ impl SceneGeometry {
 
     /// A floor-plan shape: its pieces' sides, with edges only along its
     /// outline (where pieces meet inside it, nothing is drawn).
-    fn add_shape(&mut self, shape: &halberd_doc::ShapeObject, selected: bool) {
+    fn add_shape(
+        &mut self,
+        shape: &halberd_doc::ShapeObject,
+        selected: bool,
+        layer_of: &mut dyn FnMut(&str) -> Option<u32>,
+    ) {
         let edge_start = if selected {
             self.selected_edges.len()
         } else {
             self.edges.len()
         };
         for piece in shape.pieces() {
-            self.add_brush(piece, BRUSH_COLOR, selected, Looks::All(&shape.look));
+            self.add_brush(
+                piece,
+                BRUSH_COLOR,
+                selected,
+                Looks::All(&shape.look),
+                layer_of,
+            );
         }
         let (edges, color) = if selected {
             (&mut self.selected_edges, SELECTED_EDGE_COLOR)
@@ -181,7 +207,14 @@ impl SceneGeometry {
         }
     }
 
-    fn add_brush(&mut self, brush: &Brush, base: [f32; 4], selected: bool, looks: Looks<'_>) {
+    fn add_brush(
+        &mut self,
+        brush: &Brush,
+        base: [f32; 4],
+        selected: bool,
+        looks: Looks<'_>,
+        layer_of: &mut dyn FnMut(&str) -> Option<u32>,
+    ) {
         let (color, edges, edge_color) = if selected {
             (
                 SELECTED_COLOR,
@@ -206,12 +239,13 @@ impl SceneGeometry {
                 Looks::All(info) => Some(info),
                 Looks::None => None,
             };
-            let (axes, hue) = match look {
+            let (axes, hue, layer) = match look {
                 Some(info) => (
                     Some(info.texture_axes(face.plane().normal)),
                     material_hue(&info.material),
+                    layer_of(&info.material),
                 ),
-                None => (None, 0.0),
+                None => (None, 0.0, None),
             };
             let vertex = |i: usize| FaceVertex {
                 position: corners[i].to_array(),
@@ -220,8 +254,12 @@ impl SceneGeometry {
                 texture: match axes {
                     Some(axes) => {
                         let [u, v] = axes.texels(corners[i]);
-                        let flag = if selected { 2.0 } else { 1.0 };
-                        [u / TEXTURE_SIZE, v / TEXTURE_SIZE, hue, flag]
+                        [
+                            u / TEXTURE_SIZE,
+                            v / TEXTURE_SIZE,
+                            hue,
+                            texture_flag(selected, layer),
+                        ]
                     }
                     None => [0.0; 4],
                 },
@@ -245,6 +283,14 @@ impl SceneGeometry {
             }
         }
     }
+}
+
+/// The fourth texture value of a face vertex: 1 for a face with a
+/// material, 2 if it is also selected, plus 4 × (layer + 1) when its
+/// material's real texture is in a texture layer.
+pub fn texture_flag(selected: bool, layer: Option<u32>) -> f32 {
+    let flag = if selected { 2.0 } else { 1.0 };
+    flag + layer.map_or(0.0, |l| 4.0 * (l as f32 + 1.0))
 }
 
 /// What a brush's faces look like, for the Textured mode.
